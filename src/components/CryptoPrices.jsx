@@ -261,16 +261,41 @@ function CryptoPrices() {
       if (type === 'dex' && contractAddress) {
         // For DEX tokens, use DexScreener API
         const response = await axios.get(
-          `https://api.dexscreener.com/latest/dex/pairs/${chainId}/${contractAddress}/candles`,
-          {
-            params: {
-              from: Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
-              to: Math.floor(Date.now() / 1000),
-              resolution: '1h'
-            }
-          }
+          `https://api.dexscreener.com/latest/dex/pairs/${chainId}/${contractAddress}`
         );
-        return response.data;
+        
+        // Check if we have valid pair data
+        if (response.data?.pairs && response.data.pairs.length > 0) {
+          const pair = response.data.pairs[0];
+          
+          // DexScreener doesn't provide historical candle data through API
+          // We'll create a simple dataset based on current price and 24h change
+          
+          if (pair.priceUsd && pair.priceChange) {
+            const currentPrice = parseFloat(pair.priceUsd);
+            const priceChange24h = parseFloat(pair.priceChange.h24 || 0);
+            
+            // Calculate yesterday's price based on 24h change
+            const yesterdayPrice = currentPrice / (1 + priceChange24h / 100);
+            
+            // Generate simple dataset with just two points - yesterday and today
+            const now = Math.floor(Date.now() / 1000);
+            const yesterday = now - 24 * 60 * 60;
+            
+            return {
+              timestamps: [yesterday, now],
+              prices: [yesterdayPrice, currentPrice],
+              priceChange24h
+            };
+          }
+        }
+        
+        // Fallback if no data
+        return { 
+          timestamps: [], 
+          prices: [],
+          priceChange24h: 0
+        };
       } else {
         // For CEX tokens, use Binance API
         const response = await axios.get(

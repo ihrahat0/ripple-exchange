@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
-import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 import { db } from '../firebase';
 import { 
   collection, 
@@ -23,38 +22,17 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { tradingService } from '../services/tradingService';
-import { retryOperation } from '../utils/db-helpers';
 import axios from 'axios';
-import { Connection } from '@solana/web3.js';
-import { Liquidity, Token, TokenAmount } from '@raydium-io/raydium-sdk';
-
-// Import fallback icons
+import { v4 as uuidv4 } from 'uuid';
+import TradingChartComponent from '../components/TradingChart';
+import { tradingService } from '../services/tradingService';
 import btcIcon from '../assets/images/coin/btc.png';
-import ethIcon from '../assets/images/coin/eth.png';
-import bnbIcon from '../assets/images/coin/bnb.png';
-import usdtIcon from '../assets/images/coin/tet.png';
 
 const TradingContainer = styled.div`
   padding: 20px;
   background: var(--bg1);
   min-height: calc(100vh - 100px);
   margin-top: 10px;
-  position: relative;
-  
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    pointer-events: none;
-    background: 
-      radial-gradient(circle at 10% 10%, rgba(247, 147, 26, 0.05) 0%, rgba(0, 0, 0, 0) 50%),
-      radial-gradient(circle at 90% 90%, rgba(247, 147, 26, 0.05) 0%, rgba(0, 0, 0, 0) 50%);
-    z-index: 1;
-  }
 `;
 
 const TradingGrid = styled.div`
@@ -63,33 +41,12 @@ const TradingGrid = styled.div`
   gap: 1px;
   margin-top: 20px;
   background: var(--bg);
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
-  position: relative;
-  z-index: 2;
-  
-  &:hover {
-    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2), 0 0 15px rgba(247, 147, 26, 0.15);
-  }
 `;
 
 const ChartSection = styled.div`
   background: var(--bg);
   border-right: 1px solid var(--line);
   height: 500px;
-  position: relative;
-  overflow: hidden;
-  
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(247, 147, 26, 0), rgba(247, 147, 26, 0.2), rgba(247, 147, 26, 0));
-  }
 `;
 
 const RightSection = styled.div`
@@ -149,7 +106,7 @@ const CoinIcon = styled.img`
   height: 40px;
   border-radius: 50%;
   object-fit: contain;
-  background: ${props => props.theme === 'dark' ? '#2A2A3C' : '#fff'};
+  background: ${props => props.$theme === 'dark' ? '#2A2A3C' : '#fff'};
   padding: 2px;
 `;
 
@@ -177,8 +134,12 @@ const Price = styled.div`
 `;
 
 const Change = styled.span`
-  color: ${props => props.isPositive ? '#0ECB81' : '#F6465D'};
-  font-size: 16px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 14px;
+  background: ${props => props.$isPositive ? 'rgba(14, 203, 129, 0.2)' : 'rgba(246, 70, 93, 0.2)'};
+  color: ${props => props.$isPositive ? '#0ECB81' : '#F6465D'};
+  margin-left: 8px;
 `;
 
 const OrderForm = styled.form`
@@ -197,16 +158,20 @@ const TabGroup = styled.div`
 `;
 
 const OrderTab = styled.button`
-  background: transparent;
-  color: ${props => props.active ? 'var(--primary)' : 'var(--text)'};
+  background: none;
   border: none;
-  padding: 8px 16px;
+  padding: 12px;
   cursor: pointer;
-  font-size: 14px;
-  border-bottom: 2px solid ${props => props.active ? 'var(--primary)' : 'transparent'};
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  color: ${props => props.$active ? 'var(--primary)' : 'var(--text)'};
+  opacity: 0.9;
+  transition: all 0.2s;
+  border-bottom: 2px solid ${props => props.$active ? 'var(--primary)' : 'transparent'};
 
   &:hover {
-    color: var(--primary);
+    opacity: 1;
   }
 `;
 
@@ -245,26 +210,18 @@ const AmountInput = styled.input`
 `;
 
 const Button = styled.button`
-  background: ${props => props.$primary ? 'var(--primary)' : 'transparent'};
-  color: ${props => props.$primary ? 'white' : 'var(--primary)'};
-  border: 1px solid var(--primary);
-  padding: 10px 16px;
-  border-radius: 6px;
-  cursor: pointer;
+  background: var(--primary);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 14px;
+  font-size: 16px;
   font-weight: 500;
-  transition: all 0.3s ease;
-  
+  cursor: pointer;
+  transition: background 0.3s;
+
   &:hover {
-    background: ${props => props.$primary ? 'var(--primary)' : 'rgba(247, 147, 26, 0.1)'};
-    box-shadow: 0 0 15px rgba(247, 147, 26, 0.3);
-    transform: translateY(-2px);
-  }
-  
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    box-shadow: none;
-    transform: none;
+    opacity: 0.9;
   }
 `;
 
@@ -289,34 +246,33 @@ const ChartEmbed = styled.iframe`
 `;
 
 const CurrentPrice = styled.div`
-  padding: 4px 8px;
-  margin: 1px 0;
+  padding: 8px;
+  margin: 0;
   text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--bg2);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  font-size: 16px;
+  font-weight: 600;
+  background: var(--bg1);
   color: ${props => props.$isUp ? '#0ECB81' : '#F6465D'};
   transition: color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  svg {
+    margin-right: 4px;
+  }
 `;
 
-function TradingChart({ symbol, theme }) {
+// Replace the InternalTradingChart function
+function InternalTradingChart({ symbol, theme }) {
   return (
-    <AdvancedRealTimeChart
-      symbol={`BINANCE:${symbol}USDT`}
+    <TradingChartComponent
+      symbol={`BINANCE:${symbol}`}
       theme={theme}
       container_id="tradingview_chart"
-      autosize
-      interval="15"
-      timezone="exchange"
-      style="1"
-      locale="en"
-      toolbar_bg="#f1f3f6"
-      enable_publishing={false}
-      hide_top_toolbar={false}
-      allow_symbol_change={true}
-      save_image={false}
+      autosize={true}
+      timeframe="15"
+      allow_symbol_change={false}
     />
   );
 }
@@ -393,21 +349,31 @@ const OrderTypeSelector = styled.div`
 const leverageOptions = [10, 20, 25, 30, 40];  // Updated leverage options
 
 const LeverageSlider = styled.input`
-  width: 100%;
-  margin: 8px 0;
   -webkit-appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg2);
   outline: none;
+  margin: 10px 0;
   
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
+    appearance: none;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
-    background: ${props => props.value >= 30 ? '#F6465D' : 'var(--primary)'};
+    background: ${props => props.$value >= 30 ? '#F6465D' : 'var(--primary)'};
     cursor: pointer;
+  }
+  
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: ${props => props.$value >= 30 ? '#F6465D' : 'var(--primary)'};
+    cursor: pointer;
+    border: none;
   }
 `;
 
@@ -427,13 +393,15 @@ const QuickLeverageButtons = styled.div`
 `;
 
 const QuickLeverageButton = styled.button`
-  background: ${props => props.active ? 'var(--primary)' : 'var(--bg1)'};
-  color: ${props => props.active ? '#fff' : 'var(--text)'};
-  border: 1px solid var(--line);
-  border-radius: 4px;
   padding: 4px 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  border: none;
+  font-size: 12px;
   cursor: pointer;
-  font-size: 11px;
+  transition: background 0.2s;
+  background: ${props => props.$active ? 'var(--primary)' : 'var(--bg1)'};
+  color: ${props => props.$active ? '#fff' : 'var(--text)'};
   
   &:hover {
     background: var(--primary);
@@ -487,20 +455,22 @@ const OrderBookRow = styled.div`
   font-size: 11px;
   cursor: pointer;
   position: relative;
-  background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
+  height: 20px;
+  line-height: 20px;
+  color: var(--text);
   
   &:hover {
-    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.2)' : 'rgba(14, 203, 129, 0.2)'};
+  background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
   }
   
-  &::after {
+  &::before {
     content: '';
     position: absolute;
     right: 0;
     top: 0;
     bottom: 0;
-    width: ${props => props.$depth}%;
-    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
+    width: ${props => props.$depth || 0}%;
+    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.05)' : 'rgba(14, 203, 129, 0.05)'};
     z-index: 0;
   }
 
@@ -510,6 +480,20 @@ const OrderBookRow = styled.div`
     &:nth-child(2),
     &:last-child {
       text-align: right;
+    }
+  }
+  
+  /* Add subtle animations for updates */
+  &.flash {
+    animation: flashUpdate 0.5s ease-out;
+  }
+  
+  @keyframes flashUpdate {
+    0% {
+      background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.3)' : 'rgba(14, 203, 129, 0.3)'};
+    }
+    100% {
+      background: transparent;
     }
   }
 `;
@@ -563,8 +547,8 @@ const TableCell = styled.td`
 `;
 
 const PnLValue = styled.span`
-  color: ${props => props.value >= 0 ? '#0ECB81' : '#F6465D'};
   font-weight: 500;
+  color: ${props => props.$value >= 0 ? '#0ECB81' : '#F6465D'};
 `;
 
 // Add these styled components at the top with your other styled components
@@ -581,7 +565,7 @@ const TradeInfo = styled.div`
 const InfoItem = styled.div`
   display: flex;
   justify-content: space-between;
-  color: ${props => props.highlight ? '#00C087' : '#fff'};
+  color: ${props => props.$highlight ? '#00C087' : '#fff'};
   font-size: 14px;
 `;
 
@@ -610,12 +594,35 @@ const LeverageInput = styled.input`
 
 // Add these styled components
 const ChartContainer = styled.div`
-  width: 100%;
-  height: 500px;
   position: relative;
-  background: var(--bg2);
+  background: var(--bg1);
   border-radius: 8px;
-  overflow: hidden;
+  padding: 16px;
+  margin-bottom: 20px;
+`;
+
+const DexLink = styled.a`
+  display: inline-block;
+  padding: 8px 12px;
+  background: rgba(30, 34, 45, 0.8);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+  border-radius: 4px;
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--primary);
+    color: white;
+  }
+  
+  i {
+    margin-left: 5px;
+    font-size: 12px;
+  }
 `;
 
 const TimeframeSelector = styled.div`
@@ -660,9 +667,9 @@ const TradesList = styled.div`
   max-height: 80px;
   overflow-y: auto;
   padding: 4px 0;
-  background: var(--bg2);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  border-top: none;
+  border-bottom: none;
   &::-webkit-scrollbar {
     width: 5px;
   }
@@ -713,7 +720,8 @@ const OrderBookContent = styled.div`
 const AsksContainer = styled.div`
   flex: 1;
   overflow-y: auto;
-  background: rgba(246, 70, 93, 0.05);
+  /* Use more subtle background with less opacity */
+  background: var(--bg); 
   display: flex;
   flex-direction: column-reverse;
   min-height: 200px;
@@ -729,7 +737,8 @@ const AsksContainer = styled.div`
 const BidsContainer = styled.div`
   flex: 1;
   overflow-y: auto;
-  background: rgba(14, 203, 129, 0.05);
+  /* Use same background as AsksContainer */
+  background: var(--bg);
   min-height: 200px;
   &::-webkit-scrollbar {
     width: 5px;
@@ -762,15 +771,44 @@ const calculatePnL = (position, currentMarketPrice) => {
   }
 };
 
+// Add generateMockOrderBookData function to create realistic sample data
+const generateMockOrderBookData = (currentPrice, priceStep = 0.41, depthCount = 10) => {
+  const asks = [];
+  const bids = [];
+  
+  let basePrice = parseFloat(currentPrice);
+  
+  // Generate realistic ask prices (sell orders) above current price
+  for (let i = 1; i <= depthCount; i++) {
+    const price = basePrice + (i * priceStep);
+    // Generate random size with more realistic distribution
+    const size = (Math.random() * 2 + 0.05).toFixed(4);
+    const total = (price * parseFloat(size)).toFixed(2);
+    asks.push({ price: price.toFixed(2), size, total });
+  }
+  
+  // Generate realistic bid prices (buy orders) below current price
+  for (let i = 1; i <= depthCount; i++) {
+    const price = basePrice - (i * priceStep);
+    // Generate random size with more realistic distribution
+    const size = (Math.random() * 2 + 0.05).toFixed(4);
+    const total = (price * parseFloat(size)).toFixed(2);
+    bids.push({ price: price.toFixed(2), size, total });
+  }
+  
+  return { asks, bids };
+};
+
 function Trading() {
+  const { cryptoId } = useParams();
   const location = useLocation();
-  const { id } = useParams();
-  const cryptoData = location.state?.cryptoData;
   const navigate = useNavigate();
+  const [theme] = useState('dark');
+  const { currentUser } = useAuth();
+  const [cryptoData, setCryptoData] = useState(location.state?.cryptoData || null);
   const [timeframe, setTimeframe] = useState('1H');
   const [orderType, setOrderType] = useState('buy');
   const [amount, setAmount] = useState('');
-  const [theme] = useState('dark');
   const [chartKey, setChartKey] = useState(0);
   const [orderMode, setOrderMode] = useState('market');
   const [leverage, setLeverage] = useState(1);
@@ -781,7 +819,6 @@ function Trading() {
   });
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
   const [userPnL, setUserPnL] = useState(0);
-  const { currentUser } = useAuth();
   const [error, setError] = useState('');
   const [currentPrice, setCurrentPrice] = useState(0);
   const [userBalance, setUserBalance] = useState(null);
@@ -797,6 +834,135 @@ function Trading() {
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
   const [priceData, setPriceData] = useState([]);
   const [recentTrades, setRecentTrades] = useState([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const [buyRatio, setBuyRatio] = useState(30);
+  const [orderBookFlash, setOrderBookFlash] = useState({});
+
+  // WebSocket connection management
+  useEffect(() => {
+    let ws = null;
+    let wsTimer = null;
+    
+    const setupWebSocket = () => {
+      try {
+        const symbol = cryptoData?.token?.symbol?.toLowerCase() || 'btc';
+        const wsSymbol = `${symbol}usdt@ticker`;
+        
+        ws = new WebSocket(`wss://stream.binance.com:9443/ws/${wsSymbol}`);
+        
+        ws.onopen = () => {
+          console.log('WebSocket connected');
+        };
+        
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            // Process data...
+          } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+          }
+        };
+        
+        ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        ws.onclose = () => {
+          console.log('WebSocket disconnected');
+          wsTimer = setTimeout(setupWebSocket, 5000);
+        };
+      } catch (error) {
+        console.error('Error setting up WebSocket:', error);
+      }
+    };
+    
+    if (isOnline && cryptoData?.token?.symbol) {
+      setupWebSocket();
+    }
+    
+    return () => {
+      if (wsTimer) clearTimeout(wsTimer);
+      
+      if (ws) {
+        try {
+          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+            ws.close();
+          }
+        } catch (error) {
+          console.error('Error closing WebSocket:', error);
+        }
+      }
+    };
+  }, [cryptoData?.token?.symbol, isOnline]);
+
+  // TradingView widget cleanup
+  useEffect(() => {
+    const tradingViewContainer = document.getElementById('tradingview_chart');
+    
+    return () => {
+      try {
+        if (tradingViewContainer) {
+          while (tradingViewContainer.firstChild) {
+            tradingViewContainer.removeChild(tradingViewContainer.firstChild);
+          }
+        }
+        
+        if (window.TradingView && typeof window.TradingView === 'object') {
+          if (window.TradingView._binders) {
+            window.TradingView._binders = [];
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up TradingView widget:', error);
+      }
+    };
+  }, []);
+
+  // Order book interval management
+  useEffect(() => {
+    let orderBookInterval = null;
+    
+    if (isOnline) {
+      orderBookInterval = setInterval(() => {
+        try {
+          if (marketPrice) {
+            const newOrders = generateDummyOrders(marketPrice);
+            setOrderBook(newOrders);
+            
+            const newBuyRatio = Math.floor(Math.random() * 40) + 10;
+            setBuyRatio(newBuyRatio);
+            
+            const newFlash = {};
+            newOrders.asks.forEach((_, i) => {
+              if (Math.random() > 0.7) {
+                newFlash[`ask-${i}`] = true;
+              }
+            });
+            
+            newOrders.bids.forEach((_, i) => {
+              if (Math.random() > 0.7) {
+                newFlash[`bid-${i}`] = true;
+              }
+            });
+            
+            setOrderBookFlash(newFlash);
+            
+            setTimeout(() => {
+              setOrderBookFlash({});
+            }, 600);
+          }
+        } catch (error) {
+          console.error('Error updating order book:', error);
+        }
+      }, 4000);
+    }
+    
+    return () => {
+      if (orderBookInterval) {
+        clearInterval(orderBookInterval);
+      }
+    };
+  }, [marketPrice, isOnline]);
 
   // Effect for online/offline status
   useEffect(() => {
@@ -818,17 +984,21 @@ function Trading() {
 
     let ws;
     const updatePrice = async () => {
-      if (cryptoData.token?.type === 'dex') {
+      if (cryptoData?.token?.type === 'dex') {
         // DEX price update logic
-        if (cryptoData.token?.address && cryptoData.token?.chainId) {
+        if (cryptoData?.token?.address && cryptoData?.token?.chainId) {
           try {
             const response = await axios.get(`https://api.dexscreener.com/latest/dex/pairs/${cryptoData.token.chainId}/${cryptoData.token.address}`);
             if (response.data?.pair?.priceUsd) {
               const price = parseFloat(response.data.pair.priceUsd);
-              setMarketPrice(price);
-              setLastPrice(price);
-              setCurrentPrice(price);
-              setOrderBook(generateDummyOrders(price));
+              if (!isNaN(price) && price > 0) {
+                setMarketPrice(price);
+                setLastPrice(price);
+                setCurrentPrice(price);
+                setOrderBook(generateDummyOrders(price));
+              } else {
+                console.warn('Invalid price received from DEX API:', response.data.pair.priceUsd);
+              }
             }
           } catch (error) {
             console.error('Error fetching DEX price:', error);
@@ -836,7 +1006,7 @@ function Trading() {
         }
       } else {
         // CEX WebSocket connection
-        const symbol = cryptoData.token?.symbol?.toLowerCase() || 'btcusdt';
+        const symbol = cryptoData?.token?.symbol?.toLowerCase() || 'btcusdt';
         console.log('Setting up initial WebSocket for symbol:', symbol);
         
         ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol}@trade`);
@@ -852,6 +1022,8 @@ function Trading() {
                 setLastPrice(newPrice);
                 setCurrentPrice(newPrice);
                 setOrderBook(generateDummyOrders(newPrice));
+              } else {
+                console.warn('Invalid price received from WebSocket:', data.p);
               }
             }
           } catch (error) {
@@ -884,17 +1056,7 @@ function Trading() {
     };
   }, [cryptoData]);
 
-  // Only fetch user data if logged in
-  useEffect(() => {
-    if (currentUser) {
-      fetchUserData();
-    } else {
-      setIsLoadingBalance(false);
-      setIsLoadingPositions(false);
-    }
-  }, [currentUser]);
-
-  // Update the fetchUserData function
+  // Define fetchUserData function before it's used in any useEffect
   const fetchUserData = useCallback(async () => {
     if (!currentUser) return () => {};  // Return empty cleanup function
     
@@ -959,28 +1121,95 @@ function Trading() {
     }
   }, [currentUser]);
 
-  // Update the fetchPriceData function
-  const fetchPriceData = async () => {
-    if (!cryptoData?.token) return;
+  // Define fetchPriceData function before any useEffect that uses it
+  const fetchPriceData = useCallback(async () => {
+    if (!cryptoData?.token) {
+      console.warn('No token data available for fetchPriceData');
+      return;
+    }
 
     try {
       if (cryptoData.token.type === 'dex') {
-        // For DEX tokens, use DexScreener API
-        const chain = cryptoData.token.chainId?.toLowerCase() || 'bsc';
+        // For DEX tokens, use DexScreener API's standard pairs endpoint
+        const chain = cryptoData.token.chainId?.toLowerCase() || 'ethereum';
         const pairAddress = cryptoData.pairInfo?.address?.toLowerCase();
         
-        const response = await axios.get(
-          `https://api.dexscreener.com/latest/dex/pairs/${chain}/${pairAddress}/candles`,
-          {
-            params: {
-              from: Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
-              to: Math.floor(Date.now() / 1000),
-              resolution: TIMEFRAMES[timeframe].dexInterval
-            }
+        if (!pairAddress) {
+          console.error('No pair address available for DEX token');
+          setPriceData([]);
+          return;
+        }
+        
+        console.log(`Fetching price data for ${chain}/${pairAddress}`);
+        
+        // Try both format options to ensure we get data
+        let response;
+        try {
+          // First attempt: Use pairs/{chain}/{pairAddress} format
+          response = await axios.get(
+            `https://api.dexscreener.com/latest/dex/pairs/${chain}/${pairAddress}`
+          );
+          console.log('DexScreener API response (pairs endpoint):', response.data);
+        } catch (error) {
+          console.error('Error fetching from DexScreener pairs endpoint:', error);
+          
+          // Second attempt: Use direct address endpoint
+          try {
+            response = await axios.get(
+              `https://api.dexscreener.com/latest/dex/search?q=${pairAddress}`
+            );
+            console.log('DexScreener API response (search endpoint):', response.data);
+          } catch (searchError) {
+            console.error('Error fetching from DexScreener search endpoint:', searchError);
+            throw new Error('Failed to fetch data from DexScreener');
           }
-        );
-
-        setPriceData(response.data);
+        }
+        
+        // Check if we have valid data from either attempt
+        const pairs = response.data?.pairs;
+        if (pairs && pairs.length > 0) {
+          const pair = pairs[0];
+          console.log('Found pair data:', pair);
+          
+          // Update market price with the latest price
+          if (pair.priceUsd) {
+            setMarketPrice(parseFloat(pair.priceUsd));
+            setCurrentPrice(parseFloat(pair.priceUsd));
+          }
+          
+          // For price history, we need to create a simple dataset
+          // DexScreener doesn't provide candlestick data through this endpoint
+          
+          // Create a minimal dataset with the current price
+          const currentTime = Math.floor(Date.now() / 1000);
+          
+          // Use priceChange data if available to estimate an "open" price
+          const priceChangeH24 = pair.priceChange?.h24 ? parseFloat(pair.priceChange.h24) : 0;
+          const closePrice = parseFloat(pair.priceUsd || 0);
+          const openPrice = closePrice / (1 + (priceChangeH24 / 100));
+          
+          // Estimate high and low based on price change
+          const priceChange = Math.abs(closePrice - openPrice);
+          const high = Math.max(openPrice, closePrice) + (priceChange * 0.1); // Add 10% buffer
+          const low = Math.min(openPrice, closePrice) - (priceChange * 0.1);  // Subtract 10% buffer
+          
+          // Create a simple dataset for the chart
+          setPriceData([{
+            time: currentTime,
+            open: openPrice,
+            high: high,
+            low: low,
+            close: closePrice,
+            volume: parseFloat(pair.volume?.h24 || 0)
+          }]);
+          
+          console.log('Created simplified price data for chart');
+        } else {
+          // No valid pair data
+          console.error('No valid pair data found for', pairAddress);
+          console.log('Full response:', response.data);
+          setPriceData([]);
+        }
       } else {
         // For CEX tokens, use existing Binance API
         const interval = TIMEFRAMES[timeframe].binanceInterval;
@@ -1010,8 +1239,24 @@ function Trading() {
       }
     } catch (error) {
       console.error('Error fetching price data:', error);
+      setPriceData([]);
     }
-  };
+  }, [cryptoData?.token?.id, cryptoData?.token?.type, cryptoData?.pairInfo?.address, timeframe]);
+
+  // Update user data useEffect
+  useEffect(() => {
+    if (currentUser) {
+      return fetchUserData();
+    }
+  }, [currentUser, fetchUserData]);
+
+  // Update price data useEffect
+  useEffect(() => {
+    if (cryptoData?.token?.id) {
+      fetchPriceData();
+    }
+  }, [cryptoData?.token?.id, fetchPriceData]);
+
 
   // Update the chart initialization useEffect
   useEffect(() => {
@@ -1125,7 +1370,7 @@ function Trading() {
   // Fetch data when timeframe changes
   useEffect(() => {
     fetchPriceData();
-  }, [timeframe, cryptoData?.token]);
+  }, [timeframe, cryptoData?.token?.id, fetchPriceData]); // Add fetchPriceData as a dependency
 
   // Update the handleSubmit function
   const handleSubmit = async (e) => {
@@ -1405,7 +1650,7 @@ function Trading() {
     };
   }, [cryptoData?.token?.symbol, marketPrice, generateRandomTrade]);
 
-  // Update the renderChart function to improve stability
+  // Replace the renderChart function
   const renderChart = () => {
     const symbol = getTradingViewSymbol();
     if (!symbol) return null;
@@ -1413,43 +1658,33 @@ function Trading() {
     // Use a key based on the symbol to force re-render when symbol changes
     return (
       <ChartContainer key={`chart-${symbol}-${chartKey}`}>
-        <AdvancedRealTimeChart
+        <TradingChartComponent
           symbol={symbol}
           theme="dark"
           container_id={`tradingview_${cryptoData?.token?.symbol || 'chart'}`}
-          height={500}
-          interval={TIMEFRAMES[timeframe]?.tradingViewInterval || "15"}
-          timezone="exchange"
-          style="1"
-          locale="en"
-          toolbar_bg="#1E222D"
-          enable_publishing={false}
-          hide_top_toolbar={false}
+          timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || "15"}
+          autosize={true}
           allow_symbol_change={false}
-          save_image={false}
-          backgroundColor="#1E222D"
-          gridColor="#2A2E39"
-          width="100%"
-          hide_legend={false}
-          enabled_features={[]}
-          disabled_features={[
-            "use_localstorage_for_settings",
-            "header_widget",
-            "volume_force_overlay",
-            "show_interval_dialog_on_key_press",
-            "caption_buttons_text_if_possible",
-            "context_menus",
-            "control_bar",
-            "edit_buttons_in_legend",
-            "border_around_the_chart",
-            "main_series_scale_menu",
-            "popup_hints"
-          ]}
-          autosize
         />
       </ChartContainer>
     );
   };
+
+  // Add an effect to initialize the order book immediately when the component loads
+  useEffect(() => {
+    // Set a default initial price if none exists
+    if (!marketPrice) {
+      const defaultPrice = 0.000068;
+      console.log('Setting initial default price for order book:', defaultPrice);
+      setMarketPrice(defaultPrice);
+      setCurrentPrice(defaultPrice);
+      setLastPrice(defaultPrice);
+      
+      // Generate order book immediately
+      const initialOrderBook = generateDummyOrders(defaultPrice);
+      setOrderBook(initialOrderBook);
+    }
+  }, []);
 
   // Update the book ticker WebSocket to reduce updates frequency
   useEffect(() => {
@@ -1589,12 +1824,27 @@ function Trading() {
           for (let i = 0; i < bidUpdates; i++) {
             const index = Math.floor(Math.random() * newBids.length);
             if (newBids[index]) {
+              // Get current price and ensure it's a number
+              const price = typeof newBids[index].price === 'number' ? 
+                newBids[index].price : 
+                parseFloat(newBids[index].price);
+                
               // Adjust the amount slightly
-              const amountAdjustment = newBids[index].amount * (0.2 * (Math.random() - 0.5));
+              const currentAmount = typeof newBids[index].amount === 'number' ? 
+                newBids[index].amount : 
+                parseFloat(newBids[index].amount);
+              
+              const amountAdjustment = currentAmount * (0.2 * (Math.random() - 0.5));
+              const newAmount = Math.max(0.01, currentAmount + amountAdjustment);
+              
+              // Calculate new total
+              const newTotal = price * newAmount;
+              
+              // Update the bid with numeric values
               newBids[index] = {
-                ...newBids[index],
-                amount: Math.max(0.01, newBids[index].amount + amountAdjustment).toFixed(4),
-                total: (newBids[index].price * Math.max(0.01, newBids[index].amount + amountAdjustment)).toFixed(2)
+                price: price,
+                amount: Number(newAmount.toFixed(4)),
+                total: Number(newTotal.toFixed(2))
               };
             }
           }
@@ -1604,12 +1854,27 @@ function Trading() {
           for (let i = 0; i < askUpdates; i++) {
             const index = Math.floor(Math.random() * newAsks.length);
             if (newAsks[index]) {
+              // Get current price and ensure it's a number
+              const price = typeof newAsks[index].price === 'number' ? 
+                newAsks[index].price : 
+                parseFloat(newAsks[index].price);
+                
               // Adjust the amount slightly
-              const amountAdjustment = newAsks[index].amount * (0.2 * (Math.random() - 0.5));
+              const currentAmount = typeof newAsks[index].amount === 'number' ? 
+                newAsks[index].amount : 
+                parseFloat(newAsks[index].amount);
+              
+              const amountAdjustment = currentAmount * (0.2 * (Math.random() - 0.5));
+              const newAmount = Math.max(0.01, currentAmount + amountAdjustment);
+              
+              // Calculate new total
+              const newTotal = price * newAmount;
+              
+              // Update the ask with numeric values
               newAsks[index] = {
-                ...newAsks[index],
-                amount: Math.max(0.01, newAsks[index].amount + amountAdjustment).toFixed(4),
-                total: (newAsks[index].price * Math.max(0.01, newAsks[index].amount + amountAdjustment)).toFixed(2)
+                price: price,
+                amount: Number(newAmount.toFixed(4)),
+                total: Number(newTotal.toFixed(2))
               };
             }
           }
@@ -1622,99 +1887,65 @@ function Trading() {
     return () => clearInterval(orderBookInterval);
   }, [marketPrice]);
 
-  // Update the generateDummyOrders function to ensure consistent pricing
+  // Generate dummy orders for the order book
   const generateDummyOrders = (currentPrice) => {
-    if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
-      console.warn('Invalid price provided to generateDummyOrders:', currentPrice);
-      return { bids: [], asks: [] };
-    }
-    
     try {
-      // Create a much tighter spread based on the price range
-      // For BTC-like prices (>10000), use $1-5 spread
-      // For BNB-like prices (100-5000), use $0.5-2 spread
-      // For lower priced coins, use 0.1-0.5% spread
-      let spreadPercentage;
-      let fixedSpread;
-      
-      if (currentPrice > 10000) {
-        // BTC-like prices - use fixed $1-3 spread (reduced from $1-5)
-        fixedSpread = 1 + (Math.random() * 2);
-        spreadPercentage = null;
-      } else if (currentPrice > 100) {
-        // BNB-like prices - use fixed $0.5-1 spread (reduced from $0.5-2)
-        fixedSpread = 0.5 + (Math.random() * 0.5);
-        spreadPercentage = null;
-      } else {
-        // Lower priced coins - use percentage-based spread (0.05-0.2%)
-        spreadPercentage = 0.0005 + (Math.random() * 0.0015);
-        fixedSpread = null;
+      if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
+        console.warn('Invalid price for generating orders:', currentPrice);
+        currentPrice = 86470;
       }
+
+      const isBtcStyle = currentPrice > 10000;
+      const numOrders = 10;
+      const bidSpread = 0.01;
+      const askSpread = 0.01;
       
-      const orderCount = 20; // Increased from 15 to 20 for more orders
     const bids = [];
-    const asks = [];
-      const maxAmount = 2.5; // Increased from 2.0 for larger orders
-      const minAmount = 0.1; // Minimum amount per order
-
-      // Determine price precision based on price magnitude
-      const getPricePrecision = (price) => {
-        if (price < 0.01) return 6;
-        if (price < 0.1) return 5;
-        if (price < 1) return 4;
-        if (price < 10) return 4;
-        if (price < 100) return 3;
-        if (price < 1000) return 2;
-        return 2;
-      };
+      let runningTotal = 0;
       
-      const pricePrecision = getPricePrecision(currentPrice);
-      
-      // Calculate the initial spread
-      let spread;
-      if (fixedSpread !== null) {
-        spread = fixedSpread;
-      } else {
-        spread = currentPrice * spreadPercentage;
-      }
-      
-      // Calculate bid and ask base prices with a very tight spread
-      const bidBasePrice = currentPrice - (spread / 2);
-      const askBasePrice = currentPrice + (spread / 2);
-      
-      // Calculate the step size (how much each order differs from the next)
-      // Make subsequent orders have progressively larger steps
-      const baseStepSize = spread / 10;
-
-    for (let i = 0; i < orderCount; i++) {
-        // Use a progressive step size that increases with distance from the middle
-        const stepMultiplier = 1 + (i * 0.2);
-        const currentBidStep = baseStepSize * stepMultiplier * (i + 1) / 2;
-        const currentAskStep = baseStepSize * stepMultiplier * (i + 1) / 2;
+      for (let i = 1; i <= numOrders; i++) {
+        const bidPrice = isBtcStyle
+          ? currentPrice - (i * 0.5)
+          : Number((currentPrice * (1 - (bidSpread * i / numOrders))).toFixed(2));
         
-        // Calculate prices with proper decimal precision
-        const bidPrice = Number((bidBasePrice - currentBidStep).toFixed(pricePrecision));
-        const askPrice = Number((askBasePrice + currentAskStep).toFixed(pricePrecision));
+        const size = isBtcStyle
+          ? (Math.random() * 3 + 0.001).toFixed(3)
+          : (Math.random() * 4.5 + 0.5).toFixed(4);
         
-        // Randomize amounts but make them larger near the current price
-        const amountMultiplier = 1 - (i * 0.05);
-        const bidAmount = Number((Math.random() * (maxAmount - minAmount) * amountMultiplier + minAmount).toFixed(4));
-        const askAmount = Number((Math.random() * (maxAmount - minAmount) * amountMultiplier + minAmount).toFixed(4));
+        runningTotal += parseFloat(size);
 
       bids.push({
         price: bidPrice,
-          amount: bidAmount,
-          total: Number((bidPrice * bidAmount).toFixed(2))
-      });
-
-      asks.push({
-        price: askPrice,
-          amount: askAmount,
-          total: Number((askPrice * askAmount).toFixed(2))
+          amount: size,
+          total: runningTotal.toFixed(3)
         });
       }
-
-      return { bids, asks: asks.reverse() };
+      
+      const asks = [];
+      runningTotal = 0;
+      
+      for (let i = 1; i <= numOrders; i++) {
+        const askPrice = isBtcStyle
+          ? currentPrice + (i * 0.5)
+          : Number((currentPrice * (1 + (askSpread * i / numOrders))).toFixed(2));
+        
+        const size = isBtcStyle
+          ? (Math.random() * 3 + 0.001).toFixed(3)
+          : (Math.random() * 4.5 + 0.5).toFixed(4);
+        
+        runningTotal += parseFloat(size);
+        
+        asks.push({
+          price: askPrice,
+          amount: size,
+          total: runningTotal.toFixed(3)
+        });
+      }
+      
+      bids.sort((a, b) => b.price - a.price);
+      asks.sort((a, b) => a.price - b.price);
+      
+      return { bids, asks };
       } catch (error) {
       console.error('Error generating dummy orders:', error);
       return { bids: [], asks: [] };
@@ -1765,10 +1996,62 @@ function Trading() {
     return `BINANCE:${cryptoData.token.symbol.toUpperCase()}USDT`;
   };
 
-  // Update the getDexScreenerUrl function
+  // Fix for getDexTradingViewSymbol function
+  const getDexTradingViewSymbol = () => {
+    if (!cryptoData?.token) return 'BINANCE:BTCUSDT';
+    
+    // First try to get the symbol from the token data
+    const tokenSymbol = cryptoData.token.symbol?.toUpperCase() || 'ETH';
+    const baseSymbol = cryptoData.pairInfo?.baseAsset?.toUpperCase() || 'USDT';
+    const chainId = cryptoData.token.chainId?.toLowerCase() || 'ethereum';
+    
+    // For Solana pairs, use a different approach
+    if (chainId === 'solana') {
+      // Fallback to regular market symbols for Solana since RAYDIUM is not always available
+      // This will at least show a chart with similar price action
+      if (tokenSymbol === 'SOL') {
+        return 'BINANCE:SOLUSDT';
+      }
+      
+      try {
+        // Try to create a valid Raydium symbol if available
+        return `RAYDIUM:${tokenSymbol}${baseSymbol}`;
+      } catch (err) {
+        // Fallback to a more commonly available exchange
+        return `BINANCE:${tokenSymbol}${baseSymbol}`;
+      }
+    }
+    
+    // Handle different chains with appropriate prefixes
+    const chainPrefixes = {
+      'ethereum': 'UNISWAP:',
+      'bsc': 'PANCAKESWAP:',
+      'polygon': 'QUICKSWAP:',
+      'avalanche': 'TRADERJOE:',
+      'arbitrum': 'SUSHISWAP:'
+    };
+    
+    // Use either the known prefix or default to a common exchange to ensure a chart displays
+    const prefix = chainPrefixes[chainId] || '';
+    
+    try {
+      // First try with DEX prefix
+      if (prefix) {
+        return `${prefix}${tokenSymbol}${baseSymbol}`;
+      }
+      // Fallback to main exchanges
+      return `BINANCE:${tokenSymbol}${baseSymbol}`;
+    } catch (err) {
+      console.log("Error generating TradingView symbol:", err);
+      // Ultimate fallback
+      return 'BINANCE:BTCUSDT';
+    }
+  };
+
+  // Update getDexScreenerUrl for proper iframe embedding
   const getDexScreenerUrl = () => {
     if (!cryptoData?.token?.type === 'dex' || !cryptoData?.pairInfo?.address) {
-      return null;
+      return 'https://dexscreener.com';
     }
     
     // Map chain IDs to DexScreener format
@@ -1777,33 +2060,296 @@ function Trading() {
       'ethereum': 'ethereum',
       'polygon': 'polygon',
       'arbitrum': 'arbitrum',
-      'avalanche': 'avalanche'
+      'avalanche': 'avalanche',
+      'solana': 'solana'
     };
 
-    const chain = chainMap[cryptoData.token.chainId?.toLowerCase()] || 'bsc';
+    const chain = chainMap[cryptoData.token.chainId?.toLowerCase()] || 'ethereum';
     const pairAddress = cryptoData.pairInfo.address.toLowerCase();
 
-    // Format: https://dexscreener.com/chainName/pairAddress
-    return `https://dexscreener.com/embed/${chain}/${pairAddress}`;
+    console.log(`Creating DexScreener URL: https://dexscreener.com/${chain}/${pairAddress}`);
+    return `https://dexscreener.com/${chain}/${pairAddress}`;
   };
+
+  // Effect to extract trading pair info from URL if cryptoData is missing
+  useEffect(() => {
+    if (!cryptoData && cryptoId) {
+      // Try to parse the trading pair from the URL
+      const pairParts = cryptoId.split('-');
+      if (pairParts.length === 2) {
+        const quoteAsset = pairParts[0];
+        const baseAsset = pairParts[1];
+        
+        // Create a default cryptoData object based on URL
+        const defaultCryptoData = {
+          token: {
+            id: `${quoteAsset.toLowerCase()}_${baseAsset.toLowerCase()}`,
+            name: quoteAsset,
+            symbol: quoteAsset,
+            type: 'cex'
+          },
+          pairInfo: {
+            symbol: `${quoteAsset}/${baseAsset}`,
+            baseAsset: baseAsset,
+            quoteAsset: quoteAsset
+          },
+          chartData: {
+            lastPrice: 0,
+            change24h: 0,
+            volume24h: 0
+          }
+        };
+        
+        setCryptoData(defaultCryptoData);
+        console.log('Created default cryptoData from URL:', defaultCryptoData);
+      } else {
+        // If we can't parse the URL properly, set a default BTC/USDT pair
+        console.warn('Could not parse trading pair from URL, using default BTC/USDT');
+        const defaultCryptoData = {
+          token: {
+            id: 'btc_usdt',
+            name: 'Bitcoin',
+            symbol: 'BTC',
+            type: 'cex'
+          },
+          pairInfo: {
+            symbol: 'BTC/USDT',
+            baseAsset: 'USDT',
+            quoteAsset: 'BTC'
+          },
+          chartData: {
+            lastPrice: 0,
+            change24h: 0,
+            volume24h: 0
+          }
+        };
+        setCryptoData(defaultCryptoData);
+      }
+    }
+  }, [cryptoData, cryptoId]);
+
+  // Add error handling for missing data - make sure we always have something to display
+  useEffect(() => {
+    if (!cryptoData && !cryptoId) {
+      // If we have no data and no URL parameter, set a default
+      const defaultCryptoData = {
+        token: {
+          id: 'btc_usdt',
+          name: 'Bitcoin',
+          symbol: 'BTC',
+          type: 'cex'
+        },
+        pairInfo: {
+          symbol: 'BTC/USDT',
+          baseAsset: 'USDT',
+          quoteAsset: 'BTC'
+        },
+        chartData: {
+          lastPrice: 0,
+          change24h: 0,
+          volume24h: 0
+        }
+      };
+      setCryptoData(defaultCryptoData);
+      console.log('No crypto data or ID, using default BTC/USDT');
+    }
+  }, [cryptoData, cryptoId]);
 
   // Add error handling for missing data
   if (!cryptoData) {
-    return (
+      return (
       <TradingContainer>
-        <div style={{ color: '#fff', textAlign: 'center', padding: '20px' }}>
-          No trading data available. Please select a token from the market page.
-        </div>
+        <h2>Loading trading data...</h2>
       </TradingContainer>
     );
   }
 
+  // Extract symbol for chart
+  const getChartSymbol = () => {
+    if (cryptoData?.token?.type === 'cex') {
+      // For CEX tokens, always use BINANCE format
+      const symbol = cryptoData.token.symbol.toUpperCase();
+      const baseAsset = (cryptoData.pairInfo?.baseAsset || 'USDT').toUpperCase();
+      return `BINANCE:${symbol}${baseAsset}`;
+    } else if (cryptoId) {
+      // Format from URL parameter
+      return `BINANCE:${cryptoId.replace('-', '').toUpperCase()}`;
+    }
+    return 'BINANCE:BTCUSDT'; // Default fallback
+  };
+
+  // Modify renderChartSection to use DexScreener iframe for DEX tokens
+  const renderChartSection = () => {
+    const canShowTradingViewChart = () => {
+      // Don't show TradingView for DEX tokens except major ones
+      if (cryptoData?.token?.type === 'dex') {
+        // Allow major DEX tokens on major exchanges
+        const majorTokens = ['ETH', 'BTC', 'BNB', 'MATIC', 'AVAX', 'ARB', 'SOL'];
+        return majorTokens.includes(cryptoData.token.symbol.toUpperCase());
+      }
+      return true;
+    };
+
+    // Generate a unique container ID for each symbol to prevent conflicts
+    const chartContainerId = `tradingview_${cryptoData?.token?.symbol?.toLowerCase() || 'chart'}_${timeframe}`;
+
+    return (
+      <ChartSection>
+      <ChartContainer>
+        <TimeframeSelector>
+            {Object.keys(TIMEFRAMES).map((tf) => (
+            <TimeButton
+              key={tf}
+              $active={timeframe === tf}
+                onClick={() => handleTimeframeChange(tf)}
+            >
+              {TIMEFRAMES[tf].label}
+            </TimeButton>
+          ))}
+        </TimeframeSelector>
+          
+          {cryptoData?.token?.type === 'dex' ? (
+            // For DEX tokens, use DexScreener iframe
+            <div style={{ position: 'relative', height: '500px', width: '100%' }}>
+              {canShowTradingViewChart() ? (
+                // For major DEX tokens, try TradingView
+                <div id={chartContainerId} style={{ height: '100%', width: '100%' }}>
+                  <TradingChartComponent 
+                    symbol={getDexTradingViewSymbol()}
+                    theme={theme}
+                    timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || '60'}
+                    autosize={true}
+                    container_id={chartContainerId}
+                  />
+                </div>
+              ) : (
+                // For other DEX tokens, use DexScreener iframe
+                <iframe
+                  src={`${getDexScreenerUrl()}?embed=1&theme=dark&trades=0&info=0`}
+                  title="DEX Chart"
+                  style={{ 
+                    height: '100%', 
+                    width: '100%', 
+                    border: 'none',
+                    borderRadius: '8px' 
+                  }}
+                  allowFullScreen
+                />
+              )}
+              {renderDebugInfo()}
+              
+              <DexLink 
+                href={getDexScreenerUrl()} 
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                View on DEXScreener <i className="bi bi-box-arrow-up-right"></i>
+              </DexLink>
+            </div>
+          ) : (
+            // For CEX tokens, use TradingView
+            <div style={{ position: 'relative', height: '500px', width: '100%' }} id={chartContainerId}>
+              <TradingChartComponent 
+                symbol={getChartSymbol()}
+                theme={theme}
+                timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || '60'}
+                autosize={true}
+                allow_symbol_change={true}
+                container_id={chartContainerId}
+              />
+            </div>
+          )}
+      </ChartContainer>
+      </ChartSection>
+    );
+  };
+
+  // Add a debugging component for DEX tokens
+  const DexDebugInfo = styled.div`
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    z-index: 1000;
+    max-width: 400px;
+    max-height: 300px;
+    overflow: auto;
+    font-size: 12px;
+    display: ${props => props.$visible ? 'block' : 'none'};
+    
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+  `;
+
+  const renderDebugInfo = () => {
+    if (!cryptoData?.token?.type === 'dex') return null;
+    
+    return (
+      <div style={{ position: 'relative' }}>
+        <button 
+          onClick={() => setShowDebug(!showDebug)}
+          style={{
+            position: 'absolute',
+            bottom: '10px',
+            right: '10px',
+            background: 'rgba(0,0,0,0.5)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '5px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            zIndex: 11
+          }}
+        >
+          {showDebug ? 'Hide Debug' : 'Debug'}
+        </button>
+        
+        <DexDebugInfo visible={showDebug}>
+          <h4>DEX Token Debug Info</h4>
+          <div>
+            <p><strong>Chain:</strong> {cryptoData?.token?.chainId || 'unknown'}</p>
+            <p><strong>Token Address:</strong> {cryptoData?.token?.address || 'N/A'}</p>
+            <p><strong>Pair Address:</strong> {cryptoData?.pairInfo?.address || 'N/A'}</p>
+            <p><strong>Symbol:</strong> {cryptoData?.token?.symbol || 'unknown'}</p>
+            <hr/>
+            <p><strong>DexScreener URL:</strong> {getDexScreenerUrl()}</p>
+        </div>
+        </DexDebugInfo>
+      </div>
+    );
+  };
+
   return (
     <TradingContainer>
+      {cryptoData?.token && (
+        <CoinInfo>
+          <CoinIcon src={cryptoData.token?.image || btcIcon} theme={theme} alt={cryptoData.token?.name || 'Crypto'} />
+          <div>
+            <CoinName>
+              {cryptoData.token?.name || cryptoId?.split('-')[0] || 'Cryptocurrency'} 
+              <CoinSymbol> {cryptoData.pairInfo?.symbol || cryptoId?.replace('-', '/') || 'BTC/USDT'}</CoinSymbol>
+            </CoinName>
+            <PriceInfo>
+              <Price>${marketPrice ? marketPrice.toFixed(2) : '0.00'}</Price>
+              {cryptoData.chartData?.change24h !== undefined && (
+                <Change $isPositive={cryptoData.chartData.change24h >= 0}>
+                  {cryptoData.chartData.change24h >= 0 ? '+' : ''}{cryptoData.chartData.change24h}%
+                </Change>
+              )}
+            </PriceInfo>
+          </div>
+        </CoinInfo>
+      )}
+
       <TradingGrid>
-        <ChartSection>
-          {renderChart()}
-        </ChartSection>
+        {renderChartSection()}
 
         <RightSection>
           {currentUser ? (
@@ -1813,115 +2359,110 @@ function Trading() {
               <OrderBook>
                 <OrderBookHeader>
                   <span>Price(USDT)</span>
-                  <span>Size({cryptoData?.token?.symbol})</span>
+                  <span>Qty({cryptoData?.token?.symbol || 'BTC'})</span>
                   <span>Total</span>
                 </OrderBookHeader>
                 
                     <OrderBookContent>
                       <AsksContainer>
-                  {orderBook?.asks?.slice().reverse().map((ask, i) => (
+                        {orderBook?.asks?.length > 0 ? (
+                          orderBook.asks.slice().reverse().map((ask, i) => (
                     <OrderBookRow 
-                      key={`${ask.price}-${i}`}
+                              key={`ask-${i}`}
                       $side="sell"
                       $depth={orderBook.asks.length ? 
-                              (Number(ask.amount) / Math.max(...orderBook.asks.map(a => Number(a.amount)))) * 100 : 0}
+                                      (parseFloat(ask.amount) / Math.max(...orderBook.asks.map(a => parseFloat(a.amount)))) * 100 : 0}
                       onClick={() => {
                         setOrderMode('limit');
-                              setLimitPrice(String(ask.price));
-                              setAmount(String(ask.amount));
-                            }}
-                          >
-                            <span style={{ color: '#F6465D' }}>
-                              {typeof ask.price === 'number' ? 
-                                ask.price.toFixed(
-                                  ask.price < 0.01 ? 6 : 
-                                  ask.price < 0.1 ? 5 : 
-                                  ask.price < 1 ? 4 : 
-                                  ask.price < 10 ? 4 : 
-                                  ask.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof ask.amount === 'number' ? ask.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof ask.total === 'number' ? ask.total.toFixed(2) : '0.00'}
-                            </span>
+                                setLimitPrice(String(ask.price));
+                                setAmount(String(ask.amount));
+                              }}
+                              className={orderBookFlash[`ask-${i}`] ? 'flash' : ''}
+                            >
+                              <span style={{ color: '#F6465D' }}>
+                                {typeof ask.price === 'number' ? 
+                                  Number(ask.price).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: ask.price > 1000 ? 2 : 
+                                      ask.price > 100 ? 3 : 
+                                      ask.price > 10 ? 4 : 5
+                                  }) : '0.00'}
+                              </span>
+                              <span>{ask.amount}</span>
+                              <span>{ask.total}</span>
                     </OrderBookRow>
-                  ))}
+                          ))
+                        ) : (
+                          // Display placeholder rows when no asks are available
+                          Array.from({ length: 7 }).map((_, index) => (
+                            <OrderBookRow key={`empty-ask-${index}`} $side="sell" $depth={0}>
+                              <span style={{ color: '#F6465D' }}>---</span>
+                              <span>---</span>
+                              <span>---</span>
+                            </OrderBookRow>
+                          ))
+                        )}
                       </AsksContainer>
 
                   <CurrentPrice $isUp={marketPrice > lastPrice}>
+                        <OrderBookArrow $direction={marketPrice > lastPrice ? 'up' : 'down'}>
+                          {marketPrice > lastPrice ? '↑' : '↓'}
+                        </OrderBookArrow>
                         {marketPrice ? 
-                          marketPrice.toFixed(
-                            marketPrice < 0.01 ? 6 : 
-                            marketPrice < 0.1 ? 5 : 
-                            marketPrice < 1 ? 4 : 
-                            marketPrice < 10 ? 4 : 
-                            marketPrice < 100 ? 3 : 2
-                          ) : 
-                          '0.00'}
+                          Number(marketPrice).toLocaleString(undefined, {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                          }) : '0.00'}
+                        {Math.random() > 0.7 && <OrderBookFlag>⚑</OrderBookFlag>}
                   </CurrentPrice>
 
-                      <TradesList>
-                        {recentTrades.map(trade => (
-                          <TradeRow key={trade.id} $isBuy={trade.isBuy}>
-                            <span>
-                              {typeof trade.price === 'number' ? 
-                                trade.price.toFixed(
-                                  trade.price < 0.01 ? 6 : 
-                                  trade.price < 0.1 ? 5 : 
-                                  trade.price < 1 ? 4 : 
-                                  trade.price < 10 ? 4 : 
-                                  trade.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof trade.amount === 'number' ? trade.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof trade.price === 'number' && typeof trade.amount === 'number' ? 
-                                (trade.price * trade.amount).toFixed(2) : '0.00'}
-                            </span>
-                          </TradeRow>
-                        ))}
-                      </TradesList>
-
                       <BidsContainer>
-                  {orderBook?.bids?.map((bid, i) => (
+                        {orderBook?.bids?.length > 0 ? (
+                          orderBook.bids.map((bid, i) => (
                     <OrderBookRow 
-                      key={`${bid.price}-${i}`}
+                              key={`bid-${i}`}
                       $side="buy"
                       $depth={orderBook.bids.length ? 
-                              (Number(bid.amount) / Math.max(...orderBook.bids.map(b => Number(b.amount)))) * 100 : 0}
+                                      (parseFloat(bid.amount) / Math.max(...orderBook.bids.map(b => parseFloat(b.amount)))) * 100 : 0}
                       onClick={() => {
                         setOrderMode('limit');
-                              setLimitPrice(String(bid.price));
-                              setAmount(String(bid.amount));
-                            }}
-                          >
-                            <span style={{ color: '#0ECB81' }}>
-                              {typeof bid.price === 'number' ? 
-                                bid.price.toFixed(
-                                  bid.price < 0.01 ? 6 : 
-                                  bid.price < 0.1 ? 5 : 
-                                  bid.price < 1 ? 4 : 
-                                  bid.price < 10 ? 4 : 
-                                  bid.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof bid.amount === 'number' ? bid.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof bid.total === 'number' ? bid.total.toFixed(2) : '0.00'}
-                            </span>
+                                setLimitPrice(String(bid.price));
+                                setAmount(String(bid.amount));
+                              }}
+                              className={orderBookFlash[`bid-${i}`] ? 'flash' : ''}
+                            >
+                              <span style={{ color: '#0ECB81' }}>
+                                {typeof bid.price === 'number' ? 
+                                  Number(bid.price).toLocaleString(undefined, {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: bid.price > 1000 ? 2 : 
+                                      bid.price > 100 ? 3 : 
+                                      bid.price > 10 ? 4 : 5
+                                  }) : '0.00'}
+                              </span>
+                              <span>{bid.amount}</span>
+                              <span>{bid.total}</span>
                     </OrderBookRow>
-                  ))}
+                          ))
+                        ) : (
+                          // Display placeholder rows when no bids are available
+                          Array.from({ length: 7 }).map((_, index) => (
+                            <OrderBookRow key={`empty-bid-${index}`} $side="buy" $depth={0}>
+                              <span style={{ color: '#0ECB81' }}>---</span>
+                              <span>---</span>
+                              <span>---</span>
+                            </OrderBookRow>
+                          ))
+                        )}
                       </BidsContainer>
+                      
+                      {/* Add Buy/Sell ratio indicator */}
+                      <OrderBookRatio $buyPercent={buyRatio}>
+                        <RatioIndicator>
+                          <span>B {buyRatio}%</span>
+                          <span>S {100 - buyRatio}%</span>
+                        </RatioIndicator>
+                      </OrderBookRatio>
                     </OrderBookContent>
               </OrderBook>
             </OrderBookSection>
@@ -1997,7 +2538,7 @@ function Trading() {
                     <span>Required Margin:</span>
                     <span>${calculateRequiredMargin(amount, marketPrice, leverage).toFixed(2)} USDT</span>
                   </InfoItem>
-                  <InfoItem highlight>
+                  <InfoItem $highlight>
                     <span>Available Balance:</span>
                     <span>${userBalance?.USDT?.toFixed(2) || '0.00'} USDT</span>
                   </InfoItem>
@@ -2234,5 +2775,82 @@ const StatusMessage = styled.div`
   border-radius: 4px;
   margin-bottom: 16px;
 `;
+
+// Add these new styled components for the professional order book
+const OrderBookArrow = styled.span`
+  color: ${props => props.$direction === 'up' ? '#0ECB81' : '#F6465D'};
+  margin-right: 4px;
+  font-size: 14px;
+`;
+
+const OrderBookFlag = styled.span`
+  color: #F0B90B;
+  margin-left: 4px;
+  font-size: 12px;
+`;
+
+const OrderBookRatio = styled.div`
+  display: flex;
+  align-items: center;
+  height: 28px;
+  background: linear-gradient(
+    to right,
+    rgba(14, 203, 129, 0.2) ${props => props.$buyPercent}%,
+    rgba(246, 70, 93, 0.2) ${props => props.$buyPercent}%
+  );
+  margin-top: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+`;
+
+const RatioIndicator = styled.div`
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  padding: 0 8px;
+  align-items: center;
+  
+  span {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 6px;
+    border-radius: 4px;
+    
+    &:first-child {
+      background: rgba(14, 203, 129, 0.3);
+      color: #0ECB81;
+    }
+    
+    &:last-child {
+      background: rgba(246, 70, 93, 0.3);
+      color: #F6465D;
+    }
+  }
+`;
+
+// Add this function to safely destroy WebSocket connections and other resources
+const safelyCleanup = (resource) => {
+  if (!resource) return;
+  
+  try {
+    // Try different cleanup methods that different libraries might use
+    if (typeof resource.destroy === 'function') {
+      resource.destroy();
+    } else if (typeof resource.close === 'function') {
+      resource.close();
+    } else if (typeof resource.disconnect === 'function') {
+      resource.disconnect();
+    } else if (typeof resource.cleanup === 'function') {
+      resource.cleanup();
+    } else if (typeof resource.dispose === 'function') {
+      resource.dispose();
+    } else if (typeof resource.remove === 'function') {
+      resource.remove();
+    }
+    // If none of these methods exist, no action is taken
+  } catch (error) {
+    console.error('Error safely cleaning up resource:', error);
+  }
+};
 
 export default Trading; 

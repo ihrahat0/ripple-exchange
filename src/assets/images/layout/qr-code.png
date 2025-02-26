@@ -1,1 +1,10 @@
- 
+/* 
+This is a placeholder for a QR code image file.
+Since we can't upload binary files directly through this interface,
+you'll need to replace this with an actual QR code image.
+
+You can:
+1. Create a QR code with any QR code generator (like qr-code-generator.com)
+2. Save it as qr-code.png
+3. Place it in the src/assets/images/layout/ directory
+*/ 
