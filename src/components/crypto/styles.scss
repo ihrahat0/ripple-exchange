@@ -1,0 +1,335 @@
+@use '../../scss/' as *;
+
+.crypto-box {
+    background: var(--bg);
+    border-radius: 12px;
+    padding: 31px 40px;
+    margin-right: 22px;
+    width: 25%;
+  
+    transition: 0.3s all ease-in-out;
+  
+    &:last-child {
+      margin-right: 0;
+    }
+  
+    &.active,
+    &:hover {
+      box-shadow: 0px 14px 64px 0px rgba(15, 15, 15, 0.1);
+    }
+    .top {
+      margin-bottom: 9px;
+      a {
+        font-weight: 700;
+        font-size: 14px;
+  
+        @include flex(center, flex-start);
+  
+        [class^="icon-"] {
+          font-size: 24px;
+          margin-right: 8px;
+        }
+        .unit {
+          margin-left: 9px;
+          color: #777e90;
+        }
+      }
+    }
+    .price {
+      margin-bottom: 11px;
+    }
+    .bottom {
+      display: flex;
+      align-items: center;
+  
+      p {
+        font-size: 14px;
+      }
+      .sale {
+        font-size: 12px;
+        font-weight: 700;
+        color: #fff;
+        margin-left: 9px;
+        padding: 4px 8px 3px 9px;
+        border-radius: 24px;
+      }
+    }
+  }
+
+  .home-2 {
+    .crypto {
+      margin-top: -117px;
+
+      .crypto__main {
+        display: flex;
+        padding: 27px 32px 25px;
+    
+        .crypto-box {
+          padding: 28px 30px 28px 25px;
+          background: var(--surface);
+          backdrop-filter: blur(4px);
+          box-shadow: none;
+          display: flex;
+          justify-content: space-between;
+          width: calc(25% - 17px);
+          .left {
+            width: 60%;
+            margin-right: -10px;
+            span {
+              font-size: 44px;
+            }
+            h6 {
+              font-weight: 700;
+              font-size: 14px;
+              margin-top: 21px;
+              margin-bottom: 13px;
+            }
+    
+            .price {
+              font-size: 24px;
+              letter-spacing: -0.01em;
+              margin-right: -30px;
+              margin-top: 0;
+              margin-bottom: 0;
+            }
+          }
+          .right {
+            width: 40%;
+            text-align: right;
+            img {
+              margin-left: -30px;
+            }
+    
+            .sale {
+              font-size: 16px;
+              font-weight: 700;
+              color: #fff;
+              padding: 4px 9px 3px 10px;
+              border-radius: 24px;
+              margin-top: 6px;
+              margin-bottom: 25px;
+              display: inline-block;
+              svg {
+                margin-right: 2px;
+              }
+            }
+            .unit {
+              font-size: 18px;
+              font-weight: 700;
+            }
+          }
+        }
+    
+        @include desktop-1200 {
+          flex-wrap: wrap;
+    
+          .crypto-box {
+            width: calc(50% - 17px);
+            margin-bottom: 22px;
+    
+            &:nth-child(2) {
+              margin-right: 0;
+            }
+          }
+        }
+    
+        @include mobile {
+          .crypto-box {
+            width: calc(100%);
+            margin-bottom: 22px;
+            margin-right: 0;
+          }
+        }
+      }
+    }
+    
+  }
+  
+  .markets {
+    .crypto {
+      margin-top: -66px;
+  
+      .crypto__main {
+        padding: 17px 32px 30px;
+        .react-tabs {
+          width: 100%;
+          .react-tabs__tab-panel {
+            margin-top: 44px;
+            .content-inner {
+              .crypto-box {
+                padding: 0;
+  
+                position: relative;
+                padding: 0 16px;
+                margin-right: 55px;
+  
+                @include desktop-1200 {
+                  margin-right: 22px;
+                }
+  
+                &::after {
+                  @include absolute;
+                  left: auto;
+                  right: -28px;
+                  width: 1px;
+                  height: 100%;
+                  background: var(--line);
+                }
+  
+                &:last-child {
+                  margin-right: 0;
+                  &::after {
+                    display: none;
+                  }
+                }
+  
+                @include desktop-1200 {
+                  margin-right: 22px;
+                  &::after {
+                    right: -15px;
+                  }
+  
+                  &:nth-child(2) {
+                    &::after {
+                      display: none;
+                    }
+                  }
+                }
+                @include mobile {
+                  &::after {
+                    display: none;
+                  }
+                }
+  
+                .price {
+                  margin-bottom: 0;
+                }
+  
+                &:hover {
+                  background: transparent;
+                  box-shadow: none;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+// Add these styles to handle the tab states
+.tab-item {
+    &.active {
+        color: var(--primary-color);
+        border-bottom: 2px solid var(--primary-color);
+    }
+
+    &.disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+}
+
+.tab-panel {
+    display: none;
+
+    &.active {
+        display: block;
+    }
+}
+
+.crypto {
+    &__main {
+        background: var(--bg);
+        border-radius: 12px;
+        padding: 27px 32px 25px;
+        margin-top: -66px;
+
+        .content-inner {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -11px;
+        }
+
+        .crypto-box {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 31px 27px;
+            margin: 0 11px 22px;
+            width: calc(25% - 22px);
+            transition: all 0.3s;
+
+            @media (max-width: 1199px) {
+                width: calc(50% - 22px);
+            }
+
+            @media (max-width: 767px) {
+                width: calc(100% - 22px);
+            }
+
+            &:hover {
+                transform: translateY(-6px);
+            }
+
+            .left {
+                a {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    margin-bottom: 16px;
+                    
+                    img {
+                        width: 24px;
+                        height: 24px;
+                        border-radius: 50%;
+                    }
+
+                    span {
+                        color: var(--onsurface);
+                        font-weight: 700;
+                        
+                        &.unit {
+                            color: var(--text);
+                            margin-left: 4px;
+                        }
+                    }
+                }
+
+                .price {
+                    font-size: 24px;
+                    color: var(--onsurface);
+                    margin-bottom: 8px;
+                }
+            }
+
+            .right {
+                .bottom {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+
+                    p {
+                        color: var(--text);
+                        font-size: 14px;
+
+                        &.sale {
+                            padding: 4px 8px;
+                            border-radius: 4px;
+                            font-weight: 500;
+
+                            &.success {
+                                background: rgba(14, 203, 129, 0.1);
+                                color: #0ECB81;
+                            }
+
+                            &.critical {
+                                background: rgba(246, 70, 93, 0.1);
+                                color: #F6465D;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

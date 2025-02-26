@@ -1,0 +1,135 @@
+@use '../../scss/' as *;
+
+.header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  z-index: 9999;
+  height: 70px;
+  background: transparent;
+  border-bottom: 1px solid var(--line);
+  transition: all 0.3s ease;
+
+  .container {
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 0 20px;
+  }
+
+  .header__body {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 70px;
+  }
+
+  .header__logo {
+    display: flex;
+    align-items: center;
+
+    .header-logo {
+      height: 40px;
+      width: auto;
+      object-fit: contain;
+    }
+  }
+
+  .header__right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .header__user {
+    position: relative;
+    
+    .user-avatar {
+      cursor: pointer;
+      transition: transform 0.2s;
+
+      &:hover {
+        transform: scale(1.05);
+      }
+
+      .avatar-img {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid var(--primary);
+      }
+    }
+  }
+
+  .header__auth {
+    display: flex;
+    gap: 12px;
+
+    .login-btn, .register-btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 500;
+      transition: all 0.3s ease;
+      text-decoration: none;
+    }
+
+    .login-btn {
+      color: var(--text);
+      background: transparent;
+      border: 1px solid var(--line);
+
+      &:hover {
+        background: var(--line);
+      }
+    }
+
+    .register-btn {
+      color: #fff;
+      background: var(--primary);
+
+      &:hover {
+        opacity: 0.9;
+      }
+    }
+  }
+}
+
+// Media queries for responsiveness
+@media (max-width: 768px) {
+  .header {
+    height: 60px;
+
+    .header__body {
+      height: 60px;
+    }
+
+    .header-logo {
+      height: 32px;
+    }
+
+    .header__auth {
+      .login-btn, .register-btn {
+        padding: 6px 12px;
+        font-size: 14px;
+      }
+    }
+
+    .user-avatar .avatar-img {
+      width: 32px;
+      height: 32px;
+    }
+  }
+}
+
+@media (max-width: 480px) {
+  .header {
+    .container {
+      padding: 0 12px;
+    }
+
+    .header__auth {
+      gap: 8px;
+    }
+  }
+}
