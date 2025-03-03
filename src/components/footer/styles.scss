@@ -105,6 +105,28 @@
         @include mobile {
           border: none;
         }
+        .logo {
+          display: block;
+          margin-bottom: 30px;
+          
+          img {
+            max-width: 100%;
+            height: auto;
+            width: 200px; // Default size
+            
+            @media (max-width: 991px) {
+              width: 180px;
+            }
+            
+            @media (max-width: 767px) {
+              width: 160px;
+            }
+            
+            @media (max-width: 575px) {
+              width: 140px;
+            }
+          }
+        }
       }
       .widget {
         display: flex;

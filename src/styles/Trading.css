@@ -1,0 +1,122 @@
+/* Limit Orders Section */
+.limit-orders-section {
+  margin-top: 20px;
+  margin-bottom: 20px;
+  background-color: #1a1a2e;
+  border-radius: 8px;
+  padding: 15px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.limit-orders-section h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #e1e1e6;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.limit-orders-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.limit-orders-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.limit-orders-table th {
+  text-align: left;
+  padding: 10px;
+  background-color: #16213e;
+  color: #8b8ca7;
+  font-weight: 500;
+  border-bottom: 1px solid #2a2a4a;
+}
+
+.limit-orders-table td {
+  padding: 12px 10px;
+  border-bottom: 1px solid #2a2a4a;
+  color: #e1e1e6;
+}
+
+.limit-orders-table tr:hover {
+  background-color: rgba(42, 42, 74, 0.3);
+}
+
+.limit-orders-table tr.near-execution {
+  background-color: rgba(0, 255, 170, 0.05);
+}
+
+.limit-orders-table tr.near-execution:hover {
+  background-color: rgba(0, 255, 170, 0.1);
+}
+
+.limit-orders-table .buy-type {
+  color: #00cf92;
+  font-weight: 600;
+}
+
+.limit-orders-table .sell-type {
+  color: #ff5c5c;
+  font-weight: 600;
+}
+
+.limit-orders-table .positive {
+  color: #00cf92;
+}
+
+.limit-orders-table .negative {
+  color: #ff5c5c;
+}
+
+.limit-orders-table .cancel-order-btn {
+  background-color: #ff5c5c;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 5px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background-color 0.2s;
+}
+
+.limit-orders-table .cancel-order-btn:hover {
+  background-color: #e04545;
+}
+
+.limit-orders-table tr.provisional {
+  opacity: 0.7;
+}
+
+.limit-orders-table .pending-status {
+  padding: 4px 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 152, 0, 0.1);
+  color: #ff9800;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.limit-orders-table .cancel-order-btn:disabled {
+  background-color: #666;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+@media (max-width: 768px) {
+  .limit-orders-table {
+    font-size: 12px;
+  }
+  
+  .limit-orders-table th,
+  .limit-orders-table td {
+    padding: 8px 6px;
+  }
+  
+  .limit-orders-table .cancel-order-btn {
+    padding: 4px 8px;
+  }
+} 

@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { useNavigate } from 'react-router-dom';
 import 'chartjs-adapter-date-fns';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, onSnapshot, query, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
 import axios from 'axios';
 import chart1 from '../assets/images/charts/1.png';
@@ -255,18 +255,65 @@ function CryptoPrices() {
 
   const categories = ['All', 'Popular', 'Recently added', 'Trending', 'Memes'];
 
+  const formatSmallNumber = (num) => {
+    if (typeof num === 'string') {
+      num = parseFloat(num);
+    }
+    
+    if (isNaN(num) || num === 0) return '0.00';
+    
+    // For numbers smaller than 0.0001
+    if (num < 0.0001) {
+      const str = num.toFixed(8);
+      let leadingZeros = 0;
+      let significantPart = '';
+      
+      // Count leading zeros after decimal
+      for (let i = 2; i < str.length; i++) {
+        if (str[i] === '0') {
+          leadingZeros++;
+        } else {
+          significantPart = str.substring(i);
+          break;
+        }
+      }
+      
+      return `0${leadingZeros > 0 ? `<sub>${leadingZeros}</sub>` : ''}${significantPart}`;
+    }
+    
+    // For numbers between 0.0001 and 0.01
+    if (num < 0.01) {
+      return num.toFixed(6);
+    }
+    
+    // For numbers between 0.01 and 1
+    if (num < 1) {
+      return num.toFixed(4);
+    }
+    
+    // For numbers greater than 1
+    return num.toFixed(2);
+  };
+
   // Fetch historical data for a token
-  const fetchHistoricalData = async (symbol, type, contractAddress, chainId) => {
+  const fetchHistoricalData = async (symbol, type, address, chainId) => {
     try {
-      if (type === 'dex' && contractAddress) {
+      if (!symbol) {
+        console.warn('Symbol is missing in fetchHistoricalData');
+        return null;
+      }
+
+      if (type === 'dex' && address) {
+        console.log(`Fetching historical data for DEX token ${symbol} on chain ${chainId || 'bsc'} with address ${address}`);
         // For DEX tokens, use DexScreener API
         const response = await axios.get(
-          `https://api.dexscreener.com/latest/dex/pairs/${chainId}/${contractAddress}`
+          `https://api.dexscreener.com/latest/dex/pairs/${chainId || 'bsc'}/${address}`
         );
         
         // Check if we have valid pair data
         if (response.data?.pairs && response.data.pairs.length > 0) {
           const pair = response.data.pairs[0];
+          console.log(`Got historical data for ${symbol} from DexScreener:`, pair);
           
           // DexScreener doesn't provide historical candle data through API
           // We'll create a simple dataset based on current price and 24h change
@@ -288,6 +335,8 @@ function CryptoPrices() {
               priceChange24h
             };
           }
+        } else {
+          console.warn(`No pair data found for ${symbol}`);
         }
         
         // Fallback if no data
@@ -296,23 +345,32 @@ function CryptoPrices() {
           prices: [],
           priceChange24h: 0
         };
-      } else {
+      } else if (type === 'cex' || !type) {
         // For CEX tokens, use Binance API
-        const response = await axios.get(
-          `https://api.binance.com/api/v3/klines`,
-          {
-            params: {
-              symbol: `${symbol}USDT`,
-              interval: '1h',
-              limit: 168 // 7 days * 24 hours
+        console.log(`Fetching historical data for CEX token ${symbol} from Binance`);
+        try {
+          const response = await axios.get(
+            `https://api.binance.com/api/v3/klines`,
+            {
+              params: {
+                symbol: `${symbol}USDT`,
+                interval: '1h',
+                limit: 168 // 7 days * 24 hours
+              }
             }
-          }
-        );
-        return response.data.map(candle => ({
-          time: candle[0],
-          close: parseFloat(candle[4])
-        }));
+          );
+          console.log(`Got historical data for ${symbol} from Binance`, response.data.length, 'candles');
+          return response.data.map(candle => ({
+            time: candle[0],
+            close: parseFloat(candle[4])
+          }));
+        } catch (error) {
+          console.error(`Error fetching Binance data for ${symbol}:`, error);
+          return null;
+        }
       }
+      
+      return null;
     } catch (error) {
       console.error('Error fetching historical data:', error);
       return null;
@@ -320,109 +378,167 @@ function CryptoPrices() {
   };
 
   useEffect(() => {
-    const unsubscribe = onSnapshot(query(collection(db, 'coins')), async (snapshot) => {
+    // Try to fetch from both 'tokens' and 'coins' collections
+    const fetchFromBothCollections = async () => {
+      console.log("Fetching from both tokens and coins collections");
+      setLoading(true);
+      
       try {
-        const coinsData = snapshot.docs.map(doc => ({
+        // First check the tokens collection
+        const tokensSnapshot = await getDocs(collection(db, 'tokens'));
+        const tokensData = tokensSnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         }));
-
-        const updatedPrices = await Promise.all(
-          coinsData.map(async (coin) => {
-            try {
-              let priceData;
-              let historicalPrices;
-
-              if (coin.type === 'dex' && coin.contractAddress) {
-                // Fetch DEX data
-                const response = await axios.get(
-                  `https://api.dexscreener.com/latest/dex/tokens/${coin.contractAddress}`
-                );
-                
-                const pairs = response.data.pairs;
-                if (pairs && pairs.length > 0) {
-                  const sortedPairs = pairs.sort((a, b) => 
-                    parseFloat(b.liquidity?.usd || 0) - parseFloat(a.liquidity?.usd || 0)
-                  );
-                  
-                  const mainPair = sortedPairs[0];
-                  priceData = {
-                    ...coin,
-                    price: `$${parseFloat(mainPair.priceUsd).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 6
-                    })}`,
-                    sale: `${parseFloat(mainPair.priceChange.h24).toFixed(2)}%`,
-                    volume24h: mainPair.volume.h24,
-                    cap: `$${(parseFloat(mainPair.fdv || 0) / 1e6).toFixed(2)}M`,
-                    class: parseFloat(mainPair.priceChange.h24) >= 0 ? 'up' : 'down',
-                    dexData: {
-                      pairAddress: mainPair.pairAddress,
-                      dexId: mainPair.dexId,
-                      baseToken: mainPair.baseToken,
-                      chainId: mainPair.chainId,
-                      liquidity: mainPair.liquidity.usd
-                    }
-                  };
-                }
-              } else {
-                // For CEX tokens
-                try {
-                  const response = await axios.get(
-                    `https://api.binance.com/api/v3/ticker/24hr?symbol=${coin.symbol}USDT`
-                  );
-                  
-                  priceData = {
-                    ...coin,
-                    price: `$${parseFloat(response.data.lastPrice).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 6
-                    })}`,
-                    sale: `${parseFloat(response.data.priceChangePercent).toFixed(2)}%`,
-                    volume24h: response.data.volume,
-                    cap: 'N/A', // Market cap not available from Binance API
-                    class: parseFloat(response.data.priceChangePercent) >= 0 ? 'up' : 'down'
-                  };
-                } catch (error) {
-                  console.error(`Error fetching CEX data for ${coin.symbol}:`, error);
-                  return null;
-                }
-              }
-
-              // Fetch historical data
-              historicalPrices = await fetchHistoricalData(
-                coin.symbol,
-                coin.type,
-                coin.contractAddress,
-                coin.chainId
-              );
-
-              if (historicalPrices) {
-                setHistoricalData(prev => ({
-                  ...prev,
-                  [coin.id]: historicalPrices
-                }));
-              }
-
-              return priceData;
-            } catch (error) {
-              console.error(`Error fetching data for ${coin.symbol}:`, error);
-              return null;
-            }
-          })
-        );
-
-        setPrices(updatedPrices.filter(Boolean));
-        setLoading(false);
+        console.log(`Found ${tokensData.length} tokens in 'tokens' collection:`, tokensData);
+        
+        // Then check the coins collection
+        const coinsSnapshot = await getDocs(collection(db, 'coins'));
+        const coinsData = coinsSnapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        console.log(`Found ${coinsData.length} tokens in 'coins' collection:`, coinsData);
+        
+        // Combine the data, with coins taking precedence in case of duplicates
+        const combinedData = [...tokensData];
+        coinsData.forEach(coin => {
+          const existingIndex = combinedData.findIndex(item => 
+            item.symbol === coin.symbol || item.id === coin.id
+          );
+          
+          if (existingIndex >= 0) {
+            // Replace the existing item
+            combinedData[existingIndex] = coin;
+          } else {
+            // Add as new item
+            combinedData.push(coin);
+          }
+        });
+        
+        console.log(`Combined data has ${combinedData.length} tokens:`, combinedData);
+        
+        if (combinedData.length > 0) {
+          const updatedPrices = await processTokensData(combinedData);
+          setPrices(updatedPrices.filter(Boolean));
+        } else {
+          console.warn("No tokens found in either collection");
+        }
       } catch (error) {
-        console.error('Error fetching prices:', error);
-        setError(error.message);
+        console.error("Error fetching from collections:", error);
+        setError("Failed to load token data: " + error.message);
+      } finally {
         setLoading(false);
       }
-    });
-
-    return () => unsubscribe();
+    };
+    
+    fetchFromBothCollections();
   }, []);
+
+  // Extracted processing logic to a separate function for reuse
+  const processTokensData = async (tokensData) => {
+    return Promise.all(
+      tokensData.map(async (token) => {
+        try {
+          let priceData;
+          let historicalPrices;
+
+          console.log(`Processing token: ${token.symbol}`, token);
+          
+          // Normalize token data to handle different field names
+          const normalizedToken = {
+            ...token,
+            address: token.address || token.contractAddress,
+            chainId: token.chainId || token.chain || 'bsc',
+            icon: token.icon || token.logoUrl || token.logo // Add fallback to logoUrl field from admin panel
+          };
+
+          if (normalizedToken.type === 'dex' && normalizedToken.address) {
+            console.log(`Fetching DEX data for ${normalizedToken.symbol} with address ${normalizedToken.address}`);
+            // Fetch DEX data
+            const response = await axios.get(
+              `https://api.dexscreener.com/latest/dex/tokens/${normalizedToken.address}`
+            );
+            console.log(`DexScreener response for ${normalizedToken.symbol}:`, response.data);
+            
+            const pairs = response.data.pairs;
+            if (pairs && pairs.length > 0) {
+              const sortedPairs = pairs.sort((a, b) => 
+                parseFloat(b.liquidity?.usd || 0) - parseFloat(a.liquidity?.usd || 0)
+              );
+              
+              const mainPair = sortedPairs[0];
+              priceData = {
+                ...normalizedToken,
+                price: `$${parseFloat(mainPair.priceUsd).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 6
+                })}`,
+                sale: `${parseFloat(mainPair.priceChange.h24).toFixed(2)}%`,
+                volume24h: mainPair.volume.h24,
+                cap: `$${(parseFloat(mainPair.fdv || 0) / 1e6).toFixed(2)}M`,
+                class: parseFloat(mainPair.priceChange.h24) >= 0 ? 'up' : 'down',
+                dexData: {
+                  pairAddress: mainPair.pairAddress,
+                  dexId: mainPair.dexId,
+                  baseToken: mainPair.baseToken,
+                  chainId: mainPair.chainId,
+                  liquidity: mainPair.liquidity.usd
+                }
+              };
+            } else {
+              console.warn(`No pairs found for DEX token ${normalizedToken.symbol}`);
+            }
+          } else {
+            // For CEX tokens
+            try {
+              console.log(`Fetching CEX data for ${normalizedToken.symbol}`);
+              const response = await axios.get(
+                `https://api.binance.com/api/v3/ticker/24hr?symbol=${normalizedToken.symbol}USDT`
+              );
+              console.log(`Binance response for ${normalizedToken.symbol}:`, response.data);
+              
+              priceData = {
+                ...normalizedToken,
+                price: `$${parseFloat(response.data.lastPrice).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 6
+                })}`,
+                sale: `${parseFloat(response.data.priceChangePercent).toFixed(2)}%`,
+                volume24h: response.data.volume,
+                cap: 'N/A', // Market cap not available from Binance API
+                class: parseFloat(response.data.priceChangePercent) >= 0 ? 'up' : 'down'
+              };
+            } catch (error) {
+              console.error(`Error fetching CEX data for ${normalizedToken.symbol}:`, error);
+              return null;
+            }
+          }
+
+          // Fetch historical data
+          historicalPrices = await fetchHistoricalData(
+            normalizedToken.symbol,
+            normalizedToken.type,
+            normalizedToken.address,
+            normalizedToken.chainId
+          );
+
+          if (historicalPrices) {
+            setHistoricalData(prev => ({
+              ...prev,
+              [normalizedToken.id]: historicalPrices
+            }));
+          }
+
+          console.log(`Final processed data for ${normalizedToken.symbol}:`, priceData);
+          return priceData;
+        } catch (error) {
+          console.error(`Error fetching data for ${token.symbol}:`, error);
+          return null;
+        }
+      })
+    );
+  };
 
   const toggleFavorite = (id) => {
     const newFavorites = new Set(favorites);
@@ -502,23 +618,24 @@ function CryptoPrices() {
   const handleTrade = (crypto) => {
     const cleanSymbol = crypto.symbol?.replace(/[^A-Z0-9]/g, '').toUpperCase();
     
+    // Normalize data structure to handle both 'tokens' and 'coins' format
     const tradingData = {
       token: {
         id: crypto.id,
         name: crypto.name,
         symbol: cleanSymbol,
         type: crypto.type || 'cex',
-        contractAddress: crypto.contractAddress,
-        chainId: crypto.chain || 'bsc'
+        contractAddress: crypto.address || crypto.contractAddress, // Support both field names
+        chainId: crypto.chainId || crypto.chain || 'bsc' // Support both field names
       },
       pairInfo: crypto.type === 'dex' ? {
         address: crypto.dexData?.pairAddress,
         dexId: crypto.dexData?.dexId,
-        chainId: crypto.chain || 'bsc',
-        priceUsd: parseFloat(crypto.price) || 0
+        chainId: crypto.chainId || crypto.chain || 'bsc',
+        priceUsd: parseFloat(crypto.price?.replace('$', '')) || 0
       } : null,
       chartData: {
-        lastPrice: parseFloat(crypto.price) || 0,
+        lastPrice: parseFloat(crypto.price?.replace('$', '')) || 0,
         change24h: parseFloat(crypto.sale) || 0,
         volume24h: crypto.volume24h,
         marketCap: crypto.cap
@@ -602,9 +719,7 @@ function CryptoPrices() {
                   </div>
                 </CoinInfo>
               </Td>
-              <Td>
-                {crypto.price}
-              </Td>
+              <Td dangerouslySetInnerHTML={{ __html: formatSmallNumber(parseFloat(crypto.price.replace('$', ''))) }} />
               <Td>
                 <ChangeText $isPositive={crypto.class === 'up'}>
                   {crypto.sale}

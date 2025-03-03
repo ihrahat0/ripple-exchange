@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import Sale01 from '../components/sale/Sale01';
-import { auth, googleProvider } from '../firebase';
+import { auth, googleProvider, db } from '../firebase';
 import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-
+import { doc, getDoc } from 'firebase/firestore';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
 import PageTitle from '../components/pagetitle';
-
+import { useAuth } from '../contexts/AuthContext';
 import {Link} from 'react-router-dom';
 import img from '../assets/images/icon/qrcode.png'
 
@@ -18,21 +18,45 @@ Login.propTypes = {
 
 function Login(props) {
     const navigate = useNavigate();
+    const { checkEmailVerificationStatus } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phone, setPhone] = useState('');
     const [countryCode, setCountryCode] = useState('+1');
     const [error, setError] = useState('');
+    const [verificationPrompt, setVerificationPrompt] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     const handleEmailLogin = async (e) => {
         e.preventDefault();
+        setLoading(true);
+        setError('');
+        setVerificationPrompt(false);
+
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            console.log('Logged in user:', userCredential.user);
+            const user = userCredential.user;
+            
+            // Check if email is verified in Firestore
+            const isVerified = await checkEmailVerificationStatus(user);
+            
+            if (!isVerified) {
+                // Email is not verified - show message but don't redirect
+                setVerificationPrompt(true);
+                setError('Please verify your email before logging in.');
+                setLoading(false);
+                // Sign the user out to prevent access without verification
+                await auth.signOut();
+                return;
+            }
+            
+            console.log('Logged in user:', user);
             navigate('/user-profile');
         } catch (err) {
             setError(err.message);
             console.error('Login error:', err);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -43,14 +67,26 @@ function Login(props) {
     };
 
     const handleGoogleLogin = async () => {
+        setLoading(true);
+        setError('');
+        
         try {
             const result = await signInWithPopup(auth, googleProvider);
+            
+            // Google accounts are considered pre-verified
             console.log('Google login successful:', result.user);
             navigate('/user-profile');
         } catch (err) {
             setError(err.message);
             console.error('Google login error:', err);
+        } finally {
+            setLoading(false);
         }
+    };
+
+    const handleVerification = () => {
+        // Redirect to a page where they can request a new verification code
+        navigate('/register', { state: { email, showVerification: true } });
     };
 
     return (
@@ -136,12 +172,38 @@ function Login(props) {
                                 </div>
 
                                 {error && <div className="alert alert-danger">{error}</div>}
+                                
+                                {verificationPrompt && (
+                                    <div className="alert alert-warning">
+                                        Your email is not verified. 
+                                        <button 
+                                            onClick={handleVerification}
+                                            style={{
+                                                background: 'none',
+                                                border: 'none',
+                                                color: '#0066cc',
+                                                textDecoration: 'underline',
+                                                padding: '0 5px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Click here to verify
+                                        </button>
+                                    </div>
+                                )}
 
-                                <button type="submit" className="btn-action">Login</button>
+                                <button 
+                                    type="submit" 
+                                    className="btn-action" 
+                                    disabled={loading}
+                                >
+                                    {loading ? 'Logging in...' : 'Login'}
+                                </button>
                                 <button 
                                     type="button" 
                                     onClick={handleGoogleLogin} 
                                     className="btn-action"
+                                    disabled={loading}
                                     style={{
                                         marginTop: '10px',
                                         display: 'flex',
@@ -155,7 +217,7 @@ function Login(props) {
                                         alt="Google" 
                                         style={{width: '20px', height: '20px'}}
                                     />
-                                    Continue with Google
+                                    {loading ? 'Processing...' : 'Continue with Google'}
                                 </button>
                                 <div className="bottom">
                                 <p>Not a member?</p>
@@ -222,14 +284,14 @@ function Login(props) {
                     </TabPanel>
                 </Tabs> 
 
-                    <div className="qr-code center">
+                    {/* <div className="qr-code center">
                     <img src={img} alt="" />
                     <h6 className="fs-20">Login with QR code</h6>
                     <p className="fs-14">
                         Scan this code with the <span>Ripple Exchange mobile app</span> <br />
                         to log in instantly.
                     </p>
-                    </div>
+                    </div> */}
                 </div>
                 </div>
             </div>

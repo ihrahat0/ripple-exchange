@@ -17,6 +17,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
+// Configure auth settings
+auth.useDeviceLanguage(); // Use the device's language for emails
+
 // Initialize Firestore with persistence
 const db = getFirestore(app);
 enableIndexedDbPersistence(db)

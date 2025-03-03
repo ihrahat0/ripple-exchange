@@ -2,9 +2,24 @@ import React, { useState, useEffect, useMemo } from 'react';
 import PropTypes from 'prop-types';
 import Sale01 from '../components/sale/Sale01';
 import { auth } from '../firebase';
-import { updateProfile, signOut } from 'firebase/auth';
+import { 
+    updateProfile, 
+    signOut, 
+    EmailAuthProvider, 
+    reauthenticateWithCredential, 
+    updatePassword 
+} from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { getDoc, doc, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { 
+    getDoc, 
+    doc, 
+    collection, 
+    query, 
+    where, 
+    getDocs, 
+    updateDoc, 
+    serverTimestamp 
+} from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
 import img from '../assets/images/avt/avt.png'
@@ -20,6 +35,20 @@ import ethLogo from '../assets/images/coin/eth.png';
 import usdtLogo from '../assets/images/coin/usdt.png';
 import { DEFAULT_COINS } from '../utils/constants';
 import ConvertModal from '../components/ConvertModal';
+import DepositButton from '../components/DepositButton';
+import { tradingService } from '../services/tradingService';
+import { referralService } from '../services/referralService';
+import solLogo from '../assets/images/coin/sol.png';
+import bnbLogo from '../assets/images/coin/bnb.png';
+import dogeLogo from '../assets/images/coin/doge.png';
+import xrpLogo from '../assets/images/coin/xrp.png';
+import adaLogo from '../assets/images/coin/ada.png';
+import maticLogo from '../assets/images/coin/matic.png';
+import dotLogo from '../assets/images/coin/dot.png';
+import avaxLogo from '../assets/images/coin/avax.png';
+import linkLogo from '../assets/images/coin/link.png';
+import uniLogo from '../assets/images/coin/uni.png';
+import atomLogo from '../assets/images/coin/atom.png';
 
 UserProfile.propTypes = {
     
@@ -28,7 +57,18 @@ UserProfile.propTypes = {
 const COIN_LOGOS = {
   BTC: btcLogo,
   ETH: ethLogo,
-  USDT: usdtLogo
+  USDT: usdtLogo,
+  SOL: solLogo,
+  BNB: bnbLogo,
+  DOGE: dogeLogo,
+  XRP: xrpLogo,
+  ADA: adaLogo,
+  MATIC: maticLogo,
+  DOT: dotLogo,
+  AVAX: avaxLogo,
+  LINK: linkLogo,
+  UNI: uniLogo,
+  ATOM: atomLogo
 };
 
 const AnimatedBorder = styled.div`
@@ -122,13 +162,13 @@ function UserProfile(props) {
         },
         {
             id: 3,
-            title: 'Referrals',
-            icon: 'fa-share-nodes'
+            title: 'Bonus',
+            icon: 'fa-gift'
         },
         {
             id: 4,
-            title: 'API keys',
-            icon: 'fa-gear'
+            title: 'Referrals',
+            icon: 'fa-share-nodes'
         },
         {
             id: 5,
@@ -151,6 +191,18 @@ function UserProfile(props) {
     const [users, setUsers] = useState([]);
     const [editBalance, setEditBalance] = useState({ token: '', amount: '' });
     const [showConvertModal, setShowConvertModal] = useState(false);
+    const [isGoogleUser, setIsGoogleUser] = useState(false);
+    const [verificationCode, setVerificationCode] = useState('');
+    const [sentVerificationCode, setSentVerificationCode] = useState('');
+    const [is2FAEnabled, setIs2FAEnabled] = useState(false);
+    const [oldPassword, setOldPassword] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [bonusAccount, setBonusAccount] = useState(null);
+    const [loadingBonus, setLoadingBonus] = useState(true);
+    const [referralData, setReferralData] = useState(null);
+    const [loadingReferrals, setLoadingReferrals] = useState(true);
+    const [copySuccess, setCopySuccess] = useState('');
 
     const calculateTotalBalance = useMemo(() => {
         return Object.entries(balances).reduce((total, [asset, balance]) => {
@@ -169,6 +221,15 @@ function UserProfile(props) {
                     phoneNumber: user.phoneNumber || '',
                     photoURL: user.photoURL || img,
                 });
+                
+                // Check if user is authenticated with Google
+                const isGoogleAuth = user.providerData.some(
+                    (provider) => provider.providerId === 'google.com'
+                );
+                setIsGoogleUser(isGoogleAuth);
+                
+                // Check if 2FA is enabled
+                checkTwoFactorStatus(user.uid);
             } else {
                 // Redirect to login if not authenticated
                 navigate('/login');
@@ -414,6 +475,223 @@ function UserProfile(props) {
         }
     };
 
+    // Check if 2FA is enabled for this user
+    const checkTwoFactorStatus = async (userId) => {
+        try {
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+            
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                setIs2FAEnabled(userData.twoFactorEnabled || false);
+            }
+        } catch (error) {
+            console.error('Error checking 2FA status:', error);
+        }
+    };
+    
+    // Send verification code for 2FA
+    const sendTwoFactorVerificationCode = async () => {
+        try {
+            setLoading(true);
+            setError('');
+            
+            if (!userData.email) {
+                setError('Email not found');
+                return;
+            }
+            
+            // Import dynamically to avoid server-side issues
+            const { generateVerificationCode, sendVerificationEmail } = await import('../utils/emailService');
+            
+            // Generate a 6-digit code
+            const code = generateVerificationCode();
+            setSentVerificationCode(code);
+            
+            // Send the code via email
+            await sendVerificationEmail(userData.email, code);
+            
+            setSuccess('Verification code sent to your email');
+            setTimeout(() => setSuccess(''), 5000);
+        } catch (error) {
+            console.error('Error sending verification code:', error);
+            setError('Failed to send verification code. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Verify the code and enable/disable 2FA
+    const handleToggle2FA = async () => {
+        try {
+            setLoading(true);
+            setError('');
+            
+            if (verificationCode !== sentVerificationCode) {
+                setError('Invalid verification code');
+                setLoading(false);
+                return;
+            }
+            
+            const userRef = doc(db, 'users', auth.currentUser.uid);
+            await updateDoc(userRef, {
+                twoFactorEnabled: !is2FAEnabled,
+                twoFactorUpdatedAt: serverTimestamp()
+            });
+            
+            // Send email confirmation of 2FA status change
+            const { send2FAStatusChangeEmail } = await import('../utils/emailService');
+            await send2FAStatusChangeEmail(userData.email, !is2FAEnabled);
+            
+            setIs2FAEnabled(!is2FAEnabled);
+            setSuccess(`Two-factor authentication ${!is2FAEnabled ? 'enabled' : 'disabled'} successfully`);
+            
+            // Reset verification code fields
+            setVerificationCode('');
+            setSentVerificationCode('');
+            
+            setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+            console.error('Error toggling 2FA:', error);
+            setError('Failed to update 2FA settings');
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    // Handle password change
+    const handlePasswordChange = async (e) => {
+        e.preventDefault();
+        
+        try {
+            setLoading(true);
+            setError('');
+            
+            // Validate passwords
+            if (newPassword !== confirmPassword) {
+                setError("New passwords don't match");
+                return;
+            }
+            
+            if (newPassword.length < 6) {
+                setError("Password must be at least 6 characters");
+                return;
+            }
+            
+            // Reauthenticate with Firebase
+            const user = auth.currentUser;
+            const credential = EmailAuthProvider.credential(
+                user.email,
+                oldPassword
+            );
+            
+            await reauthenticateWithCredential(user, credential);
+            
+            // Update password
+            await updatePassword(user, newPassword);
+            
+            // Send confirmation email
+            const { sendPasswordChangeConfirmation } = await import('../utils/emailService');
+            await sendPasswordChangeConfirmation(user.email);
+            
+            // Reset form
+            setOldPassword('');
+            setNewPassword('');
+            setConfirmPassword('');
+            
+            setSuccess('Password updated successfully');
+            setTimeout(() => setSuccess(''), 3000);
+        } catch (error) {
+            console.error('Error changing password:', error);
+            
+            if (error.code === 'auth/wrong-password') {
+                setError('Current password is incorrect');
+            } else if (error.code === 'auth/too-many-requests') {
+                setError('Too many attempts. Please try again later');
+            } else {
+                setError('Failed to change password: ' + error.message);
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    // Add functions to fetch bonus and referral data
+    const fetchBonusAccount = async () => {
+        if (!auth.currentUser) return;
+        
+        try {
+            setLoadingBonus(true);
+            const bonusData = await tradingService.getUserBonusAccount(auth.currentUser.uid);
+            setBonusAccount(bonusData);
+        } catch (error) {
+            console.error('Error fetching bonus account:', error);
+        } finally {
+            setLoadingBonus(false);
+        }
+    };
+
+    const fetchReferralData = async () => {
+        if (!auth.currentUser) return;
+        
+        try {
+            setLoadingReferrals(true);
+            
+            // First check if user has a referral code, generate one if not
+            const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+            const userData = userDoc.data();
+            
+            if (!userData.referralCode) {
+                await referralService.generateReferralCode(
+                    auth.currentUser.uid, 
+                    userData.displayName || auth.currentUser.email.split('@')[0]
+                );
+            }
+            
+            // Then get full referral stats
+            const referralStats = await referralService.getReferralStats(auth.currentUser.uid);
+            setReferralData(referralStats);
+        } catch (error) {
+            console.error('Error fetching referral data:', error);
+        } finally {
+            setLoadingReferrals(false);
+        }
+    };
+
+    const handleCopyReferralLink = async () => {
+        if (!referralData?.referralLink) return;
+        
+        try {
+            await navigator.clipboard.writeText(referralData.referralLink);
+            setCopySuccess('Copied!');
+            setTimeout(() => setCopySuccess(''), 3000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+            setCopySuccess('Failed to copy');
+        }
+    };
+
+    const handleCopyReferralCode = async () => {
+        if (!referralData?.referralCode) return;
+        
+        try {
+            await navigator.clipboard.writeText(referralData.referralCode);
+            setCopySuccess('Copied!');
+            setTimeout(() => setCopySuccess(''), 3000);
+        } catch (err) {
+            console.error('Failed to copy text: ', err);
+            setCopySuccess('Failed to copy');
+        }
+    };
+
+    // Add useEffect to load bonus and referral data
+    useEffect(() => {
+        if (auth.currentUser) {
+            fetchBonusAccount();
+            fetchReferralData();
+        }
+    }, []);
+
     if (loading) {
         return <div>Loading...</div>;
     }
@@ -529,6 +807,8 @@ function UserProfile(props) {
             gap: '12px'
         }}>
             <button 
+                onClick={() => navigate('/deposit')}
+                disabled={loading}
                 className="btn-action" 
                 style={{
                     background: '#4A6BF3',
@@ -540,7 +820,7 @@ function UserProfile(props) {
                     cursor: 'pointer'
                 }}
             >
-                Deposit
+                Deposit Funds
             </button>
             <button 
                 className="btn-action" 
@@ -865,173 +1145,560 @@ function UserProfile(props) {
                             </TabPanel>
 
                             <TabPanel>
+                                <div className="content-inner profile">
+                                    <h4 className="balance-title">Liquidation Protection Bonus</h4>
+                                    
+                                    {loadingBonus ? (
+                                        <div style={{ textAlign: 'center', padding: '30px' }}>
+                                            Loading bonus information...
+                                        </div>
+                                    ) : !bonusAccount || !bonusAccount.exists ? (
+                                        <div style={{ textAlign: 'center', padding: '30px', color: '#666' }}>
+                                            <p>You don't have any active bonuses at the moment.</p>
+                                        </div>
+                                    ) : (
+                                        <AnimatedBorder>
+                                            <GalaxyBackground>
+                                                <div style={{
+                                                    padding: '24px',
+                                                    position: 'relative',
+                                                    zIndex: 1
+                                                }}>
+                                                    <div style={{
+                                                        display: 'flex',
+                                                        justifyContent: 'space-between',
+                                                        alignItems: 'flex-start',
+                                                        marginBottom: '20px'
+                                                    }}>
+                                        <div>
+                                                            <h3 style={{ color: '#0ECB81', fontSize: '28px', marginBottom: '10px' }}>
+                                                                {bonusAccount.formattedAmount}
+                                                            </h3>
+                                                            <p style={{ color: '#fff' }}>
+                                                                Status: <span style={{ 
+                                                                    color: bonusAccount.isActive ? '#0ECB81' : '#F6465D', 
+                                                                    fontWeight: '500' 
+                                                                }}>
+                                                                    {bonusAccount.isActive ? 'Active' : 'Inactive'}
+                                                                </span>
+                                                            </p>
+                                                            {bonusAccount.expiryDate && (
+                                                                <p style={{ color: '#fff', marginTop: '5px' }}>
+                                                                    Expires: {bonusAccount.expiryDate.toLocaleDateString()}
+                                                                </p>
+                                                            )}
+                                        </div>
+                                                        <div style={{
+                                                            background: 'rgba(14, 203, 129, 0.1)',
+                                                            borderRadius: '8px',
+                                                            padding: '15px',
+                                                            maxWidth: '300px'
+                                                        }}>
+                                                            <h5 style={{ color: '#0ECB81', marginBottom: '10px' }}>How it works</h5>
+                                                            <p style={{ color: '#ddd', fontSize: '14px', lineHeight: '1.5' }}>
+                                                                This bonus is automatically used to protect your funds from liquidation 
+                                                                when your position would otherwise be liquidated due to market movements.
+                                                            </p>
+                                    </div>
+                                    </div>
+
+                                                    <div style={{ marginTop: '30px' }}>
+                                                        <h4 style={{ color: '#fff', marginBottom: '15px' }}>Protection Details</h4>
+                                                        
+                                                        <div style={{
+                                                            display: 'grid',
+                                                            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                                                            gap: '20px'
+                                                        }}>
+                                                            <div style={{
+                                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                                borderRadius: '8px',
+                                                                padding: '15px'
+                                                            }}>
+                                                                <h5 style={{ color: '#F7931A', marginBottom: '10px' }}>Protected Amount</h5>
+                                                                <p style={{ color: '#ddd', fontSize: '14px' }}>
+                                                                    Your bonus can protect positions up to <strong>{bonusAccount.formattedAmount}</strong> from liquidation.
+                                                                </p>
+                                                            </div>
+                                                            
+                                                            <div style={{
+                                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                                borderRadius: '8px',
+                                                                padding: '15px'
+                                                            }}>
+                                                                <h5 style={{ color: '#F7931A', marginBottom: '10px' }}>Eligibility</h5>
+                                                                <p style={{ color: '#ddd', fontSize: '14px' }}>
+                                                                    Any trading position you open with your deposited funds is eligible for liquidation protection.
+                                                                </p>
+                                                            </div>
+                                                            
+                                                            <div style={{
+                                                                background: 'rgba(255, 255, 255, 0.05)',
+                                                                borderRadius: '8px',
+                                                                padding: '15px'
+                                                            }}>
+                                                                <h5 style={{ color: '#F7931A', marginBottom: '10px' }}>Activation</h5>
+                                                                <p style={{ color: '#ddd', fontSize: '14px' }}>
+                                                                    Bonus is automatically applied when a position would otherwise be liquidated.
+                                                                </p>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {bonusAccount.bonusAccount?.usageHistory && bonusAccount.bonusAccount.usageHistory.length > 0 && (
+                                                        <div style={{ marginTop: '30px' }}>
+                                                            <h4 style={{ color: '#fff', marginBottom: '15px' }}>Usage History</h4>
+                                                            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Date</th>
+                                                                        <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Amount</th>
+                                                                        <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Position</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {bonusAccount.bonusAccount.usageHistory.map((usage, index) => (
+                                                                        <tr key={index}>
+                                                                            <td style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                                {usage.date ? new Date(usage.date.seconds * 1000).toLocaleString() : 'N/A'}
+                                                                            </td>
+                                                                            <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                                ${usage.amount.toFixed(2)}
+                                                                            </td>
+                                                                            <td style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                                {usage.positionId}
+                                                                            </td>
+                                                                        </tr>
+                                                                    ))}
+                                                                </tbody>
+                                                            </table>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </GalaxyBackground>
+                                        </AnimatedBorder>
+                                    )}
+                                </div>
+                            </TabPanel>
+
+                            <TabPanel>
                                 <div className="content-inner referrals">
-                                    <h6>Total rewards</h6>
-                                    <h4>$1,056.00 <span>USD</span></h4>
-                                    <p>
-                                    You're earning 20% of the trading fees your referrals pay.
-                                    Learn more
-                                    </p>
-                                    <div className="main">
-                                    <h6>Invite friends to earn 20%</h6>
-
-                                    <div className="refe">
-                                        <div>
-                                        <p>Referral link</p>
-                                        <input
-                                            className="form-control"
-                                            type="text"
-                                            value="https://accounts.Ripple Exchange.com/login"
-                                        />
+                                    <h4 style={{ marginBottom: '15px' }}>Referral Program</h4>
+                                    
+                                    {loadingReferrals ? (
+                                        <div style={{ textAlign: 'center', padding: '20px' }}>
+                                            Loading referral information...
                                         </div>
-                                        <div>
-                                        <p>Referral code</p>
+                                    ) : (
+                                        <>
+                                            <div style={{ 
+                                                background: 'linear-gradient(135deg, rgba(74,107,243,0.1) 0%, rgba(247,147,26,0.1) 100%)',
+                                                padding: '20px',
+                                                borderRadius: '10px',
+                                                marginBottom: '20px'
+                                            }}>
+                                                <h5 style={{ color: '#F7931A', marginBottom: '10px' }}>How it works</h5>
+                                                <p style={{ marginBottom: '15px' }}>
+                                                    Invite friends to Ripple Exchange and earn 10% of their deposits as commission!
+                                                </p>
+                                                
+                                                <ul style={{ listStyleType: 'none', padding: '0', margin: '0' }}>
+                                                    <li style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                                                        <span style={{ 
+                                                            display: 'inline-block', 
+                                                            width: '24px', 
+                                                            height: '24px', 
+                                                            borderRadius: '50%', 
+                                                            background: '#F7931A', 
+                                                            color: '#fff', 
+                                                            textAlign: 'center', 
+                                                            lineHeight: '24px', 
+                                                            marginRight: '10px' 
+                                                        }}>1</span>
+                                                        Share your referral link with friends
+                                                    </li>
+                                                    <li style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                                                        <span style={{ 
+                                                            display: 'inline-block', 
+                                                            width: '24px', 
+                                                            height: '24px', 
+                                                            borderRadius: '50%', 
+                                                            background: '#F7931A', 
+                                                            color: '#fff', 
+                                                            textAlign: 'center', 
+                                                            lineHeight: '24px', 
+                                                            marginRight: '10px' 
+                                                        }}>2</span>
+                                                        They sign up using your link and make deposits
+                                                    </li>
+                                                    <li style={{ display: 'flex', alignItems: 'center' }}>
+                                                        <span style={{ 
+                                                            display: 'inline-block', 
+                                                            width: '24px', 
+                                                            height: '24px', 
+                                                            borderRadius: '50%', 
+                                                            background: '#F7931A', 
+                                                            color: '#fff', 
+                                                            textAlign: 'center', 
+                                                            lineHeight: '24px', 
+                                                            marginRight: '10px' 
+                                                        }}>3</span>
+                                                        You earn 10% commission on their deposits
+                                                    </li>
+                                                </ul>
+                                            </div>
+                                            
+                                            <div style={{ 
+                                                display: 'flex', 
+                                                justifyContent: 'space-between', 
+                                                marginBottom: '30px',
+                                                flexWrap: 'wrap'
+                                            }}>
+                                                <div style={{ 
+                                                    flex: '1 1 200px', 
+                                                    background: 'rgba(255,255,255,0.05)', 
+                                                    padding: '20px', 
+                                                    borderRadius: '10px',
+                                                    margin: '0 10px 10px 0'
+                                                }}>
+                                                    <h5 style={{ color: '#7A7A7A', fontSize: '14px', marginBottom: '5px' }}>Total Referrals</h5>
+                                                    <h3 style={{ color: '#fff', fontSize: '24px' }}>
+                                                        {referralData?.stats?.totalReferrals || 0}
+                                                    </h3>
+                                                </div>
+                                                
+                                                <div style={{ 
+                                                    flex: '1 1 200px', 
+                                                    background: 'rgba(255,255,255,0.05)', 
+                                                    padding: '20px', 
+                                                    borderRadius: '10px',
+                                                    margin: '0 10px 10px 0'
+                                                }}>
+                                                    <h5 style={{ color: '#7A7A7A', fontSize: '14px', marginBottom: '5px' }}>Active Referrals</h5>
+                                                    <h3 style={{ color: '#fff', fontSize: '24px' }}>
+                                                        {referralData?.stats?.activeReferrals || 0}
+                                                    </h3>
+                                                </div>
+                                                
+                                                <div style={{ 
+                                                    flex: '1 1 200px', 
+                                                    background: 'rgba(255,255,255,0.05)', 
+                                                    padding: '20px', 
+                                                    borderRadius: '10px',
+                                                    margin: '0 0 10px 0'
+                                                }}>
+                                                    <h5 style={{ color: '#7A7A7A', fontSize: '14px', marginBottom: '5px' }}>Total Commission</h5>
+                                                    <h3 style={{ color: '#0ECB81', fontSize: '24px' }}>
+                                                        ${(referralData?.stats?.totalCommission || 0).toFixed(2)}
+                                                    </h3>
+                                                </div>
+                                            </div>
+                                            
+                                            <div style={{ marginBottom: '30px' }}>
+                                                <h4 style={{ marginBottom: '15px' }}>Your Referral Links</h4>
+                                                
+                                                <div style={{
+                                                    background: 'rgba(255,255,255,0.05)',
+                                                    padding: '20px',
+                                                    borderRadius: '10px',
+                                                    marginBottom: '20px'
+                                                }}>
+                                                    <label style={{ display: 'block', marginBottom: '5px', color: '#7A7A7A' }}>Referral Link</label>
+                                                    <div style={{ display: 'flex', marginBottom: '15px' }}>
                                         <input
+                                                            type="text"
+                                                            readOnly
                                             className="form-control"
+                                                            value={referralData?.referralLink || ''}
+                                                            style={{ flex: '1', marginRight: '10px' }}
+                                                        />
+                                                        <button
+                                                            onClick={handleCopyReferralLink}
+                                                            className="btn-action"
+                                                            style={{
+                                                                background: '#4A6BF3',
+                                                                border: 'none',
+                                                                borderRadius: '5px',
+                                                                color: '#fff',
+                                                                padding: '0 15px'
+                                                            }}
+                                                        >
+                                                            {copySuccess === 'Copied!' ? 'Copied!' : 'Copy'}
+                                                        </button>
+                                        </div>
+                                                    
+                                                    <label style={{ display: 'block', marginBottom: '5px', color: '#7A7A7A' }}>Referral Code</label>
+                                                    <div style={{ display: 'flex' }}>
+                                        <input
                                             type="text"
-                                            value="N84CRDKK"
-                                        />
-                                        <span className="btn-action">Copied</span>
+                                                            readOnly
+                                                            className="form-control"
+                                                            value={referralData?.referralCode || ''}
+                                                            style={{ flex: '1', marginRight: '10px' }}
+                                                        />
+                                                        <button
+                                                            onClick={handleCopyReferralCode}
+                                                            className="btn-action"
+                                                            style={{
+                                                                background: '#4A6BF3',
+                                                                border: 'none',
+                                                                borderRadius: '5px',
+                                                                color: '#fff',
+                                                                padding: '0 15px'
+                                                            }}
+                                                        >
+                                                            {copySuccess === 'Copied!' ? 'Copied!' : 'Copy'}
+                                                        </button>
                                         </div>
                                     </div>
+                                                
+                                                <div style={{ 
+                                                    display: 'flex',
+                                                    justifyContent: 'center',
+                                                    gap: '10px',
+                                                    marginTop: '20px'
+                                                }}>
+                                                    <button
+                                                        className="btn-action"
+                                                        style={{
+                                                            background: '#F7931A',
+                                                            border: 'none',
+                                                            borderRadius: '5px',
+                                                            color: '#fff',
+                                                            padding: '10px 20px'
+                                                        }}
+                                                        onClick={() => {
+                                                            window.open("https://twitter.com/intent/tweet?text=Join%20me%20on%20Ripple%20Exchange%20and%20get%20$100%20in%20liquidation%20protection!%20" + encodeURIComponent(referralData?.referralLink || ''), '_blank');
+                                                        }}
+                                                    >
+                                                        Share on Twitter
+                                                    </button>
+                                                    
+                                                    <button
+                                                        className="btn-action"
+                                                        style={{
+                                                            background: '#4267B2',
+                                                            border: 'none',
+                                                            borderRadius: '5px',
+                                                            color: '#fff',
+                                                            padding: '10px 20px'
+                                                        }}
+                                                        onClick={() => {
+                                                            window.open("https://www.facebook.com/sharer/sharer.php?u=" + encodeURIComponent(referralData?.referralLink || ''), '_blank');
+                                                        }}
+                                                    >
+                                                        Share on Facebook
+                                                    </button>
                                     </div>
-
-                                    <Link to="/wallet" className="btn-action">My Wallet</Link>
+                                            </div>
+                                            
+                                            {referralData?.referrals && referralData.referrals.length > 0 && (
+                                                <div>
+                                                    <h4 style={{ marginBottom: '15px' }}>Your Referrals</h4>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                        <thead>
+                                                            <tr>
+                                                                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>User</th>
+                                                                <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Date</th>
+                                                                <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Status</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {referralData.referrals.map((referral, index) => (
+                                                                <tr key={index}>
+                                                                    <td style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                        {referral.userId.substring(0, 8)}...
+                                                                    </td>
+                                                                    <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                        {referral.date ? new Date(referral.date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                                                                    </td>
+                                                                    <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+                                                                        <span style={{
+                                                                            display: 'inline-block',
+                                                                            padding: '3px 10px',
+                                                                            borderRadius: '12px',
+                                                                            background: referral.status === 'active' ? 'rgba(14, 203, 129, 0.1)' : 'rgba(255, 255, 255, 0.1)',
+                                                                            color: referral.status === 'active' ? '#0ECB81' : '#ddd'
+                                                                        }}>
+                                                                            {referral.status}
+                                                                        </span>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                            
+                                            {referralData?.commissions && referralData.commissions.length > 0 && (
+                                                <div style={{ marginTop: '30px' }}>
+                                                    <h4 style={{ marginBottom: '15px' }}>Commission History</h4>
+                                                    <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                                        <thead>
+                                                            <tr>
+                                                                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>From</th>
+                                                                <th style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Date</th>
+                                                                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Deposit</th>
+                                                                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#7A7A7A' }}>Commission</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {referralData.commissions.map((commission, index) => (
+                                                                <tr key={index}>
+                                                                    <td style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                        {commission.fromUserId.substring(0, 8)}...
+                                                                    </td>
+                                                                    <td style={{ padding: '10px', textAlign: 'center', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                        {commission.date ? new Date(commission.date.seconds * 1000).toLocaleDateString() : 'N/A'}
+                                                                    </td>
+                                                                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#ddd' }}>
+                                                                        ${commission.depositAmount.toFixed(2)}
+                                                                    </td>
+                                                                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid rgba(255,255,255,0.1)', color: '#0ECB81' }}>
+                                                                        ${commission.amount.toFixed(2)}
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
                                 </div>
                             </TabPanel>
                             <TabPanel>
                                 <div className="content-inner api">
-                                    <h6>Enable API access on your account to generate keys.</h6>
-                                    <h4>API Access is <span>Disabled</span></h4>
-                                    <p className="mail">
-                                    <svg
-                                        width="24"
-                                        height="24"
-                                        viewBox="0 0 24 24"
-                                        fill="none"
-                                        xmlns="http://www.w3.org/2000/svg"
+                                    <h4>Two-Factor Authentication {is2FAEnabled ? <span className="color-success">Enabled</span> : <span>Disabled</span>}</h4>
+                                    <p>
+                                    {is2FAEnabled ? 
+                                        "Two-factor authentication adds an extra layer of security to your account. To disable 2FA, you need to verify your email." : 
+                                        "Enable two-factor authentication to add an extra layer of security to your account."}
+                                    </p>
+
+                                    <div className="main">
+                                    <h6>{is2FAEnabled ? "Disable 2FA" : "Enable 2FA"}</h6>
+                                    <p>
+                                        Enter your email verification code to {is2FAEnabled ? "disable" : "enable"} 2FA
+                                    </p>
+
+                                    <div className="refe">
+                                        <div className="form-group">
+                                        <p>Verification Code</p>
+                                        <input
+                                            className="form-control"
+                                            type="text"
+                                            placeholder="6-digit code"
+                                            value={verificationCode}
+                                            onChange={(e) => setVerificationCode(e.target.value)}
+                                            maxLength={6}
+                                        />
+                                        <button 
+                                            type="button"
+                                            className="btn-action"
+                                            onClick={sendTwoFactorVerificationCode}
+                                            disabled={loading}
+                                            style={{ marginTop: '10px' }}
+                                        >
+                                            {loading && !verificationCode ? "Sending..." : "Send Verification Code"}
+                                        </button>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        type="button" 
+                                        className="btn-action"
+                                        onClick={handleToggle2FA}
+                                        disabled={loading || !verificationCode || verificationCode.length !== 6}
                                     >
-                                        <path
-                                        fill-rule="evenodd"
-                                        clip-rule="evenodd"
-                                        d="M20 5H4C3.44772 5 3 5.44772 3 6V18C3 18.5523 3.44772 19 4 19H20C20.5523 19 21 18.5523 21 18V6C21 5.44772 20.5523 5 20 5ZM4 3C2.34315 3 1 4.34315 1 6V18C1 19.6569 2.34315 21 4 21H20C21.6569 21 23 19.6569 23 18V6C23 4.34315 21.6569 3 20 3H4Z"
-                                        fill="#23262F"
-                                        />
-                                        <path
-                                        fill-rule="evenodd"
-                                        clip-rule="evenodd"
-                                        d="M5.2318 7.35984C5.58537 6.93556 6.21593 6.87824 6.64021 7.2318L11.3598 11.1648C11.7307 11.4739 12.2694 11.4739 12.6402 11.1648L17.3598 7.2318C17.7841 6.87824 18.4147 6.93556 18.7682 7.35984C19.1218 7.78412 19.0645 8.41468 18.6402 8.76825L13.9206 12.7013C12.808 13.6284 11.192 13.6284 10.0795 12.7013L5.35984 8.76825C4.93556 8.41468 4.87824 7.78412 5.2318 7.35984Z"
-                                        fill="#23262F"
-                                        />
-                                    </svg>
-                                    petersonkenn@demo.com
-                                    </p>
-                                    <div className="main">
-                                    <h6>Enable API keys</h6>
-                                    <p>Enter your password and 2FA code to Enable the API keys</p>
-
-                                    <div className="refe">
-                                        <div className="form-group">
-                                        <p>Your Password</p>
-                                        <input
-                                            className="form-control"
-                                            type="password"
-                                            placeholder="Passworld"
-                                        />
-                                        </div>
-                                        <div className="form-group">
-                                        <p>2FA Code</p>
-                                        <input
-                                            className="form-control"
-                                            type="text"
-                                            placeholder="2FA code"
-                                        />
-                                        </div>
-                                    </div>
-                                    <Link to="#" className="btn-action">Enable API keys</Link>
+                                        {loading && verificationCode ? "Processing..." : is2FAEnabled ? "Disable 2FA verification" : "Enable 2FA verification"}
+                                    </button>
                                     </div>
                                 </div>
                             </TabPanel>
                             <TabPanel>
-                                <div className="content-inner api">
-                                    <h4>2FA <span className="color-success">Enabled</span></h4>
-                                    <p>
-                                    If you want to turn off 2FA, input your account password and
-                                    the six-digit code provided by the Google Authenticator app
-                                    below, then click <strong>"Disable 2FA"</strong>.
-                                    </p>
-
-                                    <div className="main">
-                                    <h6>Disable 2FA</h6>
-                                    <p>
-                                        Enter your password and 2FA code to Disable the 2FA
-                                        verification
-                                    </p>
-
-                                    <div className="refe">
-                                        <div className="form-group">
-                                        <p>Your Password</p>
-                                        <input
-                                            className="form-control"
-                                            type="password"
-                                            placeholder="Passworld"
-                                        />
-                                        </div>
-                                        <div className="form-group">
-                                        <p>2FA Code</p>
-                                        <input
-                                            className="form-control"
-                                            type="text"
-                                            placeholder="2FA code"
-                                        />
-                                        </div>
+                                {isGoogleUser ? (
+                                    <div className="content-inner profile change-pass">
+                                        <h4>Password Change Not Available</h4>
+                                        <p style={{ marginTop: '20px', lineHeight: '1.6' }}>
+                                            Password change is not available for accounts that sign in with Google.
+                                            <br /><br />
+                                            To change your password, you need to update it through your Google account settings.
+                                        </p>
                                     </div>
-                                    <Link to="#" className="btn-action">Disable 2FA verification</Link>
-                                    </div>
-                                </div>
-                            </TabPanel>
-                            <TabPanel>
+                                ) : (
                                 <div className="content-inner profile change-pass">
                                     <h4>Change Password</h4>
-                                    <h6>New Passworld</h6>
-                                    <form action="#">
+                                        <h6>New Password</h6>
+                                        <form onSubmit={handlePasswordChange}>
                                     <div className="form-group">
                                         <div>
-                                        <label>Old Passworld<span>*</span>:</label>
+                                                    <label>Current Password<span>*</span>:</label>
                                         <input
-                                            type="text"
+                                                        type="password"
                                             className="form-control"
-                                            value="123456789"
+                                                        value={oldPassword}
+                                                        onChange={(e) => setOldPassword(e.target.value)}
+                                                        required
                                         />
                                         </div>
+                                                {is2FAEnabled && (
                                         <div>
-                                        <label>2FA Code<span>*</span>:</label>
-                                        <input type="text" className="form-control" />
+                                                        <label>Verification Code<span>*</span>:</label>
+                                                        <input
+                                                            type="text"
+                                                            className="form-control"
+                                                            value={verificationCode}
+                                                            onChange={(e) => setVerificationCode(e.target.value)}
+                                                            placeholder="Enter verification code"
+                                                            required={is2FAEnabled}
+                                                        />
+                                                        <button 
+                                                            type="button"
+                                                            className="btn-action"
+                                                            onClick={sendTwoFactorVerificationCode}
+                                                            style={{ marginTop: '10px', padding: '8px 15px', fontSize: '13px' }}
+                                                        >
+                                                            Send Code
+                                                        </button>
                                         </div>
+                                                )}
                                     </div>
                                     <div className="form-group">
                                         <div>
-                                        <label>New Passworld<span>*</span>:</label>
+                                                    <label>New Password<span>*</span>:</label>
                                         <input
                                             type="password"
                                             className="form-control"
-                                            placeholder="New Passworld"
+                                                        value={newPassword}
+                                                        onChange={(e) => setNewPassword(e.target.value)}
+                                                        placeholder="New Password"
+                                                        minLength="6"
+                                                        required
                                         />
                                         </div>
                                         <div>
-                                        <label>Confirm Passworld<span>*</span>:</label>
+                                                    <label>Confirm Password<span>*</span>:</label>
                                         <input
                                             type="password"
                                             className="form-control"
-                                            placeholder="Confirm Passworld"
+                                                        value={confirmPassword}
+                                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                                        placeholder="Confirm Password"
+                                                        minLength="6"
+                                                        required
                                         />
                                         </div>
                                     </div>
-                                    </form>
-                                    <button type="submit" className="btn-action">
-                                    Change Passworld
+                                            
+                                            {error && <div className="alert alert-danger">{error}</div>}
+                                            {success && <div className="alert alert-success">{success}</div>}
+                                            
+                                            <button type="submit" className="btn-action" disabled={loading}>
+                                                {loading ? "Processing..." : "Change Password"}
                                     </button>
+                                        </form>
                                 </div>
+                                )}
                             </TabPanel>
                         </Tabs> 
                     </div>

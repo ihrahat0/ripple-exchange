@@ -5,47 +5,110 @@ import {
     getDoc, 
     serverTimestamp,
     writeBatch,
-    increment
+    increment,
+    getDocs,
+    query,
+    where,
+    arrayUnion
 } from 'firebase/firestore';
 
 export const tradingService = {
     async openPosition(userId, tradeData) {
         try {
-            const batch = writeBatch(db);
-            const positionRef = doc(collection(db, 'positions'));
-            const userRef = doc(db, 'users', userId);
+            // Check order mode
+            if (tradeData.orderMode === 'market') {
+                // For market orders, execute immediately
+                const batch = writeBatch(db);
+                const positionRef = doc(collection(db, 'positions'));
+                const userRef = doc(db, 'users', userId);
+                
+                // Verify user has enough balance
+                const userDoc = await getDoc(userRef);
+                if (!userDoc.exists()) {
+                    throw new Error('User not found');
+                }
+                
+                const userData = userDoc.data();
+                console.log('User data when opening position:', userData);
+                
+                // Validate if user has sufficient balance
+                let userBalance = 0;
+                
+                if (userData.balances && typeof userData.balances.USDT === 'number') {
+                    userBalance = userData.balances.USDT;
+                } else {
+                    // Try to get balance from a separate balances document (legacy)
+                    try {
+                        const balanceDoc = await getDoc(doc(db, 'balances', userId));
+                        if (balanceDoc.exists()) {
+                            userBalance = balanceDoc.data().USDT || 0;
+                        }
+                    } catch (err) {
+                        console.warn('Error fetching balance document:', err);
+                    }
+                }
+                
+                console.log(`User balance: ${userBalance}, Required margin: ${tradeData.margin}`);
+                
+                if (userBalance < tradeData.margin) {
+                    throw new Error('Insufficient balance');
+                }
+                
+                const position = {
+                    userId,
+                    symbol: tradeData.symbol,
+                    type: tradeData.type,
+                    amount: tradeData.amount,
+                    leverage: tradeData.leverage,
+                    entryPrice: tradeData.entryPrice,
+                    margin: tradeData.margin,
+                    orderMode: tradeData.orderMode,
+                    status: 'OPEN',
+                    openTime: serverTimestamp(),
+                    currentPnL: 0,
+                    lastUpdated: serverTimestamp(),
+                    closePrice: null,
+                    closeTime: null,
+                    finalPnL: null
+                };
+
+                batch.set(positionRef, position);
+                
+                // Update user balance based on document structure
+                if (userData.balances) {
+                    // User has balances field, update it directly
+                    batch.update(userRef, {
+                        [`balances.USDT`]: increment(-tradeData.margin),
+                        lastUpdated: serverTimestamp()
+                    });
+                } else {
+                    // For legacy users, create the balances object
+                    console.log('User has no balances field, creating it');
+                    
+                    batch.update(userRef, {
+                        balances: {
+                            USDT: userBalance - tradeData.margin,
+                            BTC: 0,
+                            ETH: 0
+                        },
+                        lastUpdated: serverTimestamp()
+                    });
+                }
+
+                await batch.commit();
+
+                return {
+                    success: true,
+                    positionId: positionRef.id,
+                    position: { ...position, id: positionRef.id }
+                };
+            } 
+            // For limit orders, create a pending order
+            else if (tradeData.orderMode === 'limit') {
+                return await this.createLimitOrder(userId, tradeData);
+            }
             
-            const position = {
-                userId,
-                symbol: tradeData.symbol,
-                type: tradeData.type,
-                amount: tradeData.amount,
-                leverage: tradeData.leverage,
-                entryPrice: tradeData.entryPrice,
-                margin: tradeData.margin,
-                orderMode: tradeData.orderMode,
-                status: 'OPEN',
-                openTime: serverTimestamp(),
-                currentPnL: 0,
-                lastUpdated: serverTimestamp(),
-                closePrice: null,
-                closeTime: null,
-                finalPnL: null
-            };
-
-            batch.set(positionRef, position);
-            batch.update(userRef, {
-                [`balances.USDT`]: increment(-tradeData.margin),
-                lastUpdated: serverTimestamp()
-            });
-
-            await batch.commit();
-
-            return {
-                success: true,
-                positionId: positionRef.id,
-                position: { ...position, id: positionRef.id }
-            };
+            throw new Error('Invalid order mode');
         } catch (error) {
             console.error('Error opening position:', error);
             throw new Error('Failed to open position');
@@ -62,27 +125,431 @@ export const tradingService = {
             if (!positionDoc.exists()) throw new Error('Position not found');
 
             const position = positionDoc.data();
+            
+            // Validate closePrice
+            if (!closePrice || isNaN(closePrice) || closePrice <= 0) {
+                console.error('Invalid close price:', closePrice);
+                throw new Error('Invalid close price');
+            }
+            
+            console.log(`Calculating PnL for position ${positionId} with close price ${closePrice}`);
+            
             const pnl = calculatePnL(position, closePrice);
-            const returnAmount = +(position.margin + pnl).toFixed(2);
+            let returnAmount = +(position.margin + pnl).toFixed(2);
+            let bonusUsed = 0;
+            let liquidationProtected = false;
+            
+            console.log(`Position ${positionId} PnL: ${pnl}, Initial Return Amount: ${returnAmount}`);
 
+            // Check if the user would be liquidated (negative PnL exceeds margin)
+            if (returnAmount <= 0) {
+                // User would be liquidated, check for liquidation protection bonus
+                const userDoc = await getDoc(userRef);
+                if (!userDoc.exists()) {
+                    throw new Error('User document not found');
+                }
+                
+                const userData = userDoc.data();
+                
+                // Check if bonus account exists and is active
+                if (userData.bonusAccount && 
+                    userData.bonusAccount.isActive && 
+                    userData.bonusAccount.purpose === 'liquidation_protection' &&
+                    userData.bonusAccount.amount > 0) {
+                    
+                    console.log(`User has liquidation protection bonus: ${userData.bonusAccount.amount} USDT`);
+                    
+                    // Calculate how much bonus is needed
+                    const neededBonus = Math.abs(returnAmount);
+                    
+                    // Use either the full needed amount or whatever is available in bonus
+                    bonusUsed = Math.min(neededBonus, userData.bonusAccount.amount);
+                    
+                    console.log(`Using ${bonusUsed} USDT from bonus for liquidation protection`);
+                    
+                    // Adjust the return amount with the bonus
+                    returnAmount = Math.max(0, returnAmount + bonusUsed);
+                    liquidationProtected = true;
+                    
+                    // Update the bonus amount
+                    batch.update(userRef, {
+                        'bonusAccount.amount': increment(-bonusUsed),
+                        'bonusAccount.lastUsed': serverTimestamp(),
+                        'bonusAccount.usageHistory': arrayUnion({
+                            date: new Date(),
+                            amount: bonusUsed,
+                            positionId,
+                            reason: 'liquidation_protection'
+                        })
+                    });
+                    
+                    console.log(`Updated return amount after bonus: ${returnAmount}`);
+                }
+                else {
+                    console.log(`User has no active liquidation protection bonus or it's depleted`);
+                    // User has no bonus or it's depleted, they get liquidated (return 0)
+                    returnAmount = 0;
+                }
+            }
+
+            // Update the position data
             batch.update(positionRef, {
                 status: 'CLOSED',
                 closePrice,
                 closeTime: serverTimestamp(),
                 finalPnL: pnl,
-                returnAmount
+                returnAmount,
+                bonusUsed,
+                liquidationProtected
             });
 
+            // Check if user has balances field
+            const userDoc = await getDoc(userRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User document not found');
+            }
+            
+            const userData = userDoc.data();
+            console.log('User data when closing position:', userData);
+            
+            // Only update user balance if there's something to return
+            if (returnAmount > 0) {
+                // If user has balances object, update it directly
+                if (userData.balances) {
+                    console.log(`Updating user balances.USDT with returnAmount: ${returnAmount}`);
+                    batch.update(userRef, {
+                        [`balances.USDT`]: increment(returnAmount)
+                    });
+                } else {
+                    // For legacy users, create the balances object
+                    console.log('User has no balances field, creating it');
+                    
+                    // Check if there's a balances document for this user
+                    let existingBalance = 0;
+                    try {
+                        const balanceDoc = await getDoc(doc(db, 'balances', userId));
+                        if (balanceDoc.exists()) {
+                            existingBalance = balanceDoc.data().USDT || 0;
+                        }
+                    } catch (err) {
+                        console.warn('Error fetching balance document:', err);
+                    }
+                    
+                    // Create balances field and add the return amount
+                    batch.update(userRef, {
+                        balances: {
+                            USDT: existingBalance + returnAmount,
+                            BTC: 0,
+                            ETH: 0
+                        }
+                    });
+                }
+            }
+
+            await batch.commit();
+
+            return { 
+                success: true, 
+                pnl, 
+                returnAmount,
+                bonusUsed,
+                liquidationProtected 
+            };
+        } catch (error) {
+            console.error('Error closing position:', error);
+            throw new Error('Failed to close position');
+        }
+    },
+
+    // Create a new limit order
+    async createLimitOrder(userId, tradeData) {
+        try {
+            const batch = writeBatch(db);
+            const orderRef = doc(collection(db, 'limitOrders'));
+            const userRef = doc(db, 'users', userId);
+            
+            // Check if user has sufficient balance
+            const userDoc = await getDoc(userRef);
+            if (!userDoc.exists()) throw new Error('User not found');
+            
+            const userData = userDoc.data();
+            console.log('User data when creating limit order:', userData);
+            
+            // Determine user balance
+            let userBalance = 0;
+            
+            if (userData.balances && typeof userData.balances.USDT === 'number') {
+                userBalance = userData.balances.USDT;
+            } else {
+                // Try to get balance from a separate balances document (legacy)
+                try {
+                    const balanceDoc = await getDoc(doc(db, 'balances', userId));
+                    if (balanceDoc.exists()) {
+                        userBalance = balanceDoc.data().USDT || 0;
+                    }
+                } catch (err) {
+                    console.warn('Error fetching balance document:', err);
+                }
+            }
+            
+            console.log(`User balance: ${userBalance}, Required margin: ${tradeData.margin}`);
+            
+            if (userBalance < tradeData.margin) {
+                throw new Error('Insufficient balance for limit order');
+            }
+            
+            const limitOrder = {
+                userId,
+                symbol: tradeData.symbol,
+                type: tradeData.type,
+                amount: tradeData.amount,
+                leverage: tradeData.leverage,
+                targetPrice: tradeData.entryPrice, // The price at which the order should execute
+                margin: tradeData.margin,
+                status: 'PENDING',
+                createdAt: serverTimestamp(),
+                lastUpdated: serverTimestamp()
+            };
+
+            batch.set(orderRef, limitOrder);
+            
+            // Update user balance based on document structure
+            if (userData.balances) {
+                // User has balances field, update it directly
+                batch.update(userRef, {
+                    [`balances.USDT`]: increment(-tradeData.margin),
+                    [`reservedBalance.USDT`]: increment(tradeData.margin),
+                    lastUpdated: serverTimestamp()
+                });
+            } else {
+                // For legacy users, create the balances object
+                console.log('User has no balances field, creating it with reserved balance');
+                
+                batch.update(userRef, {
+                    balances: {
+                        USDT: userBalance - tradeData.margin,
+                        BTC: 0,
+                        ETH: 0
+                    },
+                    reservedBalance: {
+                        USDT: tradeData.margin,
+                    },
+                    lastUpdated: serverTimestamp()
+                });
+            }
+
+            await batch.commit();
+
+            return {
+                success: true,
+                orderId: orderRef.id,
+                order: { ...limitOrder, id: orderRef.id }
+            };
+        } catch (error) {
+            console.error('Error creating limit order:', error);
+            throw new Error(`Failed to create limit order: ${error.message}`);
+        }
+    },
+
+    // Cancel a limit order
+    async cancelLimitOrder(userId, orderId) {
+        try {
+            const batch = writeBatch(db);
+            const orderRef = doc(db, 'limitOrders', orderId);
+            const userRef = doc(db, 'users', userId);
+
+            const orderDoc = await getDoc(orderRef);
+            if (!orderDoc.exists()) throw new Error('Order not found');
+
+            const order = orderDoc.data();
+            
+            // Verify the order belongs to this user
+            if (order.userId !== userId) {
+                throw new Error('Unauthorized to cancel this order');
+            }
+            
+            // Return the reserved margin to user's available balance
             batch.update(userRef, {
-                [`balances.USDT`]: increment(returnAmount)
+                [`balances.USDT`]: increment(order.margin),
+                [`reservedBalance.USDT`]: increment(-order.margin),
+                lastUpdated: serverTimestamp()
+            });
+            
+            // Delete the limit order
+            batch.delete(orderRef);
+
+            await batch.commit();
+
+            return { success: true };
+        } catch (error) {
+            console.error('Error canceling limit order:', error);
+            throw new Error('Failed to cancel limit order');
+        }
+    },
+    
+    // Get limit orders for a user
+    async getLimitOrders(userId, symbol = null) {
+        try {
+            let q;
+            if (symbol) {
+                q = query(
+                    collection(db, 'limitOrders'), 
+                    where('userId', '==', userId),
+                    where('symbol', '==', symbol),
+                    where('status', '==', 'PENDING')
+                );
+            } else {
+                q = query(
+                    collection(db, 'limitOrders'), 
+                    where('userId', '==', userId),
+                    where('status', '==', 'PENDING')
+                );
+            }
+            
+            const snapshot = await getDocs(q);
+            const orders = [];
+            
+            snapshot.forEach(doc => {
+                orders.push({
+                    id: doc.id,
+                    ...doc.data()
+                });
+            });
+            
+            return orders;
+        } catch (error) {
+            console.error('Error getting limit orders:', error);
+            throw new Error('Failed to fetch limit orders');
+        }
+    },
+    
+    // Check and execute limit orders if conditions are met
+    async checkAndExecuteLimitOrders(userId, symbol, currentPrice) {
+        try {
+            if (!currentPrice || isNaN(currentPrice)) return { executed: 0 };
+            
+            const orders = await this.getLimitOrders(userId, symbol);
+            let executedCount = 0;
+            
+            for (const order of orders) {
+                const shouldExecute = this.shouldExecuteLimitOrder(order, currentPrice);
+                
+                if (shouldExecute) {
+                    await this.executeLimitOrder(order, currentPrice);
+                    executedCount++;
+                }
+            }
+            
+            return { executed: executedCount };
+        } catch (error) {
+            console.error('Error checking limit orders:', error);
+            throw new Error('Failed to check limit orders');
+        }
+    },
+    
+    // Determine if a limit order should be executed based on price
+    shouldExecuteLimitOrder(order, currentPrice) {
+        if (order.type === 'buy') {
+            // Buy order executes when price falls to or below target price
+            return currentPrice <= order.targetPrice;
+        } else {
+            // Sell order executes when price rises to or above target price
+            return currentPrice >= order.targetPrice;
+        }
+    },
+    
+    // Execute a limit order by creating a position
+    async executeLimitOrder(order, currentPrice) {
+        try {
+            const batch = writeBatch(db);
+            const positionRef = doc(collection(db, 'positions'));
+            const orderRef = doc(db, 'limitOrders', order.id);
+            const userRef = doc(db, 'users', order.userId);
+            
+            // Create position from the limit order
+            const position = {
+                userId: order.userId,
+                symbol: order.symbol,
+                type: order.type,
+                amount: order.amount,
+                leverage: order.leverage,
+                entryPrice: order.targetPrice, // Use the target price as entry price
+                margin: order.margin,
+                orderMode: 'limit',
+                status: 'OPEN',
+                openTime: serverTimestamp(),
+                currentPnL: 0,
+                lastUpdated: serverTimestamp(),
+                closePrice: null,
+                closeTime: null,
+                finalPnL: null,
+                limitOrderId: order.id // Keep a reference to the original order
+            };
+
+            // Set the new position
+            batch.set(positionRef, position);
+            
+            // Move reserved funds to used funds (already deducted from available balance)
+            batch.update(userRef, {
+                [`reservedBalance.USDT`]: increment(-order.margin),
+                lastUpdated: serverTimestamp()
+            });
+            
+            // Mark the limit order as executed
+            batch.update(orderRef, {
+                status: 'EXECUTED',
+                executedPrice: currentPrice,
+                executedAt: serverTimestamp(),
+                lastUpdated: serverTimestamp()
             });
 
             await batch.commit();
 
-            return { success: true, pnl, returnAmount };
+            return {
+                success: true,
+                positionId: positionRef.id
+            };
         } catch (error) {
-            console.error('Error closing position:', error);
-            throw new Error('Failed to close position');
+            console.error('Error executing limit order:', error);
+            throw new Error('Failed to execute limit order');
+        }
+    },
+
+    // Get user's bonus account details
+    async getUserBonusAccount(userId) {
+        try {
+            if (!userId) throw new Error('User ID is required');
+            
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await getDoc(userRef);
+            
+            if (!userDoc.exists()) {
+                throw new Error('User not found');
+            }
+            
+            const userData = userDoc.data();
+            
+            if (!userData.bonusAccount) {
+                // No bonus account exists
+                return {
+                    exists: false,
+                    message: 'No bonus account found'
+                };
+            }
+            
+            // Return the full bonus account details
+            return {
+                exists: true,
+                bonusAccount: userData.bonusAccount,
+                formattedAmount: `${userData.bonusAccount.amount.toFixed(2)} ${userData.bonusAccount.currency}`,
+                isActive: userData.bonusAccount.isActive,
+                expiryDate: userData.bonusAccount.expiresAt ? new Date(userData.bonusAccount.expiresAt.seconds * 1000) : null,
+                usageHistory: userData.bonusAccount.usageHistory || []
+            };
+        } catch (error) {
+            console.error('Error fetching bonus account:', error);
+            throw new Error('Failed to fetch bonus account details');
         }
     }
 };

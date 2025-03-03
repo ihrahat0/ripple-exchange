@@ -11,6 +11,8 @@ import 'react-tabs/style/react-tabs.css';
 import { useAuth } from '../../contexts/AuthContext';
 import { getDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
 import styled, { keyframes } from 'styled-components';
+import Notifications from '../Notifications';
+import { notificationService } from '../../services/notificationService';
 
 const glowPulse = keyframes`
   0% {
@@ -154,7 +156,7 @@ const SearchResults = styled.div`
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
   z-index: 1000;
   padding: 10px;
-  display: ${props => props.visible ? 'block' : 'none'};
+  display: ${props => props.$visible ? 'block' : 'none'};
 `;
 
 const SearchResultItem = styled.div`
@@ -273,6 +275,39 @@ const AdminLink = styled(Link)`
   }
 `;
 
+const NavLink = styled(Link)`
+  color: var(--text);
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: var(--bg2);
+  }
+
+  &.active {
+    color: var(--primary);
+  }
+`;
+
+const NotificationBadge = styled.span`
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  background-color: #f7931a;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ${glowPulse} 2s ease-in-out infinite;
+`;
+
 const Header = () => {
     const { currentUser } = useAuth();
     const [user, setUser] = useState(null);
@@ -282,6 +317,8 @@ const Header = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [searchResults, setSearchResults] = useState([]);
     const [showResults, setShowResults] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [notificationCount, setNotificationCount] = useState(0);
 
     // Check if we're on login or register page
     const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
@@ -303,6 +340,29 @@ const Header = () => {
             }
         };
         checkAdminStatus();
+    }, [currentUser]);
+
+    useEffect(() => {
+        if (!currentUser) {
+            setNotificationCount(0);
+            return;
+        }
+
+        const fetchNotificationCount = async () => {
+            try {
+                const count = await notificationService.getUnreadCount(currentUser.uid);
+                setNotificationCount(count);
+            } catch (error) {
+                console.error('Error fetching notification count:', error);
+            }
+        };
+
+        fetchNotificationCount();
+
+        // Set up a timer to periodically check for new notifications
+        const intervalId = setInterval(fetchNotificationCount, 60000); // Check every minute
+
+        return () => clearInterval(intervalId);
     }, [currentUser]);
 
     const handleSearch = async (term) => {
@@ -365,7 +425,7 @@ const Header = () => {
     };
 
     const handleProfileClick = () => {
-        navigate('/user-profile');
+        window.location.href = '/user-profile';
     };
 
     const renderUserAvatar = () => {
@@ -373,16 +433,45 @@ const Header = () => {
         return user.photoURL || defaultAvatar;
     };
 
+    const toggleNotifications = (e) => {
+        e.stopPropagation();
+        setShowNotifications(!showNotifications);
+        
+        // Reset notification count when opening notifications
+        if (!showNotifications && notificationCount > 0) {
+            setNotificationCount(0);
+        }
+    };
+
+    // Close notifications when clicking anywhere else
+    const handleClickOutside = () => {
+        if (showNotifications) {
+            setShowNotifications(false);
+        }
+    };
+
+    useEffect(() => {
+        if (showNotifications) {
+            document.addEventListener('click', handleClickOutside);
+        }
+        
+        return () => {
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [showNotifications]);
+
     return (
         <HeaderContainer>
             <HeaderWrapper>
                 <LogoContainer>
-                    <Link to="/">
+                    <Link onClick={() => window.location.href = '/'} to="#">
                         <Logo src={logo} alt="Ripple Exchange" />
                     </Link>
                     <Navigation>
-                        <MenuItem to="/markets">Market</MenuItem>
-                        <MenuItem to="/trade" $hasDropdown>Trade</MenuItem>
+                        <NavLink onClick={() => window.location.href = '/market'} to="#">Market</NavLink>
+                        <NavLink onClick={() => window.location.href = '/trading/btc'} to="#">Trade</NavLink>
+                        <NavLink onClick={() => window.location.href = '/deposit'} to="#">Deposit</NavLink>
+                        <NavLink onClick={() => window.location.href = '/withdraw'} to="#">Withdraw</NavLink>
                     </Navigation>
                 </LogoContainer>
 
@@ -401,7 +490,7 @@ const Header = () => {
                                 setTimeout(() => setShowResults(false), 200);
                             }}
                         />
-                        <SearchResults visible={showResults}>
+                        <SearchResults $visible={showResults}>
                             {searchResults.map(result => (
                                 <SearchResultItem
                                     key={result.id}
@@ -424,7 +513,22 @@ const Header = () => {
                                 </AdminLink>
                             )}
                             <IconButton title="Settings">⚙️</IconButton>
-                            <IconButton title="Notifications">🔔</IconButton>
+                            <IconButton 
+                                title="Notifications" 
+                                onClick={toggleNotifications}
+                                style={{ position: 'relative' }}
+                            >
+                                🔔
+                                {notificationCount > 0 && (
+                                    <NotificationBadge>{notificationCount > 9 ? '9+' : notificationCount}</NotificationBadge>
+                                )}
+                            </IconButton>
+                            {showNotifications && (
+                                <Notifications
+                                    show={showNotifications}
+                                    onClose={() => setShowNotifications(false)}
+                                />
+                            )}
                             <UserAvatar onClick={handleProfileClick}>
                                 <AvatarImage src={renderUserAvatar()} alt="User" />
                             </UserAvatar>

@@ -179,24 +179,29 @@ const TokensList = () => {
   const fetchTokens = async () => {
     setLoading(true);
     try {
-      const tokensQuery = searchTerm 
-        ? query(
-            collection(db, 'tokens'), 
-            where('symbol', '>=', searchTerm.toUpperCase()),
-            where('symbol', '<=', searchTerm.toUpperCase() + '\uf8ff')
-          )
-        : collection(db, 'tokens');
+      // Simplified approach to avoid composite index requirements
+      const tokensSnapshot = await getDocs(collection(db, 'tokens'));
       
-      const snapshot = await getDocs(tokensQuery);
-      
-      const tokensData = snapshot.docs.map(doc => ({
+      let tokensData = tokensSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
+      // Filter in memory if there's a search term
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase();
+        tokensData = tokensData.filter(token => 
+          token.symbol.toLowerCase().includes(term) || 
+          token.name.toLowerCase().includes(term)
+        );
+      }
+      
+      console.log(`Found ${tokensData.length} tokens after filtering`);
       setTokens(tokensData);
     } catch (error) {
       console.error('Error fetching tokens:', error);
+      // Create a helpful user message
+      alert(`Error loading tokens: ${error.message}. Please try refreshing the page.`);
     } finally {
       setLoading(false);
     }

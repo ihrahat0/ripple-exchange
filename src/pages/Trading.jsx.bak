@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
-import { AdvancedRealTimeChart } from "react-ts-tradingview-widgets";
 import { db } from '../firebase';
 import { 
   collection, 
@@ -23,20 +22,12 @@ import {
   serverTimestamp
 } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
-import { tradingService } from '../services/tradingService';
-import { retryOperation } from '../utils/db-helpers';
 import axios from 'axios';
-import { Connection } from '@solana/web3.js';
-import { Liquidity, Token, TokenAmount } from '@raydium-io/raydium-sdk';
-
-// Import fallback icons
+import { v4 as uuidv4 } from 'uuid';
+import TradingChartComponent from '../components/TradingChart';
+import { tradingService } from '../services/tradingService';
 import btcIcon from '../assets/images/coin/btc.png';
-import ethIcon from '../assets/images/coin/eth.png';
-import bnbIcon from '../assets/images/coin/bnb.png';
-import usdtIcon from '../assets/images/coin/tet.png';
-
-// Add this import at the top of the file with other imports
-import FallbackChart from '../components/FallbackChart';
+import LightweightChartComponent from '../components/LightweightChartComponent';
 
 const TradingContainer = styled.div`
   padding: 20px;
@@ -116,7 +107,7 @@ const CoinIcon = styled.img`
   height: 40px;
   border-radius: 50%;
   object-fit: contain;
-  background: ${props => props.theme === 'dark' ? '#2A2A3C' : '#fff'};
+  background: ${props => props.$theme === 'dark' ? '#2A2A3C' : '#fff'};
   padding: 2px;
 `;
 
@@ -168,16 +159,20 @@ const TabGroup = styled.div`
 `;
 
 const OrderTab = styled.button`
-  background: transparent;
-  color: ${props => props.active ? 'var(--primary)' : 'var(--text)'};
+  background: none;
   border: none;
-  padding: 8px 16px;
+  padding: 12px;
   cursor: pointer;
-  font-size: 14px;
-  border-bottom: 2px solid ${props => props.active ? 'var(--primary)' : 'transparent'};
+  font-size: 16px;
+  font-weight: 500;
+  outline: none;
+  color: ${props => props.$active ? 'var(--primary)' : 'var(--text)'};
+  opacity: 0.9;
+  transition: all 0.2s;
+  border-bottom: 2px solid ${props => props.$active ? 'var(--primary)' : 'transparent'};
 
   &:hover {
-    color: var(--primary);
+    opacity: 1;
   }
 `;
 
@@ -252,35 +247,49 @@ const ChartEmbed = styled.iframe`
 `;
 
 const CurrentPrice = styled.div`
-  padding: 4px 8px;
-  margin: 1px 0;
-  text-align: center;
-  font-size: 13px;
-  font-weight: 500;
-  background: var(--bg2);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 14px;
+  padding: 4px 0;
+  margin: 3px 0;
+  position: relative;
   color: ${props => props.$isUp ? '#0ECB81' : '#F6465D'};
-  transition: color 0.2s ease;
+  background: ${props => props.$isUp ? 'rgba(14, 203, 129, 0.1)' : 'rgba(246, 70, 93, 0.1)'};
+  
+  /* Make the price more visible */
+  text-shadow: 0 0 5px ${props => props.$isUp ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)'};
+  
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: ${props => props.$isUp ? 'linear-gradient(to right, rgba(14, 203, 129, 0), rgba(14, 203, 129, 0.1), rgba(14, 203, 129, 0))' : 
+                                         'linear-gradient(to right, rgba(246, 70, 93, 0), rgba(246, 70, 93, 0.1), rgba(246, 70, 93, 0))'};
+    animation: pulse 2s infinite;
+  }
+  
+  @keyframes pulse {
+    0% { opacity: 0.5; }
+    50% { opacity: 1; }
+    100% { opacity: 0.5; }
+  }
 `;
 
-// Update TradingChart component to handle missing cryptoData
-function TradingChart({ symbol, theme }) {
+// Replace the InternalTradingChart function
+function InternalTradingChart({ symbol, theme }) {
   return (
-    <AdvancedRealTimeChart
+    <TradingChartComponent
       symbol={`BINANCE:${symbol}`}
       theme={theme}
       container_id="tradingview_chart"
-      autosize
-      interval="15"
-      timezone="exchange"
-      style="1"
-      locale="en"
-      toolbar_bg="#f1f3f6"
-      enable_publishing={false}
-      hide_top_toolbar={false}
-      hide_legend={false}
-      withdateranges={true}
+      autosize={true}
+      timeframe="15"
+      allow_symbol_change={false}
     />
   );
 }
@@ -305,7 +314,10 @@ const COINGECKO_IDS = {
     'monero': { id: 'monero', symbol: 'XMR', wsSymbol: 'xmrusdt' },
     'cosmos': { id: 'cosmos', symbol: 'ATOM', wsSymbol: 'atomusdt' },
     'algorand': { id: 'algorand', symbol: 'ALGO', wsSymbol: 'algousdt' },
-    'vechain': { id: 'vechain', symbol: 'VET', wsSymbol: 'vetusdt' }
+    'vechain': { id: 'vechain', symbol: 'VET', wsSymbol: 'vetusdt' },
+    'serum': { id: 'serum', symbol: 'SRM', wsSymbol: 'srmusdt' },
+    'raydium': { id: 'raydium', symbol: 'RAY', wsSymbol: 'rayusdt' },
+    'mango-markets': { id: 'mango-markets', symbol: 'MNGO', wsSymbol: 'mngousdt' }
 };
 
 const fetchHistoricalData = async (coinId, days = '1', interval = 'minute') => {
@@ -357,21 +369,31 @@ const OrderTypeSelector = styled.div`
 const leverageOptions = [10, 20, 25, 30, 40];  // Updated leverage options
 
 const LeverageSlider = styled.input`
-  width: 100%;
-  margin: 8px 0;
   -webkit-appearance: none;
-  height: 4px;
-  border-radius: 2px;
-  background: var(--line);
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--bg2);
   outline: none;
+  margin: 10px 0;
   
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
+    appearance: none;
+    width: 18px;
+    height: 18px;
     border-radius: 50%;
-    background: ${props => props.value >= 30 ? '#F6465D' : 'var(--primary)'};
+    background: ${props => props.$value >= 30 ? '#F6465D' : 'var(--primary)'};
     cursor: pointer;
+  }
+  
+  &::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: ${props => props.$value >= 30 ? '#F6465D' : 'var(--primary)'};
+    cursor: pointer;
+    border: none;
   }
 `;
 
@@ -391,13 +413,15 @@ const QuickLeverageButtons = styled.div`
 `;
 
 const QuickLeverageButton = styled.button`
-  background: ${props => props.active ? 'var(--primary)' : 'var(--bg1)'};
-  color: ${props => props.active ? '#fff' : 'var(--text)'};
-  border: 1px solid var(--line);
-  border-radius: 4px;
   padding: 4px 8px;
+  margin: 0 4px;
+  border-radius: 4px;
+  border: none;
+  font-size: 12px;
   cursor: pointer;
-  font-size: 11px;
+  transition: background 0.2s;
+  background: ${props => props.$active ? 'var(--primary)' : 'var(--bg1)'};
+  color: ${props => props.$active ? '#fff' : 'var(--text)'};
   
   &:hover {
     background: var(--primary);
@@ -451,20 +475,22 @@ const OrderBookRow = styled.div`
   font-size: 11px;
   cursor: pointer;
   position: relative;
-  background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
+  height: 20px;
+  line-height: 20px;
+  color: var(--text);
   
   &:hover {
-    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.2)' : 'rgba(14, 203, 129, 0.2)'};
+  background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
   }
   
-  &::after {
+  &::before {
     content: '';
     position: absolute;
     right: 0;
     top: 0;
     bottom: 0;
-    width: ${props => props.$depth}%;
-    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
+    width: ${props => props.$depth || 0}%;
+    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.05)' : 'rgba(14, 203, 129, 0.05)'};
     z-index: 0;
   }
 
@@ -474,6 +500,20 @@ const OrderBookRow = styled.div`
     &:nth-child(2),
     &:last-child {
       text-align: right;
+    }
+  }
+  
+  /* Add subtle animations for updates */
+  &.flash {
+    animation: flashUpdate 0.5s ease-out;
+  }
+  
+  @keyframes flashUpdate {
+    0% {
+      background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.3)' : 'rgba(14, 203, 129, 0.3)'};
+    }
+    100% {
+      background: transparent;
     }
   }
 `;
@@ -527,8 +567,8 @@ const TableCell = styled.td`
 `;
 
 const PnLValue = styled.span`
-  color: ${props => props.value >= 0 ? '#0ECB81' : '#F6465D'};
   font-weight: 500;
+  color: ${props => props.$value >= 0 ? '#0ECB81' : '#F6465D'};
 `;
 
 // Add these styled components at the top with your other styled components
@@ -574,12 +614,35 @@ const LeverageInput = styled.input`
 
 // Add these styled components
 const ChartContainer = styled.div`
-  width: 100%;
-  height: 500px;
   position: relative;
-  background: var(--bg2);
+  background: var(--bg1);
   border-radius: 8px;
-  overflow: hidden;
+  padding: 16px;
+  margin-bottom: 20px;
+`;
+
+const DexLink = styled.a`
+  display: inline-block;
+  padding: 8px 12px;
+  background: rgba(30, 34, 45, 0.8);
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-decoration: none;
+  border-radius: 4px;
+  position: absolute;
+  right: 24px;
+  bottom: 24px;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: var(--primary);
+    color: white;
+  }
+  
+  i {
+    margin-left: 5px;
+    font-size: 12px;
+  }
 `;
 
 const TimeframeSelector = styled.div`
@@ -624,9 +687,9 @@ const TradesList = styled.div`
   max-height: 80px;
   overflow-y: auto;
   padding: 4px 0;
-  background: var(--bg2);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+  border-top: none;
+  border-bottom: none;
   &::-webkit-scrollbar {
     width: 5px;
   }
@@ -677,7 +740,8 @@ const OrderBookContent = styled.div`
 const AsksContainer = styled.div`
   flex: 1;
   overflow-y: auto;
-  background: rgba(246, 70, 93, 0.05);
+  /* Use more subtle background with less opacity */
+  background: var(--bg); 
   display: flex;
   flex-direction: column-reverse;
   min-height: 200px;
@@ -693,7 +757,8 @@ const AsksContainer = styled.div`
 const BidsContainer = styled.div`
   flex: 1;
   overflow-y: auto;
-  background: rgba(14, 203, 129, 0.05);
+  /* Use same background as AsksContainer */
+  background: var(--bg);
   min-height: 200px;
   &::-webkit-scrollbar {
     width: 5px;
@@ -726,15 +791,216 @@ const calculatePnL = (position, currentMarketPrice) => {
   }
 };
 
+// Enhance the function for generating more realistic order book data
+const generateMockOrderBookData = (currentPrice, depthCount = 15) => {
+  if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
+    console.warn('Invalid current price for order book generation:', currentPrice);
+    currentPrice = 0.04; // Fallback price if invalid
+  }
+  
+  // Function to get appropriate step size based on price
+  const getStepSize = (price) => {
+    if (price < 0.0001) return 0.00000001;
+    if (price < 0.001) return 0.0000001;
+    if (price < 0.01) return 0.000001;
+    if (price < 0.1) return 0.00001;
+    if (price < 1) return 0.0001;
+    if (price < 10) return 0.001;
+    if (price < 100) return 0.01;
+    if (price < 1000) return 0.1;
+    return 1;
+  };
+  
+  // Get the step size for this price range
+  const stepSize = getStepSize(currentPrice);
+  const spreadFactor = Math.random() * 0.004 + 0.001; // 0.1% to 0.5% spread
+  
+  // Generate ask prices (sell orders) above current price
+  const asks = [];
+  let askPrice = currentPrice * (1 + spreadFactor);
+  
+  // Create a realistic volume distribution - more volume near the current price
+  for (let i = 0; i < depthCount; i++) {
+    // Round price to appropriate number of decimals
+    askPrice = Math.round(askPrice / stepSize) * stepSize;
+    
+    // Volume decreases as we get further from current price (with some randomness)
+    const volumeBase = 10 / (i + 1) * (0.8 + Math.random() * 0.4);
+    const amount = parseFloat((volumeBase * (0.9 + Math.random() * 0.2)).toFixed(4));
+    
+    // Total value of this order
+    const total = parseFloat((askPrice * amount).toFixed(4));
+    
+    asks.push({
+      price: askPrice,
+      amount: amount,
+      total: total
+    });
+    
+    // Increase the next price with some randomness
+    const priceIncrement = stepSize * (1 + Math.random() * 2);
+    askPrice += priceIncrement;
+  }
+
+  // Generate bid prices (buy orders) below current price
+  const bids = [];
+  let bidPrice = currentPrice * (1 - spreadFactor);
+  
+  for (let i = 0; i < depthCount; i++) {
+    // Round price to appropriate number of decimals
+    bidPrice = Math.round(bidPrice / stepSize) * stepSize;
+    
+    // Volume decreases as we get further from current price (with some randomness)
+    const volumeBase = 10 / (i + 1) * (0.8 + Math.random() * 0.4);
+    const amount = parseFloat((volumeBase * (0.9 + Math.random() * 0.2)).toFixed(4));
+    
+    // Total value of this order
+    const total = parseFloat((bidPrice * amount).toFixed(4));
+    
+    bids.push({
+      price: bidPrice,
+      amount: amount,
+      total: total
+    });
+    
+    // Decrease the next price with some randomness
+    const priceDecrement = stepSize * (1 + Math.random() * 2);
+    bidPrice -= priceDecrement;
+  }
+
+  return { asks, bids };
+};
+
+const formatSmallNumber = (num) => {
+  // Convert string to number if needed
+  const number = typeof num === 'string' ? parseFloat(num) : num;
+  
+  if (isNaN(number) || number === null) return '0.00';
+  
+  // For very small numbers (less than 0.0001)
+  if (number < 0.0001 && number > 0) {
+    return number.toFixed(8).replace(/\.?0+$/, '');
+  }
+  
+  // For small numbers (0.0001 to 0.001)
+  if (number < 0.001) {
+    return number.toFixed(7).replace(/\.?0+$/, '');
+  }
+  
+  // For numbers between 0.001 and 0.01
+  if (number < 0.01) {
+    return number.toFixed(6).replace(/\.?0+$/, '');
+  }
+  
+  // For numbers between 0.01 and 1
+  if (number < 1) {
+    return number.toFixed(4).replace(/\.?0+$/, '');
+  }
+  
+  // For numbers greater than 1
+  return number.toFixed(2).replace(/\.?0+$/, '');
+};
+
+// Helper function to safely cleanup resources
+const safelyCleanup = (resource) => {
+  if (resource && typeof resource === 'function') {
+    try {
+      resource();
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+    }
+  } else if (resource && typeof resource.destroy === 'function') {
+    try {
+      resource.destroy();
+    } catch (error) {
+      console.error('Error destroying resource:', error);
+    }
+  } else if (resource && typeof resource.close === 'function') {
+    try {
+      resource.close();
+    } catch (error) {
+      console.error('Error closing resource:', error);
+    }
+  }
+};
+
+/**
+ * Generates a random updated price based on the current price with realistic volatility
+ * @param {number} currentPrice - The current market price
+ * @returns {number} - A new price with slight random variation
+ */
+const getRandomUpdatedPrice = (currentPrice) => {
+  if (!currentPrice || currentPrice <= 0) return 0.04;
+  
+  // Smaller price changes for more stable updates
+  const volatilityPercentage = 0.002; // Max 0.2% change per update
+  const changePercent = (Math.random() * 2 - 1) * volatilityPercentage;
+  
+  // Calculate new price
+  let newPrice = currentPrice * (1 + changePercent);
+  
+  // Ensure price doesn't drop below minimum values
+  if (newPrice < 0.01) {
+    newPrice = Math.max(newPrice, 0.01);
+  }
+  
+  // Round appropriately based on price magnitude
+  if (newPrice < 0.1) {
+    return Math.round(newPrice * 100000) / 100000;
+  } else if (newPrice < 1) {
+    return Math.round(newPrice * 10000) / 10000;
+  } else if (newPrice < 10) {
+    return Math.round(newPrice * 1000) / 1000;
+  } else if (newPrice < 100) {
+    return Math.round(newPrice * 100) / 100;
+  }
+  
+  return Math.round(newPrice * 10) / 10;
+};
+
+/**
+ * Creates order book data based on market price
+ * @param {number} marketPrice - Current market price
+ * @param {string} symbol - Token symbol
+ * @param {number} buyRatio - Ratio of buy orders vs sell orders
+ * @returns {Object} - Order book data with asks and bids
+ */
+const createOrderBookData = (marketPrice, symbol, buyRatio = 0.5) => {
+  if (!marketPrice || isNaN(marketPrice)) {
+    console.warn('Invalid market price for order book:', marketPrice);
+    return { asks: [], bids: [] };
+  }
+
+  // Ensure buyRatio is between 0.3 and 0.7
+  const normalizedBuyRatio = Math.min(Math.max(buyRatio / 100, 0.3), 0.7);
+  
+  // Generate mock data based on current price
+  const orderBookData = generateMockOrderBookData(marketPrice, 15);
+  
+  // Adjust volume based on buy/sell ratio
+  orderBookData.asks.forEach(ask => {
+    ask.amount = parseFloat((ask.amount * (2 - normalizedBuyRatio * 1.5)).toFixed(4));
+    ask.total = parseFloat((ask.price * ask.amount).toFixed(4));
+  });
+  
+  orderBookData.bids.forEach(bid => {
+    bid.amount = parseFloat((bid.amount * (normalizedBuyRatio * 1.5)).toFixed(4));
+    bid.total = parseFloat((bid.price * bid.amount).toFixed(4));
+  });
+  
+  return orderBookData;
+};
+
 function Trading() {
-  const location = useLocation();
   const { cryptoId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const [theme] = useState('dark');
+  const { currentUser } = useAuth();
   const [cryptoData, setCryptoData] = useState(location.state?.cryptoData || null);
   const [timeframe, setTimeframe] = useState('1H');
   const [orderType, setOrderType] = useState('buy');
   const [amount, setAmount] = useState('');
-  const [theme] = useState('dark');
   const [chartKey, setChartKey] = useState(0);
   const [orderMode, setOrderMode] = useState('market');
   const [leverage, setLeverage] = useState(1);
@@ -743,9 +1009,7 @@ function Trading() {
     open: [],
     closed: []
   });
-  const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
   const [userPnL, setUserPnL] = useState(0);
-  const { currentUser } = useAuth();
   const [error, setError] = useState('');
   const [currentPrice, setCurrentPrice] = useState(0);
   const [userBalance, setUserBalance] = useState(null);
@@ -753,6 +1017,7 @@ function Trading() {
   const [isPending, setIsPending] = useState(false);
   const [openPositions, setOpenPositions] = useState([]);
   const [closedPositions, setClosedPositions] = useState([]);
+  const [pendingLimitOrders, setPendingLimitOrders] = useState([]);
   const [inputKey, setInputKey] = useState(0);
   const [lastPrice, setLastPrice] = useState(0);
   const [marketPrice, setMarketPrice] = useState(0);
@@ -761,6 +1026,390 @@ function Trading() {
   const [isLoadingBalance, setIsLoadingBalance] = useState(true);
   const [priceData, setPriceData] = useState([]);
   const [recentTrades, setRecentTrades] = useState([]);
+  const [showDebug, setShowDebug] = useState(false);
+  const [buyRatio, setBuyRatio] = useState(0.5); // Default 50/50 ratio
+  const [orderBookFlash, setOrderBookFlash] = useState({});
+  const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
+  // Add a state to track the last checked price to avoid too frequent checks
+  const [lastCheckedPrice, setLastCheckedPrice] = useState(0);
+
+  // Refs for cleanup
+  const ws = useRef(null);
+  const priceUpdateInterval = useRef(null);
+  const orderUpdateInterval = useRef(null);
+  const unsubscribeOrders = useRef(null);
+  const unsubscribePositions = useRef(null);
+
+  // Function to fetch positions for the current user
+  const fetchPositions = useCallback(async () => {
+    if (!currentUser) return;
+    
+    try {
+      setIsLoadingPositions(true);
+      
+      // Get open positions
+      const openPositionsQuery = query(
+        collection(db, 'positions'),
+        where('userId', '==', currentUser.uid),
+        where('status', '==', 'OPEN')
+      );
+      
+      const openPositionsSnapshot = await getDocs(openPositionsQuery);
+      const openPositionsData = openPositionsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Get closed positions
+      const closedPositionsQuery = query(
+        collection(db, 'positions'),
+        where('userId', '==', currentUser.uid),
+        where('status', '==', 'CLOSED')
+      );
+      
+      const closedPositionsSnapshot = await getDocs(closedPositionsQuery);
+      const closedPositionsData = closedPositionsSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      
+      // Update the state
+      setOpenPositions(openPositionsData);
+      setClosedPositions(closedPositionsData);
+    } catch (error) {
+      console.error('Error fetching positions:', error);
+    } finally {
+      setIsLoadingPositions(false);
+    }
+  }, [currentUser]);
+
+  // Function to fetch pending limit orders for the current symbol
+  const fetchPendingLimitOrders = useCallback(async () => {
+    if (!currentUser || !cryptoData?.token?.symbol) return;
+    
+    try {
+      const limitOrders = await tradingService.getLimitOrders(currentUser.uid, cryptoData?.token?.symbol);
+      setPendingLimitOrders(limitOrders);
+    } catch (error) {
+      console.error('Error fetching limit orders:', error);
+    }
+  }, [currentUser, cryptoData?.token?.symbol]);
+
+  // Effect to fetch positions on mount and when user changes
+  useEffect(() => {
+    if (currentUser) {
+      fetchPositions();
+    }
+  }, [currentUser, fetchPositions]);
+
+  // Replace with a properly structured useEffect that doesn't have an early return
+  useEffect(() => {
+    let intervalId = null;
+    
+    // Only set up the limit order checking if we have the required data
+    if (currentUser && cryptoData?.token?.symbol && marketPrice) {
+      const executeLimitOrder = async (order) => {
+        try {
+          // Execute the limit order
+          await tradingService.executeLimitOrder(
+            currentUser.uid,
+            order.id,
+            cryptoData.token.symbol,
+            marketPrice
+          );
+          
+          // Refresh positions and limit orders
+          fetchPositions();
+          fetchPendingLimitOrders();
+          
+          console.log(`Limit order ${order.id} executed`);
+        } catch (error) {
+          console.error('Error executing limit order:', error);
+        }
+      };
+      
+      const checkLimitOrders = async () => {
+        try {
+          // Only check for limit order execution if there's a significant price change
+          const pendingOrders = [...pendingLimitOrders];
+          
+          for (const order of pendingOrders) {
+            // Check if the order should be executed
+            if (order.type === 'buy' && marketPrice <= order.targetPrice) {
+              // Execute buy limit order
+              await executeLimitOrder(order);
+            } else if (order.type === 'sell' && marketPrice >= order.targetPrice) {
+              // Execute sell limit order
+              await executeLimitOrder(order);
+            }
+          }
+        } catch (error) {
+          console.error('Error checking limit orders:', error);
+        }
+      };
+      
+      // Check limit orders when price changes
+      checkLimitOrders();
+      
+      // Set up interval to periodically check limit orders
+      intervalId = setInterval(checkLimitOrders, 10000);
+    }
+    
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
+  }, [currentUser, cryptoData?.token?.symbol, marketPrice, pendingLimitOrders, fetchPositions, fetchPendingLimitOrders]);
+
+  // Move ensureUserBalances here, at the top level of the component
+  const ensureUserBalances = useCallback(async () => {
+    if (!currentUser) return;
+    
+    try {
+      // Check if user has balances field
+      const userRef = doc(db, 'users', currentUser.uid);
+      const userDoc = await getDoc(userRef);
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        
+        // If balances field doesn't exist or is invalid, create it
+        if (!userData.balances || typeof userData.balances !== 'object') {
+          console.log('User missing balances field, adding default balances');
+          
+          // Try to get any existing balances from the old location
+          let existingBalances = { USDT: 1000 }; // Default to 1000 USDT
+          
+          try {
+            const oldBalanceDoc = await getDoc(doc(db, 'balances', currentUser.uid));
+            if (oldBalanceDoc.exists()) {
+              const oldBalances = oldBalanceDoc.data();
+              if (oldBalances.USDT !== undefined) {
+                existingBalances.USDT = oldBalances.USDT;
+              }
+              if (oldBalances.BTC !== undefined) {
+                existingBalances.BTC = oldBalances.BTC;
+              }
+              // Add other coins as needed
+    }
+  } catch (error) {
+            console.warn('Error fetching old balances:', error);
+          }
+          
+          // Update user document with balances
+          await updateDoc(userRef, {
+            balances: existingBalances
+          });
+          
+          console.log('Updated user with balances:', existingBalances);
+        }
+      }
+    } catch (error) {
+      console.error('Error ensuring user balances:', error);
+    }
+  }, [currentUser]);
+  
+  // Call the ensureUserBalances function when component mounts and user is available
+  useEffect(() => {
+    if (currentUser) {
+      ensureUserBalances();
+    }
+  }, [currentUser, ensureUserBalances]);
+
+  // WebSocket setup
+  const setupWebSocket = useCallback(() => {
+    if (!isOnline) return null;
+
+    try {
+      // Close existing connection if any
+      if (ws.current) {
+        ws.current.close();
+      }
+
+      const symbol = cryptoData?.token?.symbol?.toLowerCase() || 'btc';
+      const wsSymbol = `${symbol}usdt@ticker`;
+      const newWs = new WebSocket(`wss://stream.binance.com:9443/ws/${wsSymbol}`);
+      
+      newWs.onopen = () => {
+        console.log('WebSocket connected');
+      };
+
+      newWs.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          // Handle the message data
+          console.log('WebSocket message:', data);
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
+        }
+      };
+
+      newWs.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      newWs.onclose = () => {
+        console.log('WebSocket disconnected');
+      };
+
+      ws.current = newWs;
+      return () => {
+        if (ws.current) {
+          ws.current.close();
+          ws.current = null;
+        }
+      };
+    } catch (error) {
+      console.error('Error setting up WebSocket:', error);
+      return null;
+    }
+  }, [isOnline, cryptoData?.token?.symbol]);
+
+  // Price update function
+  const updatePrice = useCallback(async () => {
+    try {
+      // Your price update logic here
+      const newPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.001);
+      setCurrentPrice(newPrice);
+    } catch (error) {
+      console.error('Error updating price:', error);
+    }
+  }, [currentPrice]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      // Cleanup WebSocket
+      if (ws.current) {
+        ws.current.close();
+        ws.current = null;
+      }
+
+      // Clear intervals
+      if (priceUpdateInterval.current) {
+        clearInterval(priceUpdateInterval.current);
+        priceUpdateInterval.current = null;
+      }
+
+      // Clear any other intervals or timeouts
+      if (orderUpdateInterval.current) {
+        clearInterval(orderUpdateInterval.current);
+        orderUpdateInterval.current = null;
+      }
+
+      // Unsubscribe from any Firestore listeners
+      if (typeof unsubscribeOrders.current === 'function') {
+        unsubscribeOrders.current();
+      }
+      if (typeof unsubscribePositions.current === 'function') {
+        unsubscribePositions.current();
+      }
+    };
+  }, []);
+
+  // WebSocket connection effect
+  useEffect(() => {
+    const cleanup = setupWebSocket();
+    return () => {
+      if (cleanup && typeof cleanup === 'function') {
+        cleanup();
+      }
+    };
+  }, [setupWebSocket]);
+
+  // Price update interval effect
+  useEffect(() => {
+    const intervalId = setInterval(updatePrice, 5000);
+    priceUpdateInterval.current = intervalId;
+    
+    return () => {
+      clearInterval(intervalId);
+      priceUpdateInterval.current = null;
+    };
+  }, [updatePrice]);
+
+  // Order update interval effect
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setOrderBook(generateMockOrderBookData(currentPrice));
+    }, 3000);
+    orderUpdateInterval.current = intervalId;
+    
+    return () => {
+      clearInterval(intervalId);
+      orderUpdateInterval.current = null;
+    };
+  }, [currentPrice]);
+
+  // TradingView widget cleanup
+  useEffect(() => {
+    const tradingViewContainer = document.getElementById('tradingview_chart');
+    
+    return () => {
+      try {
+        if (tradingViewContainer) {
+          while (tradingViewContainer.firstChild) {
+            tradingViewContainer.removeChild(tradingViewContainer.firstChild);
+          }
+        }
+        
+        if (window.TradingView && typeof window.TradingView === 'object') {
+          if (window.TradingView._binders) {
+            window.TradingView._binders = [];
+          }
+        }
+      } catch (error) {
+        console.error('Error cleaning up TradingView widget:', error);
+      }
+    };
+  }, []);
+
+  // Order book interval management
+  useEffect(() => {
+    let orderBookInterval = null;
+    
+    if (isOnline) {
+      orderBookInterval = setInterval(() => {
+        try {
+          if (marketPrice) {
+            const newOrders = generateDummyOrders(marketPrice);
+            setOrderBook(newOrders);
+            
+            const newBuyRatio = Math.floor(Math.random() * 40) + 10;
+            setBuyRatio(newBuyRatio);
+            
+            const newFlash = {};
+            newOrders.asks.forEach((_, i) => {
+              if (Math.random() > 0.7) {
+                newFlash[`ask-${i}`] = true;
+              }
+            });
+            
+            newOrders.bids.forEach((_, i) => {
+              if (Math.random() > 0.7) {
+                newFlash[`bid-${i}`] = true;
+              }
+            });
+            
+            setOrderBookFlash(newFlash);
+            
+            setTimeout(() => {
+              setOrderBookFlash({});
+            }, 600);
+          }
+        } catch (error) {
+          console.error('Error updating order book:', error);
+        }
+      }, 4000);
+    }
+    
+    return () => {
+      if (orderBookInterval) {
+        clearInterval(orderBookInterval);
+      }
+    };
+  }, [marketPrice, isOnline]);
 
   // Effect for online/offline status
   useEffect(() => {
@@ -782,17 +1431,21 @@ function Trading() {
 
     let ws;
     const updatePrice = async () => {
-      if (cryptoData.token?.type === 'dex') {
+      if (cryptoData?.token?.type === 'dex') {
         // DEX price update logic
-        if (cryptoData.token?.address && cryptoData.token?.chainId) {
+        if (cryptoData?.token?.address && cryptoData?.token?.chainId) {
           try {
             const response = await axios.get(`https://api.dexscreener.com/latest/dex/pairs/${cryptoData.token.chainId}/${cryptoData.token.address}`);
             if (response.data?.pair?.priceUsd) {
               const price = parseFloat(response.data.pair.priceUsd);
-              setMarketPrice(price);
-              setLastPrice(price);
-              setCurrentPrice(price);
-              setOrderBook(generateDummyOrders(price));
+              if (!isNaN(price) && price > 0) {
+                setMarketPrice(price);
+                setLastPrice(price);
+                setCurrentPrice(price);
+                setOrderBook(generateDummyOrders(price));
+              } else {
+                console.warn('Invalid price received from DEX API:', response.data.pair.priceUsd);
+              }
             }
           } catch (error) {
             console.error('Error fetching DEX price:', error);
@@ -800,7 +1453,7 @@ function Trading() {
         }
       } else {
         // CEX WebSocket connection
-        const symbol = cryptoData.token?.symbol?.toLowerCase() || 'btcusdt';
+        const symbol = cryptoData?.token?.symbol?.toLowerCase() || 'btcusdt';
         console.log('Setting up initial WebSocket for symbol:', symbol);
         
         ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol}@trade`);
@@ -816,9 +1469,11 @@ function Trading() {
                 setLastPrice(newPrice);
                 setCurrentPrice(newPrice);
                 setOrderBook(generateDummyOrders(newPrice));
+              } else {
+                console.warn('Invalid price received from WebSocket:', data.p);
               }
-            }
-          } catch (error) {
+      }
+    } catch (error) {
             console.error('Error processing WebSocket message:', error);
           }
         };
@@ -861,7 +1516,27 @@ function Trading() {
         },
         (doc) => {
           if (doc.exists()) {
-            setUserBalance(doc.data().balances || {});
+            const userData = doc.data();
+            console.log('Full user data:', userData);
+            
+            // Check if balances exist in the user document
+            if (userData.balances) {
+              console.log('User balances from document:', userData.balances);
+              console.log('USDT balance type:', typeof userData.balances.USDT, 'value:', userData.balances.USDT);
+              
+              // Ensure USDT exists and is a valid number
+              if (userData.balances.USDT === undefined || userData.balances.USDT === null || isNaN(userData.balances.USDT)) {
+                console.warn('Invalid USDT balance in user document, setting to 0');
+                userData.balances.USDT = 0;
+              }
+              
+              setUserBalance(userData.balances);
+            } else {
+              // No balances in user document
+              console.warn('No balances field in user document, will be fixed by ensureUserBalances');
+              setUserBalance({ USDT: 0, BTC: 0, ETH: 0 });
+            }
+            
             setIsLoadingBalance(false);
           }
         },
@@ -881,7 +1556,7 @@ function Trading() {
           snapshot.docs.forEach(doc => {
             const data = doc.data();
             const position = {
-              id: doc.id,
+        id: doc.id,
               ...data,
               openTime: data.openTime?.toDate?.() || new Date(data.openTime),
               closeTime: data.closeTime?.toDate?.() || (data.closeTime ? new Date(data.closeTime) : null),
@@ -897,7 +1572,7 @@ function Trading() {
 
           setOpenPositions(openPos.sort((a, b) => b.openTime - a.openTime));
           setClosedPositions(closedPos.sort((a, b) => b.closeTime - a.closeTime));
-          setIsLoadingPositions(false);
+      setIsLoadingPositions(false);
         },
         (error) => console.error('Positions snapshot error:', error)
       );
@@ -915,26 +1590,110 @@ function Trading() {
 
   // Define fetchPriceData function before any useEffect that uses it
   const fetchPriceData = useCallback(async () => {
-    if (!cryptoData?.token) return;
+    if (!cryptoData?.token) {
+      console.warn('No token data available for fetchPriceData');
+      return;
+    }
 
     try {
       if (cryptoData.token.type === 'dex') {
-        // For DEX tokens, use DexScreener API
-        const chain = cryptoData.token.chainId?.toLowerCase() || 'bsc';
+        // For DEX tokens, use DexScreener API's standard pairs endpoint
+        const chain = cryptoData.token.chainId?.toLowerCase() || 'ethereum';
         const pairAddress = cryptoData.pairInfo?.address?.toLowerCase();
         
-        const response = await axios.get(
-          `https://api.dexscreener.com/latest/dex/pairs/${chain}/${pairAddress}/candles`,
-          {
-            params: {
-              from: Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
-              to: Math.floor(Date.now() / 1000),
-              resolution: TIMEFRAMES[timeframe].dexInterval
-            }
+        if (!pairAddress) {
+          console.error('No pair address available for DEX token');
+          setPriceData([]);
+          return;
+        }
+        
+        console.log(`Fetching price data for ${chain}/${pairAddress}`);
+        
+        // Try both format options to ensure we get data
+        let response;
+        try {
+          // First attempt: Use pairs/{chain}/{pairAddress} format
+          response = await axios.get(
+            `https://api.dexscreener.com/latest/dex/pairs/${chain}/${pairAddress}`
+          );
+          console.log('DexScreener API response (pairs endpoint):', response.data);
+        } catch (error) {
+          console.error('Error fetching from DexScreener pairs endpoint:', error);
+          
+          // Second attempt: Use direct address endpoint
+          try {
+            response = await axios.get(
+              `https://api.dexscreener.com/latest/dex/search?q=${pairAddress}`
+            );
+            console.log('DexScreener API response (search endpoint):', response.data);
+          } catch (searchError) {
+            console.error('Error fetching from DexScreener search endpoint:', searchError);
+            throw new Error('Failed to fetch data from DexScreener');
           }
-        );
-
-        setPriceData(response.data);
+        }
+        
+        // Check if we have valid data from either attempt
+        const pairs = response.data?.pairs || [response.data?.pair].filter(Boolean);
+        if (pairs && pairs.length > 0) {
+          const pair = pairs[0];
+          console.log('Found pair data:', pair);
+          
+          // Update market price with the latest price
+          if (pair.priceUsd) {
+            setMarketPrice(parseFloat(pair.priceUsd));
+            setCurrentPrice(parseFloat(pair.priceUsd));
+          }
+          
+          // Update pairInfo with any additional data we got from DexScreener
+          if (!cryptoData.pairInfo || !cryptoData.pairInfo.dexId) {
+            const updatedCryptoData = {
+              ...cryptoData,
+              pairInfo: {
+                ...cryptoData.pairInfo,
+                address: pair.pairAddress || cryptoData.pairInfo?.address,
+                dexId: pair.dexId || cryptoData.pairInfo?.dexId || 'unknown',
+                baseToken: pair.baseToken || cryptoData.pairInfo?.baseToken,
+                quoteToken: pair.quoteToken || cryptoData.pairInfo?.quoteToken,
+                priceUsd: pair.priceUsd || cryptoData.pairInfo?.priceUsd
+              }
+            };
+            setCryptoData(updatedCryptoData);
+            console.log('Updated cryptoData with pair info:', updatedCryptoData);
+          }
+          
+          // For price history, we need to create a simple dataset
+          // DexScreener doesn't provide candlestick data through this endpoint
+          
+          // Create a minimal dataset with the current price
+          const currentTime = Math.floor(Date.now() / 1000);
+          
+          // Use priceChange data if available to estimate an "open" price
+          const priceChangeH24 = pair.priceChange?.h24 ? parseFloat(pair.priceChange.h24) : 0;
+          const closePrice = parseFloat(pair.priceUsd || 0);
+          const openPrice = closePrice / (1 + (priceChangeH24 / 100));
+          
+          // Estimate high and low based on price change
+          const priceChange = Math.abs(closePrice - openPrice);
+          const high = Math.max(openPrice, closePrice) + (priceChange * 0.1); // Add 10% buffer
+          const low = Math.min(openPrice, closePrice) - (priceChange * 0.1);  // Subtract 10% buffer
+          
+          // Create a simple dataset for the chart
+          setPriceData([{
+            time: currentTime,
+            open: openPrice,
+            high: high,
+            low: low,
+            close: closePrice,
+            volume: parseFloat(pair.volume?.h24 || 0)
+          }]);
+          
+          console.log('Created simplified price data for chart');
+        } else {
+          // No valid pair data
+          console.error('No valid pair data found for', pairAddress);
+          console.log('Full response:', response.data);
+          setPriceData([]);
+        }
       } else {
         // For CEX tokens, use existing Binance API
         const interval = TIMEFRAMES[timeframe].binanceInterval;
@@ -964,8 +1723,9 @@ function Trading() {
       }
     } catch (error) {
       console.error('Error fetching price data:', error);
+      setPriceData([]);
     }
-  }, [cryptoData?.token?.id, cryptoData?.token?.type, cryptoData?.pairInfo?.address, timeframe]); // Include timeframe in dependencies
+  }, [cryptoData?.token?.id, cryptoData?.token?.type, cryptoData?.pairInfo?.address, timeframe]);
 
   // Update user data useEffect
   useEffect(() => {
@@ -981,124 +1741,6 @@ function Trading() {
     }
   }, [cryptoData?.token?.id, fetchPriceData]);
 
-  // Update the fetchUserData function
-  const fetchUserData = useCallback(async () => {
-    if (!currentUser) return () => {};  // Return empty cleanup function
-    
-    try {
-      // Listen to user balance changes
-      const userUnsubscribe = onSnapshot(
-        doc(db, 'users', currentUser.uid),
-        {
-          includeMetadataChanges: true
-        },
-        (doc) => {
-          if (doc.exists()) {
-            setUserBalance(doc.data().balances || {});
-            setIsLoadingBalance(false);
-          }
-        },
-        (error) => console.error('User snapshot error:', error)
-      );
-
-      // Listen to positions
-      const positionsUnsubscribe = onSnapshot(
-        query(collection(db, 'positions'), where('userId', '==', currentUser.uid)),
-        {
-          includeMetadataChanges: true
-        },
-        (snapshot) => {
-          const openPos = [];
-          const closedPos = [];
-          
-          snapshot.docs.forEach(doc => {
-            const data = doc.data();
-            const position = {
-              id: doc.id,
-              ...data,
-              openTime: data.openTime?.toDate?.() || new Date(data.openTime),
-              closeTime: data.closeTime?.toDate?.() || (data.closeTime ? new Date(data.closeTime) : null),
-              lastUpdated: data.lastUpdated?.toDate?.() || new Date(data.lastUpdated)
-            };
-
-            if (position.status === 'OPEN') {
-              openPos.push(position);
-            } else if (position.status === 'CLOSED') {
-              closedPos.push(position);
-            }
-          });
-
-          setOpenPositions(openPos.sort((a, b) => b.openTime - a.openTime));
-          setClosedPositions(closedPos.sort((a, b) => b.closeTime - a.closeTime));
-          setIsLoadingPositions(false);
-        },
-        (error) => console.error('Positions snapshot error:', error)
-      );
-
-      // Return a cleanup function that calls both unsubscribe functions
-      return () => {
-        userUnsubscribe();
-        positionsUnsubscribe();
-      };
-    } catch (error) {
-      console.error('Error in fetchUserData:', error);
-      return () => {}; // Return empty cleanup function
-    }
-  }, [currentUser]);
-
-  // Update the fetchPriceData function
-  const fetchPriceData = useCallback(async () => {
-    if (!cryptoData?.token) return;
-
-    try {
-      if (cryptoData.token.type === 'dex') {
-        // For DEX tokens, use DexScreener API
-        const chain = cryptoData.token.chainId?.toLowerCase() || 'bsc';
-        const pairAddress = cryptoData.pairInfo?.address?.toLowerCase();
-        
-        const response = await axios.get(
-          `https://api.dexscreener.com/latest/dex/pairs/${chain}/${pairAddress}/candles`,
-          {
-            params: {
-              from: Math.floor((Date.now() - 7 * 24 * 60 * 60 * 1000) / 1000),
-              to: Math.floor(Date.now() / 1000),
-              resolution: TIMEFRAMES[timeframe].dexInterval
-            }
-          }
-        );
-
-        setPriceData(response.data);
-      } else {
-        // For CEX tokens, use existing Binance API
-        const interval = TIMEFRAMES[timeframe].binanceInterval;
-        const symbol = `${cryptoData.token.symbol}USDT`;
-
-        const response = await axios.get(
-          `https://api.binance.com/api/v3/klines`,
-          {
-            params: {
-              symbol: symbol,
-              interval: interval,
-              limit: 500
-            }
-          }
-        );
-
-        const formattedData = response.data.map(candle => ({
-          time: candle[0] / 1000,
-          open: parseFloat(candle[1]),
-          high: parseFloat(candle[2]),
-          low: parseFloat(candle[3]),
-          close: parseFloat(candle[4]),
-          volume: parseFloat(candle[5])
-        }));
-
-        setPriceData(formattedData);
-      }
-    } catch (error) {
-      console.error('Error fetching price data:', error);
-    }
-  }, [cryptoData?.token?.id, cryptoData?.token?.type, cryptoData?.pairInfo?.address, timeframe]); // Include timeframe in dependencies
 
   // Update the chart initialization useEffect
   useEffect(() => {
@@ -1214,6 +1856,27 @@ function Trading() {
     fetchPriceData();
   }, [timeframe, cryptoData?.token?.id, fetchPriceData]); // Add fetchPriceData as a dependency
 
+  // Function to handle canceling a limit order
+  const handleCancelLimitOrder = async (orderId) => {
+    if (isPending) return;
+    
+    try {
+    setIsPending(true);
+      await tradingService.cancelLimitOrder(currentUser.uid, orderId);
+      setIsPending(false);
+      
+      // Refresh the list of limit orders
+      fetchPendingLimitOrders();
+      
+      // Show success message
+      console.log('Limit order canceled successfully');
+    } catch (error) {
+      console.error('Error canceling limit order:', error);
+      setError(error.message || 'Failed to cancel limit order');
+      setIsPending(false);
+    }
+  };
+
   // Update the handleSubmit function
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1221,7 +1884,7 @@ function Trading() {
 
     if (!currentUser) {
       navigate('/login');
-        return;
+      return;
     }
 
     const tradeAmount = parseFloat(amount);
@@ -1239,7 +1902,7 @@ function Trading() {
     }
 
     const tradeData = {
-        symbol: cryptoData.token.symbol,
+      symbol: cryptoData.token.symbol,
       type: orderType,
       amount: tradeAmount,
       leverage: parseInt(leverage),
@@ -1248,57 +1911,89 @@ function Trading() {
       orderMode: orderMode
     };
 
-    // ---------------------------
-    // Optimistic Update Start
-    // ---------------------------
-    const provisionalId = `temp-${Date.now()}`;
-    const now = new Date();
-    const provisionalPosition = {
-      id: provisionalId,
-      userId: currentUser.uid,
-      symbol: tradeData.symbol,
-      type: tradeData.type,
-      amount: tradeData.amount,
-      leverage: tradeData.leverage,
-      entryPrice: tradeData.entryPrice,
-      margin: tradeData.margin,
-      orderMode: tradeData.orderMode,
-      status: 'OPEN',
-      openTime: now,
-      currentPnL: 0,
-      lastUpdated: now,
-      closePrice: null,
-      closeTime: null,
-      finalPnL: null
-    };
-
-    setOpenPositions(prev => [provisionalPosition, ...prev]);
-    // ---------------------------
-    // Optimistic Update End
-    // ---------------------------
-    
     try {
       setError('');
       setIsPending(true);
       
-      const result = await tradingService.openPosition(currentUser.uid, tradeData);
-      
-      if (result.success) {
-        // Once onSnapshot picks up Firestore's response, the provisional position will update
-        // Optionally, you can remove the provisional update now if desired:
-        // setOpenPositions(prev => prev.filter(p => p.id !== provisionalId));
+      if (orderMode === 'market') {
+        // For market orders, use the existing optimistic update approach
+        // ---------------------------
+        // Optimistic Update Start
+        // ---------------------------
+        const provisionalId = `temp-${Date.now()}`;
+        const now = new Date();
+        const provisionalPosition = {
+          id: provisionalId,
+          userId: currentUser.uid,
+          symbol: tradeData.symbol,
+          type: tradeData.type,
+          amount: tradeData.amount,
+          leverage: tradeData.leverage,
+          entryPrice: tradeData.entryPrice,
+          margin: tradeData.margin,
+          orderMode: tradeData.orderMode,
+          status: 'OPEN',
+          openTime: now,
+          currentPnL: 0,
+          lastUpdated: now,
+          closePrice: null,
+          closeTime: null,
+          finalPnL: null
+        };
+
+        setOpenPositions(prev => [provisionalPosition, ...prev]);
+        
+        const result = await tradingService.openPosition(currentUser.uid, tradeData);
+        
+        if (!result.success) {
+          // Roll back optimistic update in case of error
+          setOpenPositions(prev => prev.filter(p => p.id !== provisionalId));
+          throw new Error(result.error || 'Failed to create position');
+        }
+      } else if (orderMode === 'limit') {
+        // For limit orders, create a provisional pending order for UI feedback
+        const provisionalId = `temp-${Date.now()}`;
+        const now = new Date();
+        const provisionalOrder = {
+          id: provisionalId,
+          userId: currentUser.uid,
+          symbol: tradeData.symbol,
+          type: tradeData.type,
+          amount: tradeData.amount,
+          leverage: tradeData.leverage,
+          targetPrice: tradeData.entryPrice,
+          margin: tradeData.margin,
+          status: 'PENDING',
+          createdAt: now,
+          lastUpdated: now,
+          isProvisional: true // Flag to identify optimistic updates
+        };
+        
+        // Optimistically add to pending limit orders
+        setPendingLimitOrders(prev => [provisionalOrder, ...prev]);
+        
+        const result = await tradingService.openPosition(currentUser.uid, tradeData);
+        
+        if (!result.success) {
+          // Remove provisional order on error
+          setPendingLimitOrders(prev => 
+            prev.filter(order => !order.isProvisional)
+          );
+          throw new Error(result.error || 'Failed to create limit order');
+        }
+        
+        // Refresh the actual limit orders from the server
+        fetchPendingLimitOrders();
       }
     } catch (error) {
-      console.error('Error creating position:', error);
-      setError(error.message || 'Failed to create position');
-      // Roll back optimistic update in case of error
-      setOpenPositions(prev => prev.filter(p => p.id !== provisionalId));
+      console.error('Error creating position/order:', error);
+      setError(error.message || 'Failed to create position/order');
     } finally {
       setIsPending(false);
       // Clear input fields whether success or error
-        setAmount('');
+      setAmount('');
       setLeverage(1);
-        setLimitPrice('');
+      setLimitPrice('');
     }
   };
 
@@ -1310,18 +2005,29 @@ function Trading() {
     if (isPending) return;
     
     try {
+      console.log('Closing position:', position);
       setError('');
       setIsPending(true);
       setClosingPositionId(position.id);
       
+      if (!marketPrice || isNaN(marketPrice) || marketPrice <= 0) {
+        console.error('Invalid market price for closing position:', marketPrice);
+        throw new Error('Cannot close position: Invalid market price');
+      }
+      
+      console.log(`Attempting to close position ${position.id} at price $${marketPrice}`);
+      
       // Pass the currentUser.uid as the first parameter
       const result = await tradingService.closePosition(currentUser.uid, position.id, marketPrice);
+      
+      console.log('Position close result:', result);
       
       if (!result.success) {
         throw new Error(result.error || 'Failed to close position');
       }
       
       // The position will be updated via the Firestore listener
+      console.log(`Successfully closed position. PnL: $${result.pnl.toFixed(2)}, Return Amount: $${result.returnAmount.toFixed(2)}`);
     } catch (error) {
       console.error('Error closing position:', error);
       setError(error.message || 'Failed to close position');
@@ -1492,7 +2198,7 @@ function Trading() {
     };
   }, [cryptoData?.token?.symbol, marketPrice, generateRandomTrade]);
 
-  // Update the renderChart function to improve stability
+  // Replace the renderChart function
   const renderChart = () => {
     const symbol = getTradingViewSymbol();
     if (!symbol) return null;
@@ -1500,43 +2206,33 @@ function Trading() {
     // Use a key based on the symbol to force re-render when symbol changes
     return (
       <ChartContainer key={`chart-${symbol}-${chartKey}`}>
-        <AdvancedRealTimeChart
+        <TradingChartComponent
           symbol={symbol}
           theme="dark"
           container_id={`tradingview_${cryptoData?.token?.symbol || 'chart'}`}
-          height={500}
-          interval={TIMEFRAMES[timeframe]?.tradingViewInterval || "15"}
-          timezone="exchange"
-          style="1"
-          locale="en"
-          toolbar_bg="#1E222D"
-          enable_publishing={false}
-          hide_top_toolbar={false}
+          timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || "15"}
+          autosize={true}
           allow_symbol_change={false}
-          save_image={false}
-          backgroundColor="#1E222D"
-          gridColor="#2A2E39"
-          width="100%"
-          hide_legend={false}
-          enabled_features={[]}
-          disabled_features={[
-            "use_localstorage_for_settings",
-            "header_widget",
-            "volume_force_overlay",
-            "show_interval_dialog_on_key_press",
-            "caption_buttons_text_if_possible",
-            "context_menus",
-            "control_bar",
-            "edit_buttons_in_legend",
-            "border_around_the_chart",
-            "main_series_scale_menu",
-            "popup_hints"
-          ]}
-          autosize
         />
       </ChartContainer>
     );
   };
+
+  // Add an effect to initialize the order book immediately when the component loads
+  useEffect(() => {
+    // Set a default initial price if none exists
+    if (!marketPrice) {
+      const defaultPrice = 0.000068;
+      console.log('Setting initial default price for order book:', defaultPrice);
+      setMarketPrice(defaultPrice);
+      setCurrentPrice(defaultPrice);
+      setLastPrice(defaultPrice);
+      
+      // Generate order book immediately
+      const initialOrderBook = generateDummyOrders(defaultPrice);
+      setOrderBook(initialOrderBook);
+    }
+  }, []);
 
   // Update the book ticker WebSocket to reduce updates frequency
   useEffect(() => {
@@ -1676,12 +2372,27 @@ function Trading() {
           for (let i = 0; i < bidUpdates; i++) {
             const index = Math.floor(Math.random() * newBids.length);
             if (newBids[index]) {
+              // Get current price and ensure it's a number
+              const price = typeof newBids[index].price === 'number' ? 
+                newBids[index].price : 
+                parseFloat(newBids[index].price);
+                
               // Adjust the amount slightly
-              const amountAdjustment = newBids[index].amount * (0.2 * (Math.random() - 0.5));
+              const currentAmount = typeof newBids[index].amount === 'number' ? 
+                newBids[index].amount : 
+                parseFloat(newBids[index].amount);
+              
+              const amountAdjustment = currentAmount * (0.2 * (Math.random() - 0.5));
+              const newAmount = Math.max(0.01, currentAmount + amountAdjustment);
+              
+              // Calculate new total
+              const newTotal = price * newAmount;
+              
+              // Update the bid with numeric values
               newBids[index] = {
-                ...newBids[index],
-                amount: Math.max(0.01, newBids[index].amount + amountAdjustment).toFixed(4),
-                total: (newBids[index].price * Math.max(0.01, newBids[index].amount + amountAdjustment)).toFixed(2)
+                price: price,
+                amount: Number(newAmount.toFixed(4)),
+                total: Number(newTotal.toFixed(2))
               };
             }
           }
@@ -1691,12 +2402,27 @@ function Trading() {
           for (let i = 0; i < askUpdates; i++) {
             const index = Math.floor(Math.random() * newAsks.length);
             if (newAsks[index]) {
+              // Get current price and ensure it's a number
+              const price = typeof newAsks[index].price === 'number' ? 
+                newAsks[index].price : 
+                parseFloat(newAsks[index].price);
+                
               // Adjust the amount slightly
-              const amountAdjustment = newAsks[index].amount * (0.2 * (Math.random() - 0.5));
+              const currentAmount = typeof newAsks[index].amount === 'number' ? 
+                newAsks[index].amount : 
+                parseFloat(newAsks[index].amount);
+              
+              const amountAdjustment = currentAmount * (0.2 * (Math.random() - 0.5));
+              const newAmount = Math.max(0.01, currentAmount + amountAdjustment);
+              
+              // Calculate new total
+              const newTotal = price * newAmount;
+              
+              // Update the ask with numeric values
               newAsks[index] = {
-                ...newAsks[index],
-                amount: Math.max(0.01, newAsks[index].amount + amountAdjustment).toFixed(4),
-                total: (newAsks[index].price * Math.max(0.01, newAsks[index].amount + amountAdjustment)).toFixed(2)
+                price: price,
+                amount: Number(newAmount.toFixed(4)),
+                total: Number(newTotal.toFixed(2))
               };
             }
           }
@@ -1709,99 +2435,65 @@ function Trading() {
     return () => clearInterval(orderBookInterval);
   }, [marketPrice]);
 
-  // Update the generateDummyOrders function to ensure consistent pricing
+  // Generate dummy orders for the order book
   const generateDummyOrders = (currentPrice) => {
-    if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
-      console.warn('Invalid price provided to generateDummyOrders:', currentPrice);
-      return { bids: [], asks: [] };
-    }
-    
     try {
-      // Create a much tighter spread based on the price range
-      // For BTC-like prices (>10000), use $1-5 spread
-      // For BNB-like prices (100-5000), use $0.5-2 spread
-      // For lower priced coins, use 0.1-0.5% spread
-      let spreadPercentage;
-      let fixedSpread;
-      
-      if (currentPrice > 10000) {
-        // BTC-like prices - use fixed $1-3 spread (reduced from $1-5)
-        fixedSpread = 1 + (Math.random() * 2);
-        spreadPercentage = null;
-      } else if (currentPrice > 100) {
-        // BNB-like prices - use fixed $0.5-1 spread (reduced from $0.5-2)
-        fixedSpread = 0.5 + (Math.random() * 0.5);
-        spreadPercentage = null;
-      } else {
-        // Lower priced coins - use percentage-based spread (0.05-0.2%)
-        spreadPercentage = 0.0005 + (Math.random() * 0.0015);
-        fixedSpread = null;
+      if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
+        console.warn('Invalid price for generating orders:', currentPrice);
+        currentPrice = 86470;
       }
+
+      const isBtcStyle = currentPrice > 10000;
+      const numOrders = 10;
+      const bidSpread = 0.01;
+      const askSpread = 0.01;
       
-      const orderCount = 20; // Increased from 15 to 20 for more orders
     const bids = [];
-    const asks = [];
-      const maxAmount = 2.5; // Increased from 2.0 for larger orders
-      const minAmount = 0.1; // Minimum amount per order
-
-      // Determine price precision based on price magnitude
-      const getPricePrecision = (price) => {
-        if (price < 0.01) return 6;
-        if (price < 0.1) return 5;
-        if (price < 1) return 4;
-        if (price < 10) return 4;
-        if (price < 100) return 3;
-        if (price < 1000) return 2;
-        return 2;
-      };
+      let runningTotal = 0;
       
-      const pricePrecision = getPricePrecision(currentPrice);
-      
-      // Calculate the initial spread
-      let spread;
-      if (fixedSpread !== null) {
-        spread = fixedSpread;
-      } else {
-        spread = currentPrice * spreadPercentage;
-      }
-      
-      // Calculate bid and ask base prices with a very tight spread
-      const bidBasePrice = currentPrice - (spread / 2);
-      const askBasePrice = currentPrice + (spread / 2);
-      
-      // Calculate the step size (how much each order differs from the next)
-      // Make subsequent orders have progressively larger steps
-      const baseStepSize = spread / 10;
-
-    for (let i = 0; i < orderCount; i++) {
-        // Use a progressive step size that increases with distance from the middle
-        const stepMultiplier = 1 + (i * 0.2);
-        const currentBidStep = baseStepSize * stepMultiplier * (i + 1) / 2;
-        const currentAskStep = baseStepSize * stepMultiplier * (i + 1) / 2;
+      for (let i = 1; i <= numOrders; i++) {
+        const bidPrice = isBtcStyle
+          ? currentPrice - (i * 0.5)
+          : Number((currentPrice * (1 - (bidSpread * i / numOrders))).toFixed(2));
         
-        // Calculate prices with proper decimal precision
-        const bidPrice = Number((bidBasePrice - currentBidStep).toFixed(pricePrecision));
-        const askPrice = Number((askBasePrice + currentAskStep).toFixed(pricePrecision));
+        const size = isBtcStyle
+          ? (Math.random() * 3 + 0.001).toFixed(3)
+          : (Math.random() * 4.5 + 0.5).toFixed(4);
         
-        // Randomize amounts but make them larger near the current price
-        const amountMultiplier = 1 - (i * 0.05);
-        const bidAmount = Number((Math.random() * (maxAmount - minAmount) * amountMultiplier + minAmount).toFixed(4));
-        const askAmount = Number((Math.random() * (maxAmount - minAmount) * amountMultiplier + minAmount).toFixed(4));
+        runningTotal += parseFloat(size);
 
       bids.push({
         price: bidPrice,
-          amount: bidAmount,
-          total: Number((bidPrice * bidAmount).toFixed(2))
-      });
-
-      asks.push({
-        price: askPrice,
-          amount: askAmount,
-          total: Number((askPrice * askAmount).toFixed(2))
+          amount: size,
+          total: runningTotal.toFixed(3)
         });
       }
-
-      return { bids, asks: asks.reverse() };
+      
+      const asks = [];
+      runningTotal = 0;
+      
+      for (let i = 1; i <= numOrders; i++) {
+        const askPrice = isBtcStyle
+          ? currentPrice + (i * 0.5)
+          : Number((currentPrice * (1 + (askSpread * i / numOrders))).toFixed(2));
+        
+        const size = isBtcStyle
+          ? (Math.random() * 3 + 0.001).toFixed(3)
+          : (Math.random() * 4.5 + 0.5).toFixed(4);
+        
+        runningTotal += parseFloat(size);
+        
+        asks.push({
+          price: askPrice,
+          amount: size,
+          total: runningTotal.toFixed(3)
+        });
+      }
+      
+      bids.sort((a, b) => b.price - a.price);
+      asks.sort((a, b) => a.price - b.price);
+      
+      return { bids, asks };
       } catch (error) {
       console.error('Error generating dummy orders:', error);
       return { bids: [], asks: [] };
@@ -1904,9 +2596,9 @@ function Trading() {
     }
   };
 
-  // Single getDexScreenerUrl implementation with Solana support
+  // Update getDexScreenerUrl for proper iframe embedding
   const getDexScreenerUrl = () => {
-    if (!cryptoData?.token?.type === 'dex' || !cryptoData?.pairInfo?.address) {
+    if (cryptoData?.token?.type !== 'dex' || !cryptoData?.pairInfo?.address) {
       return 'https://dexscreener.com';
     }
     
@@ -1923,7 +2615,32 @@ function Trading() {
     const chain = chainMap[cryptoData.token.chainId?.toLowerCase()] || 'ethereum';
     const pairAddress = cryptoData.pairInfo.address.toLowerCase();
 
+    console.log(`Creating DexScreener URL: https://dexscreener.com/${chain}/${pairAddress}`);
     return `https://dexscreener.com/${chain}/${pairAddress}`;
+  };
+
+  // Add special function for getting chart embed URL
+  const getDexScreenerChartEmbedUrl = () => {
+    if (cryptoData?.token?.type !== 'dex' || !cryptoData?.pairInfo?.address) {
+      return 'https://dexscreener.com';
+    }
+    
+    // Map chain IDs to DexScreener format
+    const chainMap = {
+      'bsc': 'bsc',
+      'ethereum': 'ethereum',
+      'polygon': 'polygon',
+      'arbitrum': 'arbitrum',
+      'avalanche': 'avalanche',
+      'solana': 'solana'
+    };
+
+    const chain = chainMap[cryptoData.token.chainId?.toLowerCase()] || 'ethereum';
+    const pairAddress = cryptoData.pairInfo.address.toLowerCase();
+
+    // Use embed=1 for iframe embedding and dark theme for better UI
+    console.log(`Creating DexScreener Embed URL: https://dexscreener.com/${chain}/${pairAddress}?embed=1&theme=dark&trades=0&info=0`);
+    return `https://dexscreener.com/${chain}/${pairAddress}?embed=1&theme=dark&trades=0&info=0`;
   };
 
   // Effect to extract trading pair info from URL if cryptoData is missing
@@ -1957,129 +2674,486 @@ function Trading() {
         
         setCryptoData(defaultCryptoData);
         console.log('Created default cryptoData from URL:', defaultCryptoData);
+      } else {
+        // If we can't parse the URL properly, set a default BTC/USDT pair
+        console.warn('Could not parse trading pair from URL, using default BTC/USDT');
+        const defaultCryptoData = {
+          token: {
+            id: 'btc_usdt',
+            name: 'Bitcoin',
+            symbol: 'BTC',
+            type: 'cex'
+          },
+          pairInfo: {
+            symbol: 'BTC/USDT',
+            baseAsset: 'USDT',
+            quoteAsset: 'BTC'
+          },
+          chartData: {
+            lastPrice: 0,
+            change24h: 0,
+            volume24h: 0
+          }
+        };
+        setCryptoData(defaultCryptoData);
       }
     }
   }, [cryptoData, cryptoId]);
 
+  // Add error handling for missing data - make sure we always have something to display
+  useEffect(() => {
+    if (!cryptoData && !cryptoId) {
+      // If we have no data and no URL parameter, set a default
+      const defaultCryptoData = {
+        token: {
+          id: 'btc_usdt',
+          name: 'Bitcoin',
+          symbol: 'BTC',
+          type: 'cex'
+        },
+        pairInfo: {
+          symbol: 'BTC/USDT',
+          baseAsset: 'USDT',
+          quoteAsset: 'BTC'
+        },
+        chartData: {
+          lastPrice: 0,
+          change24h: 0,
+          volume24h: 0
+        }
+      };
+      setCryptoData(defaultCryptoData);
+      console.log('No crypto data or ID, using default BTC/USDT');
+    }
+  }, [cryptoData, cryptoId]);
+
   // Add error handling for missing data
-  if (!cryptoData && !cryptoId) {
+  if (!cryptoData) {
       return (
       <TradingContainer>
-        <h2>No trading data available. Please select a token from the market page.</h2>
-        <Button onClick={() => navigate('/markets')}>Go to Markets</Button>
+        <h2>Loading trading data...</h2>
       </TradingContainer>
     );
   }
 
   // Extract symbol for chart
   const getChartSymbol = () => {
-    if (cryptoData?.token?.symbol && cryptoData?.pairInfo?.baseAsset) {
-      return `${cryptoData.token.symbol}${cryptoData.pairInfo.baseAsset}`;
-    } else if (cryptoId) {
-      // Format from URL parameter
-      return cryptoId.replace('-', '');
+    if (!cryptoData?.token) return 'BTCUSDT';
+    
+    // Add special handling for Solana tokens if needed
+    if (cryptoData.token.chainId === 'solana') {
+      return `BINANCE:${cryptoData.token.symbol}USDT`;
     }
-    return 'BTCUSDT'; // Default fallback
+    
+    // Regular logic for other chains
+    return `BINANCE:${cryptoData.token.symbol}USDT`;
   };
 
-  // Modify renderChartSection to add fallback options
+  // Define canShowTradingViewChart outside of renderChartSection 
+  const canShowTradingViewChart = () => {
+    // Don't show TradingView for DEX tokens except major ones
+    if (cryptoData?.token?.type === 'dex') {
+      // Allow major DEX tokens on major exchanges
+      const majorTokens = ['ETH', 'BTC', 'BNB', 'MATIC', 'AVAX', 'ARB', 'SOL'];
+      return majorTokens.includes(cryptoData.token.symbol.toUpperCase());
+    }
+    return true;
+  };
+
+  // Somewhere near the time frame selector buttons
+  const renderTimeframeBar = () => (
+    <TimeframeSelector>
+      {Object.keys(TIMEFRAMES).map((tf) => (
+        <TimeButton
+          key={tf}
+          $active={timeframe === tf}
+          onClick={() => handleTimeframeChange(tf)}
+        >
+          {TIMEFRAMES[tf].label}
+        </TimeButton>
+      ))}
+      
+      {/* Debug toggle button - only visible in development */}
+      {process.env.NODE_ENV === 'development' && (
+        <TimeButton
+          $active={showDebug}
+          onClick={() => setShowDebug(!showDebug)}
+          style={{ marginLeft: 'auto', background: showDebug ? '#ff3e3e' : '#555' }}
+        >
+          Debug
+        </TimeButton>
+      )}
+    </TimeframeSelector>
+  );
+
+  // Update renderChartSection to use the new timeframe bar
   const renderChartSection = () => {
-    // Determine if we can reliably show a TradingView chart
     const canShowTradingViewChart = () => {
-      if (!cryptoData?.token) return false;
-      
-      // CEX tokens always show TradingView
-      if (cryptoData.token.type === 'cex') return true;
-      
-      // For DEX tokens, only show TradingView for major chains and tokens
-      if (cryptoData.token.type === 'dex') {
-        const symbol = cryptoData.token.symbol?.toUpperCase();
-        const majorTokens = ['ETH', 'WETH', 'BTC', 'WBTC', 'USDT', 'USDC', 'DAI', 'LINK', 'UNI', 'AAVE'];
-        
-        // For major tokens on main chains, TradingView might work
-        if (majorTokens.includes(symbol)) {
-          return true;
-        }
-        
-        // For all other DEX tokens, show fallback
-        return false;
+      // Don't show TradingView for DEX tokens except major ones
+      if (cryptoData?.token?.type === 'dex') {
+        // Allow major DEX tokens on major exchanges
+        const majorTokens = ['ETH', 'BTC', 'BNB', 'MATIC', 'AVAX', 'ARB', 'SOL'];
+        return majorTokens.includes(cryptoData.token.symbol.toUpperCase());
       }
-      
-      return false;
+      return true;
     };
+
+    // Generate a unique container ID for each symbol to prevent conflicts
+    const chartContainerId = `tradingview_${cryptoData?.token?.symbol?.toLowerCase() || 'chart'}_${timeframe}`;
 
     return (
       <ChartSection>
-        <ChartContainer>
-          <TimeframeSelector>
-            {Object.keys(TIMEFRAMES).map((tf) => (
-              <TimeButton
-                key={tf}
-                $active={timeframe === tf}
-                onClick={() => setTimeframe(tf)}
-              >
-                {TIMEFRAMES[tf].label}
-              </TimeButton>
-            ))}
-          </TimeframeSelector>
+      <ChartContainer>
+        {renderTimeframeBar()}
           
-          {cryptoData?.token?.type === 'dex' && !canShowTradingViewChart() ? (
-            // Show fallback component for DEX tokens that won't work with TradingView
-            <FallbackChart 
-              pairName={`${cryptoData.token.symbol}/${cryptoData.pairInfo?.baseAsset || 'USDT'}`}
-              dexScreenerUrl={getDexScreenerUrl()}
-            />
+          {cryptoData?.token?.type === 'dex' ? (
+            // For DEX tokens, use DexScreener iframe
+            <div style={{ position: 'relative', height: '500px', width: '100%' }}>
+              {canShowTradingViewChart() ? (
+                // For major DEX tokens, try TradingView
+                <div id={chartContainerId} style={{ height: '100%', width: '100%' }}>
+                  <TradingChartComponent 
+                    symbol={getDexTradingViewSymbol()}
+                    theme={theme}
+                    timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || '60'}
+                    autosize={true}
+                    container_id={chartContainerId}
+                  />
+                </div>
+              ) : (
+                // For other DEX tokens, use DexScreener iframe
+                <iframe
+                  src={getDexScreenerChartEmbedUrl()}
+                  title="DEX Chart"
+                  style={{ 
+                    height: '100%', 
+                    width: '100%', 
+                    border: 'none',
+                    borderRadius: '8px' 
+                  }}
+                  allowFullScreen
+                />
+              )}
+              {showDebug && renderDebugInfo()}
+              
+              <DexLink 
+                href={`${getDexScreenerUrl()}?theme=dark`}
+                target="_blank" 
+                rel="noopener noreferrer"
+              >
+                View on DEXScreener <i className="bi bi-box-arrow-up-right"></i>
+              </DexLink>
+            </div>
           ) : (
-            // For CEX tokens and major DEX tokens, try TradingView
-            <div style={{ height: '500px', width: '100%' }} id="tradingview_chart">
-              <TradingChart 
-                symbol={cryptoData.token.type === 'dex' ? 
-                  getDexTradingViewSymbol() : 
-                  getChartSymbol()
-                }
+            // For CEX tokens, use TradingView
+            <div style={{ position: 'relative', height: '500px', width: '100%' }} id={chartContainerId}>
+              <TradingChartComponent 
+                symbol={getChartSymbol()}
                 theme={theme}
                 timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || '60'}
                 autosize={true}
                 allow_symbol_change={true}
-                hide_side_toolbar={false}
-                container_id="tradingview_chart"
-                onSymbolError={() => {
-                  console.log("Symbol error occurred");
-                  // If TradingView fails, we could set state to show fallback
-                }}
+                container_id={chartContainerId}
               />
-              
-              {/* DEX link always shown for DEX tokens */}
-              {cryptoData?.token?.type === 'dex' && (
-                <div style={{ 
-                  padding: '4px 8px', 
-                  fontSize: '11px', 
-                  position: 'absolute', 
-                  right: '15px', 
-                  bottom: '15px', 
-                  background: 'rgba(30, 34, 45, 0.7)',
-                  borderRadius: '4px'
-                }}>
-                  <a 
-                    href={getDexScreenerUrl()} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    style={{ color: '#7a7a7a', textDecoration: 'none' }}
-                  >
-                    View on DEXScreener
-                  </a>
-                </div>
-              )}
             </div>
           )}
-        </ChartContainer>
+      </ChartContainer>
       </ChartSection>
     );
   };
 
+  // Add a debugging component for DEX tokens
+  const DexDebugInfo = styled.div`
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    z-index: 1000;
+    max-width: 400px;
+    max-height: 300px;
+    overflow: auto;
+    font-size: 12px;
+    display: ${props => props.$visible ? 'block' : 'none'};
+    
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+    }
+  `;
+
+  const renderDebugInfo = () => {
+    if (cryptoData?.token?.type !== 'dex') return null;
+    
     return (
+      <div style={{ position: 'relative' }}>
+        <button 
+          onClick={() => setShowDebug(!showDebug)}
+          style={{
+            position: 'absolute',
+            bottom: '10px',
+            right: '10px',
+            background: 'rgba(0,0,0,0.5)',
+            color: '#fff',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '5px',
+            fontSize: '12px',
+            cursor: 'pointer',
+            zIndex: 11
+          }}
+        >
+          {showDebug ? 'Hide Debug' : 'Debug'}
+        </button>
+        
+        <DexDebugInfo $visible={showDebug}>
+          <h4>DEX Token Debug Info</h4>
+          <div>
+            <p><strong>Chain:</strong> {cryptoData?.token?.chainId || 'unknown'}</p>
+            <p><strong>Token Address:</strong> {cryptoData?.token?.address || 'N/A'}</p>
+            <p><strong>Pair Address:</strong> {cryptoData?.pairInfo?.address || 'N/A'}</p>
+            <p><strong>Symbol:</strong> {cryptoData?.token?.symbol || 'unknown'}</p>
+            <hr/>
+            <p><strong>DexScreener URL:</strong> {getDexScreenerUrl()}</p>
+            <p><strong>Chart Embed URL:</strong> {getDexScreenerChartEmbedUrl()}</p>
+        </div>
+        </DexDebugInfo>
+      </div>
+    );
+  };
+
+  // Add these styled components near the top with other styled components
+  const OrderPrice = styled.div`
+    color: ${props => props.$type === 'ask' ? 'var(--red)' : 'var(--green)'};
+    font-family: 'Roboto Mono', monospace;
+    
+    sub {
+      color: rgba(255, 255, 255, 0.5);
+    }
+  `;
+
+  const OrderBookTable = styled.div`
+    width: 100%;
+    font-size: 14px;
+    
+    .header {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      padding: 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      color: #666;
+    }
+    
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      padding: 4px 8px;
+      cursor: pointer;
+      
+      &:hover {
+        background: rgba(255, 255, 255, 0.05);
+      }
+    }
+  `;
+
+  const renderOrderBook = () => {
+    return (
+      <OrderBookTable>
+        <div className="header">
+          <div>Price</div>
+          <div>Quantity</div>
+          <div>Total</div>
+        </div>
+        
+        {orderBook.asks.map((ask, index) => (
+          <div key={`ask-${index}`} className="row">
+            <OrderPrice type="ask" dangerouslySetInnerHTML={{ __html: formatSmallNumber(ask.price) }} />
+            <div>{formatSmallNumber(ask.quantity)}</div>
+            <div>{formatSmallNumber(ask.total)}</div>
+          </div>
+        ))}
+        
+        <div style={{ padding: '8px', textAlign: 'center', color: '#666' }}>
+          Current Price: <span dangerouslySetInnerHTML={{ __html: formatSmallNumber(currentPrice) }} />
+        </div>
+        
+        {orderBook.bids.map((bid, index) => (
+          <div key={`bid-${index}`} className="row">
+            <OrderPrice type="bid" dangerouslySetInnerHTML={{ __html: formatSmallNumber(bid.price) }} />
+            <div>{formatSmallNumber(bid.quantity)}</div>
+            <div>{formatSmallNumber(bid.total)}</div>
+          </div>
+        ))}
+      </OrderBookTable>
+    );
+  };
+
+  const renderPendingLimitOrders = () => {
+    if (pendingLimitOrders.length === 0) return null;
+    
+    return (
+      <div style={{ marginTop: '20px', marginBottom: '20px' }}>
+        <h3 style={{ 
+          margin: '10px 0', 
+          color: 'var(--text)', 
+          fontSize: '18px', 
+          fontWeight: '500',
+          borderBottom: '1px solid var(--divider)',
+          paddingBottom: '10px'
+        }}>Pending Limit Orders</h3>
+        
+        <PositionsTable>
+          <thead>
+            <tr>
+              <TableHeader>Type</TableHeader>
+              <TableHeader>Amount</TableHeader>
+              <TableHeader>Target Price</TableHeader>
+              <TableHeader>Market Price</TableHeader>
+              <TableHeader>Leverage</TableHeader>
+              <TableHeader>Margin</TableHeader>
+              <TableHeader>Created At</TableHeader>
+              <TableHeader>Actions</TableHeader>
+            </tr>
+          </thead>
+          <tbody>
+            {pendingLimitOrders.map(order => {
+              const createdDate = order.createdAt instanceof Date 
+                ? order.createdAt 
+                : order.createdAt?.toDate?.() || new Date();
+                
+              return (
+      <tr key={order.id}>
+                  <TableCell style={{ 
+                    color: order.type === 'buy' ? '#0ECB81' : '#F6465D' 
+                  }}>
+                    {order.type?.toUpperCase() || 'N/A'}
+        </TableCell>
+                  <TableCell>{order.amount || 0} {order.symbol || ''}</TableCell>
+                  <TableCell>${order.targetPrice?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>${marketPrice?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>{order.leverage || 1}x</TableCell>
+                  <TableCell>${order.margin?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>
+                    {createdDate.toLocaleString()}
+                  </TableCell>
+        <TableCell>
+          <Button
+            onClick={() => handleCancelLimitOrder(order.id)}
+                      disabled={isPending || order.isProvisional}
+          >
+                      {isPending && order.isProvisional ? 'Processing...' : 'Cancel'}
+          </Button>
+        </TableCell>
+      </tr>
+              );
+            })}
+          </tbody>
+        </PositionsTable>
+      </div>
+    );
+  };
+
+  // Now, add a synchronized order book update effect
+  useEffect(() => {
+    let orderBookUpdateInterval = null;
+    
+    // Only set up the interval if we have valid data
+    if (cryptoData && marketPrice) {
+      console.log('Setting up synchronized order book updates with market price:', marketPrice);
+      
+      // Generate initial order book based on market price
+      const initialOrderBook = createOrderBookData(marketPrice, cryptoData.token?.symbol || 'BTC', buyRatio);
+      setOrderBook(initialOrderBook);
+      
+      // Set up interval for updating the order book
+      orderBookUpdateInterval = setInterval(() => {
+        setOrderBook(prevOrderBook => {
+          // Use the current market price for accurate order book data
+          const newOrderBook = createOrderBookData(marketPrice, cryptoData.token?.symbol || 'BTC', buyRatio);
+          
+          // Calculate which rows have changed significantly to highlight them
+          const flashStates = {};
+          
+          // Compare asks to previous asks and highlight significant changes
+          if (prevOrderBook?.asks?.length) {
+            newOrderBook.asks.forEach((ask, i) => {
+              if (i < prevOrderBook.asks.length) {
+                const prevAsk = prevOrderBook.asks[i];
+                // If price or amount changed by more than 0.5%
+                const priceChanged = Math.abs(ask.price - prevAsk.price) / prevAsk.price > 0.005;
+                const amountChanged = Math.abs(ask.amount - prevAsk.amount) / prevAsk.amount > 0.05;
+                
+                if (priceChanged || amountChanged) {
+                  flashStates[`ask-${i}`] = true;
+                }
+              }
+            });
+          }
+          
+          // Compare bids to previous bids and highlight significant changes
+          if (prevOrderBook?.bids?.length) {
+            newOrderBook.bids.forEach((bid, i) => {
+              if (i < prevOrderBook.bids.length) {
+                const prevBid = prevOrderBook.bids[i];
+                // If price or amount changed by more than 0.5%
+                const priceChanged = Math.abs(bid.price - prevBid.price) / prevBid.price > 0.005;
+                const amountChanged = Math.abs(bid.amount - prevBid.amount) / prevBid.amount > 0.05;
+                
+                if (priceChanged || amountChanged) {
+                  flashStates[`bid-${i}`] = true;
+                }
+              }
+            });
+          }
+          
+          // Set flash states and clear them after animation
+          if (Object.keys(flashStates).length > 0) {
+            setOrderBookFlash(flashStates);
+            setTimeout(() => setOrderBookFlash({}), 800);
+          }
+          
+          return newOrderBook;
+        });
+      }, 2000); // Update every 2 seconds for smoother appearance
+    }
+    
+    // Cleanup function
+    return () => {
+      if (orderBookUpdateInterval) {
+        clearInterval(orderBookUpdateInterval);
+      }
+    };
+  }, [cryptoData, marketPrice, buyRatio]);
+
+  // Add this function inside the Trading component before the render method to ensure 
+  // we display prices consistently throughout the order book
+  const formatOrderPrice = (price) => {
+    if (!price) return '0.00000';
+    
+    // Convert to number if it's a string
+    const numPrice = typeof price === 'number' ? price : parseFloat(price);
+    
+    // For small numbers, use more decimal places
+    if (numPrice < 0.1) {
+      return numPrice.toFixed(5);
+    } else if (numPrice < 1) {
+      return numPrice.toFixed(4);
+    } else if (numPrice < 10) {
+      return numPrice.toFixed(3);
+    } else if (numPrice < 1000) {
+      return numPrice.toFixed(2);
+    }
+    
+    // For large numbers, use fewer decimal places
+    return numPrice.toFixed(2);
+  };
+
+  return (
     <TradingContainer>
-      {cryptoData && (
+      {cryptoData?.token && (
         <CoinInfo>
           <CoinIcon src={cryptoData.token?.image || btcIcon} theme={theme} alt={cryptoData.token?.name || 'Crypto'} />
           <div>
@@ -2089,7 +3163,7 @@ function Trading() {
             </CoinName>
             <PriceInfo>
               <Price>${marketPrice ? marketPrice.toFixed(2) : '0.00'}</Price>
-              {cryptoData.chartData?.change24h && (
+              {cryptoData.chartData?.change24h !== undefined && (
                 <Change $isPositive={cryptoData.chartData.change24h >= 0}>
                   {cryptoData.chartData.change24h >= 0 ? '+' : ''}{cryptoData.chartData.change24h}%
                 </Change>
@@ -2110,115 +3184,126 @@ function Trading() {
               <OrderBook>
                 <OrderBookHeader>
                   <span>Price(USDT)</span>
-                  <span>Size({cryptoData?.token?.symbol})</span>
+                  <span>Qty({cryptoData?.token?.symbol || 'BTC'})</span>
                   <span>Total</span>
                 </OrderBookHeader>
                 
                     <OrderBookContent>
                       <AsksContainer>
-                  {orderBook?.asks?.slice().reverse().map((ask, i) => (
+                        {orderBook?.asks?.length > 0 ? (
+                          orderBook.asks.slice().reverse().map((ask, i) => (
                     <OrderBookRow 
-                      key={`${ask.price}-${i}`}
+                              key={`ask-${i}`}
                       $side="sell"
                       $depth={orderBook.asks.length ? 
-                              (Number(ask.amount) / Math.max(...orderBook.asks.map(a => Number(a.amount)))) * 100 : 0}
-                      onClick={() => {
+                                      (parseFloat(ask.amount) / Math.max(...orderBook.asks.map(a => parseFloat(a.amount)))) * 100 : 0}
+                        onClick={() => {
                         setOrderMode('limit');
-                              setLimitPrice(String(ask.price));
-                              setAmount(String(ask.amount));
-                            }}
-                          >
-                            <span style={{ color: '#F6465D' }}>
-                              {typeof ask.price === 'number' ? 
-                                ask.price.toFixed(
-                                  ask.price < 0.01 ? 6 : 
-                                  ask.price < 0.1 ? 5 : 
-                                  ask.price < 1 ? 4 : 
-                                  ask.price < 10 ? 4 : 
-                                  ask.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof ask.amount === 'number' ? ask.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof ask.total === 'number' ? ask.total.toFixed(2) : '0.00'}
-                            </span>
+                                setLimitPrice(String(ask.price));
+                                setAmount(String(ask.amount));
+                      }}
+                      className={orderBookFlash[`ask-${i}`] ? 'flash' : ''}
+                    >
+                      <span style={{ color: '#F6465D' }}>
+                                {typeof ask.price === 'number' ? 
+                                  Number(ask.price).toLocaleString(undefined, {
+                                    minimumFractionDigits: ask.price < 0.1 ? 5 : 
+                                                         ask.price < 1 ? 4 : 
+                                                         ask.price < 10 ? 3 : 2,
+                                    maximumFractionDigits: ask.price < 0.1 ? 5 : 
+                                                         ask.price < 1 ? 4 : 
+                                                         ask.price < 10 ? 3 : 2
+                                  }) : '0.00000'}
+                      </span>
+                        <span>{typeof ask.amount === 'number' ? 
+                          ask.amount.toFixed(4) : 
+                          parseFloat(ask.amount).toFixed(4)}</span>
+                        <span>{typeof ask.total === 'number' ? 
+                          ask.total.toFixed(4) : 
+                          parseFloat(ask.total).toFixed(4)}</span>
                     </OrderBookRow>
-                  ))}
+                          ))
+                        ) : (
+                          // Display placeholder rows when no asks are available
+                          Array.from({ length: 7 }).map((_, index) => (
+                            <OrderBookRow key={`empty-ask-${index}`} $side="sell" $depth={0}>
+                              <span style={{ color: '#F6465D' }}>---</span>
+                              <span>---</span>
+                              <span>---</span>
+                            </OrderBookRow>
+                          ))
+                        )}
                       </AsksContainer>
 
                   <CurrentPrice $isUp={marketPrice > lastPrice}>
+                        <OrderBookArrow $direction={marketPrice > lastPrice ? 'up' : 'down'}>
+                          {marketPrice > lastPrice ? '↑' : '↓'}
+                        </OrderBookArrow>
                         {marketPrice ? 
-                          marketPrice.toFixed(
-                            marketPrice < 0.01 ? 6 : 
-                            marketPrice < 0.1 ? 5 : 
-                            marketPrice < 1 ? 4 : 
-                            marketPrice < 10 ? 4 : 
-                            marketPrice < 100 ? 3 : 2
-                          ) : 
-                          '0.00'}
+                          Number(marketPrice).toLocaleString(undefined, {
+                            minimumFractionDigits: marketPrice < 0.1 ? 5 : 
+                                                 marketPrice < 1 ? 4 : 
+                                                 marketPrice < 10 ? 3 : 2,
+                            maximumFractionDigits: marketPrice < 0.1 ? 5 : 
+                                                 marketPrice < 1 ? 4 : 
+                                                 marketPrice < 10 ? 3 : 2
+                          }) : '0.00000'}
+                        {Math.random() > 0.8 && <OrderBookFlag>⚑</OrderBookFlag>}
                   </CurrentPrice>
 
-                      <TradesList>
-                        {recentTrades.map(trade => (
-                          <TradeRow key={trade.id} $isBuy={trade.isBuy}>
-                            <span>
-                              {typeof trade.price === 'number' ? 
-                                trade.price.toFixed(
-                                  trade.price < 0.01 ? 6 : 
-                                  trade.price < 0.1 ? 5 : 
-                                  trade.price < 1 ? 4 : 
-                                  trade.price < 10 ? 4 : 
-                                  trade.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof trade.amount === 'number' ? trade.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof trade.price === 'number' && typeof trade.amount === 'number' ? 
-                                (trade.price * trade.amount).toFixed(2) : '0.00'}
-                            </span>
-                          </TradeRow>
-                        ))}
-                      </TradesList>
-
                       <BidsContainer>
-                  {orderBook?.bids?.map((bid, i) => (
+                        {orderBook?.bids?.length > 0 ? (
+                          orderBook.bids.map((bid, i) => (
                     <OrderBookRow 
-                      key={`${bid.price}-${i}`}
+                              key={`bid-${i}`}
                       $side="buy"
                       $depth={orderBook.bids.length ? 
-                              (Number(bid.amount) / Math.max(...orderBook.bids.map(b => Number(b.amount)))) * 100 : 0}
-                      onClick={() => {
+                                      (parseFloat(bid.amount) / Math.max(...orderBook.bids.map(b => parseFloat(b.amount)))) * 100 : 0}
+                        onClick={() => {
                         setOrderMode('limit');
-                              setLimitPrice(String(bid.price));
-                              setAmount(String(bid.amount));
-                            }}
-                          >
-                            <span style={{ color: '#0ECB81' }}>
-                              {typeof bid.price === 'number' ? 
-                                bid.price.toFixed(
-                                  bid.price < 0.01 ? 6 : 
-                                  bid.price < 0.1 ? 5 : 
-                                  bid.price < 1 ? 4 : 
-                                  bid.price < 10 ? 4 : 
-                                  bid.price < 100 ? 3 : 2
-                                ) : 
-                                '0.00'}
-                            </span>
-                            <span>
-                              {typeof bid.amount === 'number' ? bid.amount.toFixed(4) : '0.0000'}
-                            </span>
-                            <span>
-                              {typeof bid.total === 'number' ? bid.total.toFixed(2) : '0.00'}
-                            </span>
+                                setLimitPrice(String(bid.price));
+                                setAmount(String(bid.amount));
+                      }}
+                      className={orderBookFlash[`bid-${i}`] ? 'flash' : ''}
+                    >
+                      <span style={{ color: '#0ECB81' }}>
+                                {typeof bid.price === 'number' ? 
+                                  Number(bid.price).toLocaleString(undefined, {
+                                    minimumFractionDigits: bid.price < 0.1 ? 5 : 
+                                                         bid.price < 1 ? 4 : 
+                                                         bid.price < 10 ? 3 : 2,
+                                    maximumFractionDigits: bid.price < 0.1 ? 5 : 
+                                                         bid.price < 1 ? 4 : 
+                                                         bid.price < 10 ? 3 : 2
+                                  }) : '0.00000'}
+                      </span>
+                        <span>{typeof bid.amount === 'number' ? 
+                          bid.amount.toFixed(4) : 
+                          parseFloat(bid.amount).toFixed(4)}</span>
+                        <span>{typeof bid.total === 'number' ? 
+                          bid.total.toFixed(4) : 
+                          parseFloat(bid.total).toFixed(4)}</span>
                     </OrderBookRow>
-                  ))}
+                          ))
+                        ) : (
+                          // Display placeholder rows when no bids are available
+                          Array.from({ length: 7 }).map((_, index) => (
+                            <OrderBookRow key={`empty-bid-${index}`} $side="buy" $depth={0}>
+                              <span style={{ color: '#0ECB81' }}>---</span>
+                              <span>---</span>
+                              <span>---</span>
+                            </OrderBookRow>
+                          ))
+                        )}
                       </BidsContainer>
+                      
+                      {/* Add Buy/Sell ratio indicator */}
+                      <OrderBookRatio $buyPercent={buyRatio}>
+                        <RatioIndicator>
+                          <span>B {buyRatio}%</span>
+                          <span>S {100 - buyRatio}%</span>
+                        </RatioIndicator>
+                      </OrderBookRatio>
                     </OrderBookContent>
               </OrderBook>
             </OrderBookSection>
@@ -2296,7 +3381,7 @@ function Trading() {
                   </InfoItem>
                   <InfoItem $highlight>
                     <span>Available Balance:</span>
-                    <span>${userBalance?.USDT?.toFixed(2) || '0.00'} USDT</span>
+                    <span>${typeof userBalance?.USDT === 'number' && !isNaN(userBalance.USDT) ? userBalance.USDT.toFixed(2) : '0.00'} USDT</span>
                   </InfoItem>
                 </TradeInfo>
 
@@ -2339,6 +3424,8 @@ function Trading() {
           )}
         </RightSection>
       </TradingGrid>
+
+      {renderPendingLimitOrders()}
 
       {(isLoadingPositions ? true : openPositions.length > 0 || closedPositions.length > 0) && (
         <div style={{ marginTop: '20px' }}>
@@ -2530,6 +3617,58 @@ const StatusMessage = styled.div`
   background: ${props => props.error ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
   border-radius: 4px;
   margin-bottom: 16px;
+`;
+
+// Add these new styled components for the professional order book
+const OrderBookArrow = styled.span`
+  color: ${props => props.$direction === 'up' ? '#0ECB81' : '#F6465D'};
+  margin-right: 4px;
+  font-size: 14px;
+`;
+
+const OrderBookFlag = styled.span`
+  color: #F0B90B;
+  margin-left: 4px;
+  font-size: 12px;
+`;
+
+const OrderBookRatio = styled.div`
+  display: flex;
+  align-items: center;
+  height: 28px;
+  background: linear-gradient(
+    to right,
+    rgba(14, 203, 129, 0.2) ${props => props.$buyPercent}%,
+    rgba(246, 70, 93, 0.2) ${props => props.$buyPercent}%
+  );
+  margin-top: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+`;
+
+const RatioIndicator = styled.div`
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  padding: 0 8px;
+  align-items: center;
+  
+  span {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 3px 6px;
+    border-radius: 4px;
+    
+    &:first-child {
+      background: rgba(14, 203, 129, 0.3);
+      color: #0ECB81;
+    }
+    
+    &:last-child {
+      background: rgba(246, 70, 93, 0.3);
+      color: #F6465D;
+    }
+  }
 `;
 
 export default Trading; 

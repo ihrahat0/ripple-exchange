@@ -195,7 +195,7 @@ const BalanceManagement = () => {
   return (
     <Container>
       <ActionButton onClick={() => navigate('/admin')}>
-        ← Back to Admin Dashboard
+        ← Back to Admin user-profile
       </ActionButton>
       
       <h2>User Balance Management</h2>

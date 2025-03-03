@@ -411,12 +411,7 @@ const Header = () => {
                                     <Link className="dropdown-item" to="#"><i className="bx bx-user font-size-16 align-middle me-1"></i>
                                     <span>Profile</span></Link>
                                 </Dropdown.Item>
-                                <Dropdown.Item href="#">
-                                    <Link className="dropdown-item" to="#"><i
-                                        className="bx bx-wallet font-size-16 align-middle me-1"
-                                    ></i>
-                                    <span>My Wallet</span></Link>
-                                </Dropdown.Item>
+                              
                                 <Dropdown.Item href="#">
                                     <Link className="dropdown-item d-block" to="#"
                                     ><i

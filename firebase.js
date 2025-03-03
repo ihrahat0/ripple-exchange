@@ -1,5 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
 // Firebase configuration as provided
 const firebaseConfig = {
@@ -15,6 +16,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const db = getFirestore(app);
 
 // Google Authentication Provider
 const googleProvider = new GoogleAuthProvider();
@@ -23,4 +25,4 @@ googleProvider.setCustomParameters({
   client_id: '642484459055-r7dpg09r8ne0o92qcsdk07r8i8n63rqn.apps.googleusercontent.com'
 });
 
-export { auth, googleProvider }; 
+export { auth, googleProvider, db }; 

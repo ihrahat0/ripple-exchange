@@ -11,74 +11,54 @@ function Footer(props) {
 
     const [productLink] = useState([
         {
-            title: 'Spot',
-            path: '/spot'
+            title: 'Market',
+            path: '/market'
         },
         {
-            title: 'Inverse Perpetual',
-            path: '#'
+            title: 'Deposit',
+            path: '/deposit'
         },
         {
             title: 'USDT Perpetual',
             path: '#'
-        },
-        {
-            title: 'Exchange',
-            path: '#'
-        },
-        {
-            title: 'Launchpad',
-            path: '#'
-        },
-        {
-            title: 'Binance Pay',
-            path: '#'
-        },
+        }
     ]);
     const [servicesLink] = useState([
         {
-            title: 'Buy Crypto',
-            path: '#'
+            title: 'Convert',
+            path: '/convert'
         },
         {
-            title: 'Markets',
-            path: '#'
+            title: 'Trade',
+            path: '/trade'
         },
         {
-            title: 'Tranding Fee',
-            path: '#'
+            title: 'Sign Up',
+            path: '/register'
         },
         {
-            title: 'Affiliate Program',
-            path: '#'
-        },
-        {
-            title: 'Referral Program',
-            path: '#'
-        },
-        {
-            title: 'API',
-            path: '#'
-        },
+            title: 'Login',
+            path: '/login'
+        }
     ]);
 
 
     const [listSocial] = useState([
-        {
-            icon: 'icon-facebook-f',
-            path: '#'
-        },
-        {
-            icon: 'icon-instagram',
-            path: '#'
-        },
-        {
-            icon: 'icon-youtube',
-            path: '#'
-        },
+        // {
+        //     icon: 'icon-facebook-f',
+        //     path: '#'
+        // },
+        // {
+        //     icon: 'icon-instagram',
+        //     path: '#'
+        // },
+        // {
+        //     icon: 'icon-youtube',
+        //     path: '#'
+        // },
         {
             icon: 'icon-twitter',
-            path: '#'
+            path: 'https://x.com/ripple_exch'
         },
     ])
     
@@ -122,8 +102,8 @@ function Footer(props) {
                         </Link>
                         <h6>Let's talk! 🤙</h6>
                         <ul className="list">
-                        <li><p>+12 345 678 9101</p></li>
-                        <li><p>Info.Avitex@Gmail.Com</p></li>
+                        <li><p>+1 724 246 9101</p></li>
+                        <li><p>support@rippleexchange.org</p></li>
                         <li>
                             <p>
                             Cecilia Chapman 711-2880 Nulla St. Mankato Mississippi
@@ -189,7 +169,7 @@ function Footer(props) {
             <div className="container-fluid">
                 <div className="footer__bottom">
                 <p>
-                    ©2022 Ripple Exchange.com. All rights reserved. Terms of Service | Privacy
+                    ©2025 RippleExchange.org. All rights reserved. Terms of Service | Privacy
                     Terms
                 </p>
                 </div>

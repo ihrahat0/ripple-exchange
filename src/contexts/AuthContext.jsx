@@ -9,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
+import { DEFAULT_COINS } from '../utils/constants';
 
 const AuthContext = createContext();
 
@@ -19,18 +20,33 @@ export function useAuth() {
 export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isEmailVerified, setIsEmailVerified] = useState(false);
 
   async function signup(email, password) {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
-      // Initialize user document with default balance
+      // Initialize balances for all coins
+      const initialBalances = {};
+      Object.keys(DEFAULT_COINS).forEach(coin => {
+        initialBalances[coin] = DEFAULT_COINS[coin].initialBalance || 0;
+      });
+      
+      // Initialize user document with all balances and bonus
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         email,
-        balances: {
-          USDT: 10000, // Default 10,000 USDT
-          BTC: 0,
-          ETH: 0
+        emailVerified: false,
+        balances: initialBalances,
+        // Add a bonus that can only be used for liquidation protection
+        bonusAccount: {
+          amount: 100, // $100 bonus for liquidation protection
+          currency: 'USDT',
+          isActive: true,
+          canWithdraw: false,
+          canTrade: false,
+          purpose: 'liquidation_protection',
+          expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
+          description: 'Welcome bonus - protects your deposits from liquidation'
         }
       });
       
@@ -54,15 +70,29 @@ export function AuthProvider({ children }) {
       const userDoc = await getDoc(userDocRef);
       
       if (!userDoc.exists()) {
+        // Initialize balances for all coins
+        const initialBalances = {};
+        Object.keys(DEFAULT_COINS).forEach(coin => {
+          initialBalances[coin] = DEFAULT_COINS[coin].initialBalance || 0;
+        });
+        
         // Create new user document for Google sign-in
         await setDoc(userDocRef, {
           email: result.user.email,
           displayName: result.user.displayName,
           photoURL: result.user.photoURL,
-          balances: {
-            USDT: 10000, // Default 10,000 USDT
-            BTC: 0,
-            ETH: 0
+          emailVerified: true,
+          balances: initialBalances,
+          // Add a bonus that can only be used for liquidation protection
+          bonusAccount: {
+            amount: 100, // $100 bonus for liquidation protection
+            currency: 'USDT',
+            isActive: true,
+            canWithdraw: false,
+            canTrade: false,
+            purpose: 'liquidation_protection',
+            expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
+            description: 'Welcome bonus - protects your deposits from liquidation'
           },
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
@@ -108,9 +138,34 @@ export function AuthProvider({ children }) {
     }
   }
 
+  // Check email verification status from Firestore
+  async function checkEmailVerificationStatus(user) {
+    if (!user) return false;
+    
+    try {
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        return userData.emailVerified === true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error checking email verification status:', error);
+      return false;
+    }
+  }
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        // Check email verification status from Firestore
+        const isVerified = await checkEmailVerificationStatus(user);
+        setIsEmailVerified(isVerified);
+        setCurrentUser(user);
+      } else {
+        setCurrentUser(null);
+        setIsEmailVerified(false);
+      }
       setLoading(false);
     });
 
@@ -119,12 +174,14 @@ export function AuthProvider({ children }) {
 
   const value = {
     currentUser,
+    isEmailVerified,
     signup,
     login,
     loginWithGoogle,
     logout,
     checkAdminStatus,
-    isUserAdmin
+    isUserAdmin,
+    checkEmailVerificationStatus
   };
 
   return (

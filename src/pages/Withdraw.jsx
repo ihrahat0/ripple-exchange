@@ -1,0 +1,551 @@
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../firebase';
+import styled from 'styled-components';
+import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { getUserWalletAddress, SUPPORTED_CHAINS } from '../services/walletService';
+import { DEFAULT_COINS } from '../utils/constants';
+import TransactionHistory from '../components/TransactionHistory';
+
+// Import coin logos
+import btcLogo from '../assets/images/coin/btc.png';
+import ethLogo from '../assets/images/coin/eth.png';
+import usdtLogo from '../assets/images/coin/usdt.png';
+import solLogo from '../assets/images/coin/sol.png';
+import bnbLogo from '../assets/images/coin/bnb.png';
+import dogeLogo from '../assets/images/coin/doge.png';
+import xrpLogo from '../assets/images/coin/xrp.png';
+import adaLogo from '../assets/images/coin/ada.png';
+import maticLogo from '../assets/images/coin/matic.png';
+import dotLogo from '../assets/images/coin/dot.png';
+import avaxLogo from '../assets/images/coin/avax.png';
+import linkLogo from '../assets/images/coin/link.png';
+import uniLogo from '../assets/images/coin/uni.png';
+import atomLogo from '../assets/images/coin/atom.png';
+
+const COIN_LOGOS = {
+  BTC: btcLogo,
+  ETH: ethLogo,
+  USDT: usdtLogo,
+  SOL: solLogo,
+  BNB: bnbLogo,
+  DOGE: dogeLogo,
+  XRP: xrpLogo,
+  ADA: adaLogo,
+  MATIC: maticLogo,
+  DOT: dotLogo,
+  AVAX: avaxLogo,
+  LINK: linkLogo,
+  UNI: uniLogo,
+  ATOM: atomLogo
+};
+
+// Coin full names
+const COIN_NAMES = {
+  BTC: 'Bitcoin',
+  ETH: 'Ethereum',
+  USDT: 'Tether USD',
+  XRP: 'Ripple',
+  BNB: 'Binance Coin',
+  SOL: 'Solana',
+  ADA: 'Cardano',
+  DOGE: 'Dogecoin',
+  DOT: 'Polkadot',
+  MATIC: 'Polygon',
+  AVAX: 'Avalanche',
+  LINK: 'Chainlink',
+  UNI: 'Uniswap',
+  ATOM: 'Cosmos'
+};
+
+const Container = styled.div`
+  min-height: 100vh;
+  background: linear-gradient(135deg, rgba(0, 40, 20, 0.8), rgba(0, 20, 40, 0.8));
+  padding: 20px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 60px;
+`;
+
+const WithdrawCard = styled(motion.div)`
+  background: rgba(0, 0, 0, 0.8);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 600px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  margin-bottom: 20px;
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  gap: 12px;
+`;
+
+const WalletIcon = styled.div`
+  width: 24px;
+  height: 24px;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+`;
+
+const HeaderText = styled.h2`
+  color: #fff;
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+  flex-grow: 1;
+`;
+
+const TabsContainer = styled.div`
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+`;
+
+const Tab = styled.button`
+  flex: 1;
+  padding: 16px;
+  background: none;
+  border: none;
+  color: ${props => props.active ? '#00ff9d' : 'rgba(255, 255, 255, 0.6)'};
+  font-size: 16px;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s;
+
+  &:after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: ${props => props.active ? '#00ff9d' : 'transparent'};
+    transition: background 0.2s;
+  }
+
+  &:hover {
+    color: ${props => props.active ? '#00ff9d' : '#fff'};
+  }
+`;
+
+const ContentSection = styled.div`
+  padding: 20px;
+`;
+
+const Description = styled.p`
+  color: rgba(255, 255, 255, 0.7);
+  margin-bottom: 20px;
+  line-height: 1.6;
+`;
+
+const FormGroup = styled.div`
+  margin-bottom: 20px;
+`;
+
+const Label = styled.label`
+  display: block;
+  color: #fff;
+  margin-bottom: 8px;
+  font-size: 14px;
+`;
+
+const Select = styled.select`
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: calc(100% - 12px) center;
+  
+  &:focus {
+    outline: none;
+    border-color: #00ff9d;
+  }
+  
+  option {
+    background: #000;
+  }
+`;
+
+const Input = styled.input`
+  width: 100%;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 16px;
+  
+  &:focus {
+    outline: none;
+    border-color: #00ff9d;
+  }
+  
+  &::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+  }
+`;
+
+const WithdrawButton = styled.button`
+  width: 100%;
+  padding: 14px;
+  background: ${props => props.disabled ? 'rgba(0, 255, 157, 0.2)' : 'rgba(0, 255, 157, 0.8)'};
+  border: none;
+  border-radius: 8px;
+  color: ${props => props.disabled ? 'rgba(255, 255, 255, 0.4)' : '#fff'};
+  font-size: 16px;
+  font-weight: 500;
+  cursor: ${props => props.disabled ? 'not-allowed' : 'pointer'};
+  transition: background 0.2s;
+  
+  &:hover {
+    background: ${props => props.disabled ? 'rgba(0, 255, 157, 0.2)' : 'rgba(0, 255, 157, 1)'};
+  }
+`;
+
+const AvailableBalance = styled.div`
+  display: flex;
+  justify-content: space-between;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+  margin-top: 8px;
+`;
+
+const MaxButton = styled.button`
+  background: none;
+  border: none;
+  color: #00ff9d;
+  cursor: pointer;
+  padding: 0;
+  font-size: 14px;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
+const InfoBox = styled.div`
+  background: rgba(0, 153, 255, 0.1);
+  border: 1px solid rgba(0, 153, 255, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  
+  span {
+    font-size: 18px;
+    color: #0099ff;
+  }
+`;
+
+const InfoText = styled.p`
+  color: rgba(255, 255, 255, 0.8);
+  margin: 0;
+  line-height: 1.5;
+  font-size: 14px;
+`;
+
+const ErrorMessage = styled.div`
+  color: #ff3b30;
+  background: rgba(255, 59, 48, 0.1);
+  border: 1px solid rgba(255, 59, 48, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 14px;
+`;
+
+const SuccessMessage = styled.div`
+  color: #00ff9d;
+  background: rgba(0, 255, 157, 0.1);
+  border: 1px solid rgba(0, 255, 157, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 20px;
+  font-size: 14px;
+`;
+
+const CoinLogo = styled.img`
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+`;
+
+const HistoryContainer = styled.div`
+  margin-top: 20px;
+`;
+
+function Withdraw() {
+  const { currentUser } = useAuth();
+  const navigate = useNavigate();
+  const [selectedChain, setSelectedChain] = useState('ethereum');
+  const [selectedCoin, setSelectedCoin] = useState('ETH');
+  const [withdrawalAddress, setWithdrawalAddress] = useState('');
+  const [amount, setAmount] = useState('');
+  const [userBalances, setUserBalances] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [activeTab, setActiveTab] = useState('withdraw');
+
+  // Get coin chains based on selected coin
+  const getChainForCoin = (coin) => {
+    if (coin === 'SOL') return 'solana';
+    if (coin === 'BTC') return 'bitcoin';
+    if (coin === 'BNB') return 'bsc';
+    return 'ethereum'; // Default to Ethereum for most ERC-20 tokens
+  };
+
+  // Initialize component
+  useEffect(() => {
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    fetchUserBalances();
+  }, [currentUser, navigate]);
+
+  // Fetch user balances
+  const fetchUserBalances = async () => {
+    try {
+      setLoading(true);
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      
+      if (userDoc.exists()) {
+        setUserBalances(userDoc.data().balances || {});
+      } else {
+        // Initialize with empty balances
+        setUserBalances({});
+      }
+    } catch (error) {
+      console.error('Error fetching balances:', error);
+      setError('Failed to load your balances. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle coin selection
+  const handleCoinChange = (e) => {
+    const coin = e.target.value;
+    setSelectedCoin(coin);
+    setSelectedChain(getChainForCoin(coin));
+    setAmount('');
+    setError('');
+  };
+
+  // Handle setting maximum amount
+  const handleSetMaxAmount = () => {
+    if (userBalances[selectedCoin]) {
+      setAmount(userBalances[selectedCoin].toString());
+    }
+  };
+
+  // Validate withdrawal request
+  const validateWithdrawal = () => {
+    if (!withdrawalAddress.trim()) {
+      setError('Please enter a valid withdrawal address');
+      return false;
+    }
+
+    const parsedAmount = parseFloat(amount);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Please enter a valid amount');
+      return false;
+    }
+
+    const balance = userBalances[selectedCoin] || 0;
+    if (parsedAmount > balance) {
+      setError(`Insufficient balance. You have ${balance} ${selectedCoin} available.`);
+      return false;
+    }
+
+    return true;
+  };
+
+  // Handle withdrawal submission
+  const handleWithdraw = async () => {
+    if (!validateWithdrawal()) return;
+
+    try {
+      setWithdrawing(true);
+      setError('');
+      
+      // Create withdrawal transaction record
+      const withdrawalData = {
+        userId: currentUser.uid,
+        type: 'withdrawal',
+        chain: selectedChain,
+        token: selectedCoin,
+        amount: parseFloat(amount),
+        destinationAddress: withdrawalAddress,
+        status: 'pending', // Needs admin approval
+        timestamp: serverTimestamp(),
+        requestedBy: currentUser.email
+      };
+
+      console.log("Submitting withdrawal request:", withdrawalData);
+
+      // Add to transactions collection
+      const docRef = await addDoc(collection(db, 'transactions'), withdrawalData);
+      console.log("Withdrawal request created with ID:", docRef.id);
+      
+      setSuccess(`Withdrawal request for ${amount} ${selectedCoin} has been submitted and is pending approval. Request ID: ${docRef.id}`);
+      setAmount('');
+      setWithdrawalAddress('');
+      
+      // Refresh balances to show current state
+      fetchUserBalances();
+    } catch (error) {
+      console.error('Error processing withdrawal:', error);
+      setError(`Failed to process your withdrawal: ${error.message}`);
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Container>
+        <WithdrawCard>
+          <CardHeader>
+            <WalletIcon>💰</WalletIcon>
+            <HeaderText>Loading...</HeaderText>
+          </CardHeader>
+        </WithdrawCard>
+      </Container>
+    );
+  }
+
+  return (
+    <Container>
+      <div style={{ maxWidth: '600px', width: '100%' }}>
+        <WithdrawCard
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+        >
+          <CardHeader>
+            <WalletIcon>{activeTab === 'withdraw' ? '↑' : '⏱️'}</WalletIcon>
+            <HeaderText>{activeTab === 'withdraw' ? 'Withdraw Funds' : 'Withdrawal History'}</HeaderText>
+          </CardHeader>
+          
+          <TabsContainer>
+            <Tab 
+              active={activeTab === 'withdraw'} 
+              onClick={() => setActiveTab('withdraw')}
+            >
+              Withdraw
+            </Tab>
+            <Tab 
+              active={activeTab === 'history'} 
+              onClick={() => setActiveTab('history')}
+            >
+              History
+            </Tab>
+          </TabsContainer>
+          
+          {activeTab === 'withdraw' ? (
+            <ContentSection>
+              <Description>
+                Withdraw your crypto to external wallets. All withdrawals are subject to review for security purposes.
+                Withdrawals are typically processed within 24 hours after approval.
+              </Description>
+              
+              {error && <ErrorMessage>{error}</ErrorMessage>}
+              {success && <SuccessMessage>{success}</SuccessMessage>}
+              
+              <FormGroup>
+                <Label>Select Coin</Label>
+                <Select value={selectedCoin} onChange={handleCoinChange}>
+                  {Object.entries(userBalances)
+                    .filter(([_, balance]) => balance > 0)
+                    .map(([coin]) => (
+                      <option key={coin} value={coin}>
+                        {coin} - {COIN_NAMES[coin] || coin}
+                      </option>
+                    ))
+                  }
+                </Select>
+                
+                <AvailableBalance>
+                  <span>Available: {(userBalances[selectedCoin] || 0).toFixed(8)} {selectedCoin}</span>
+                </AvailableBalance>
+              </FormGroup>
+              
+              <FormGroup>
+                <Label>Amount to Withdraw</Label>
+                <Input 
+                  type="number" 
+                  placeholder={`Enter amount in ${selectedCoin}`}
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  min="0"
+                  step="0.00000001"
+                />
+                
+                <AvailableBalance>
+                  <span>Transaction fee: 0.0001 {selectedCoin}</span>
+                  <MaxButton onClick={handleSetMaxAmount}>MAX</MaxButton>
+                </AvailableBalance>
+              </FormGroup>
+              
+              <FormGroup>
+                <Label>Withdrawal Address</Label>
+                <Input 
+                  type="text"
+                  placeholder={`Enter your ${selectedCoin} address`}
+                  value={withdrawalAddress}
+                  onChange={(e) => setWithdrawalAddress(e.target.value)}
+                />
+              </FormGroup>
+              
+              <InfoBox>
+                <span>ℹ️</span>
+                <InfoText>
+                  Please double-check your withdrawal address. Transactions sent to incorrect addresses cannot be recovered.
+                  All withdrawals require admin approval for security purposes.
+                </InfoText>
+              </InfoBox>
+              
+              <WithdrawButton 
+                onClick={handleWithdraw} 
+                disabled={withdrawing || !amount || !withdrawalAddress}
+              >
+                {withdrawing ? 'Processing...' : 'Submit Withdrawal Request'}
+              </WithdrawButton>
+            </ContentSection>
+          ) : (
+            <ContentSection>
+              <TransactionHistory type="withdrawal" limit={10} />
+            </ContentSection>
+          )}
+        </WithdrawCard>
+      </div>
+    </Container>
+  );
+}
+
+export default Withdraw; 

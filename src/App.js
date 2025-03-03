@@ -10,10 +10,12 @@ import UserProfile from './pages/UserProfile';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Trading from './pages/Trading';
+import Deposit from './pages/Deposit';
+import Withdraw from './pages/Withdraw';
 import { auth } from './firebase';
 import { isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import AOS from 'aos';
-import AdminPanel from './pages/AdminPanel';
+import AdminPanel from './pages/admin/AdminPanel';
 import PrivateRoute from './components/PrivateRoute';
 
 // Create a separate component for email link handling
@@ -77,7 +79,17 @@ function App() {
                             <Trading />
                         </PrivateRoute>
                     } />
-                    <Route path="/admin" element={
+                    <Route path="/deposit" element={
+                        <PrivateRoute>
+                            <Deposit />
+                        </PrivateRoute>
+                    } />
+                    <Route path="/withdraw" element={
+                        <PrivateRoute>
+                            <Withdraw />
+                        </PrivateRoute>
+                    } />
+                    <Route path="/admin/*" element={
                         <PrivateRoute>
                             <AdminPanel />
                         </PrivateRoute>

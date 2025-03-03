@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link, Routes, Route } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../firebase';
-import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, deleteDoc, doc, getDoc, updateDoc, query, where, orderBy, increment, serverTimestamp } from 'firebase/firestore';
 import styled from 'styled-components';
 import axios from 'axios';
 import { DEFAULT_COINS } from '../utils/constants';
@@ -319,6 +319,90 @@ const TabButton = styled.button`
   }
 `;
 
+const TransactionsCard = styled.div`
+  background: var(--bg1);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+`;
+
+const TransactionTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+  
+  th, td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+  }
+  
+  th {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+`;
+
+const StatusBadge = styled.span`
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  background: ${props => {
+    switch (props.$status) {
+      case 'pending':
+        return 'rgba(255, 193, 7, 0.1)';
+      case 'completed':
+        return 'rgba(0, 255, 157, 0.1)';
+      case 'rejected':
+        return 'rgba(255, 71, 87, 0.1)';
+      default:
+        return 'rgba(255, 255, 255, 0.1)';
+    }
+  }};
+  color: ${props => {
+    switch (props.$status) {
+      case 'pending':
+        return '#ffc107';
+      case 'completed':
+        return '#00ff9d';
+      case 'rejected':
+        return '#ff4757';
+      default:
+        return '#fff';
+    }
+  }};
+`;
+
+const ActionButton = styled.button`
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-right: 8px;
+  
+  &.approve {
+    background: rgba(0, 255, 157, 0.1);
+    color: #00ff9d;
+    
+    &:hover {
+      background: rgba(0, 255, 157, 0.2);
+    }
+  }
+  
+  &.reject {
+    background: rgba(255, 71, 87, 0.1);
+    color: #ff4757;
+    
+    &:hover {
+      background: rgba(255, 71, 87, 0.2);
+    }
+  }
+`;
+
 function AdminPanel() {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [coins, setCoins] = useState([]);
@@ -352,13 +436,16 @@ function AdminPanel() {
   const [loading, setLoading] = useState(false);
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [transactions, setTransactions] = useState([]);
+  const [transactionType, setTransactionType] = useState('pending');
 
   const chains = [
     { id: 'ethereum', name: 'Ethereum' },
     { id: 'bsc', name: 'BNB Smart Chain' },
     { id: 'polygon', name: 'Polygon' },
     { id: 'arbitrum', name: 'Arbitrum' },
-    { id: 'avalanche', name: 'Avalanche' }
+    { id: 'avalanche', name: 'Avalanche' },
+    { id: 'solana', name: 'Solana' }
   ];
 
   useEffect(() => {
@@ -1033,6 +1120,153 @@ function AdminPanel() {
     </AdminContainer>
   );
 
+  const fetchTransactions = async () => {
+    try {
+      setLoading(true);
+      const transactionsQuery = query(
+        collection(db, 'transactions'),
+        where('status', '==', transactionType),
+        orderBy('timestamp', 'desc')
+      );
+
+      const snapshot = await getDocs(transactionsQuery);
+      const transactionsList = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+
+      setTransactions(transactionsList);
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching transactions:', error);
+      setLoading(false);
+    }
+  };
+
+  const handleApproveTransaction = async (transaction) => {
+    try {
+      const { id, userId, amount, token, type } = transaction;
+
+      // Update transaction status
+      await updateDoc(doc(db, 'transactions', id), {
+        status: 'completed',
+        processedAt: serverTimestamp(),
+        processedBy: currentUser.uid
+      });
+
+      // Update user's balance
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        [`balances.${token}`]: type === 'deposit' ? increment(amount) : increment(-amount)
+      });
+
+      // Refresh transactions list
+      fetchTransactions();
+
+    } catch (error) {
+      console.error('Error approving transaction:', error);
+      alert('Error approving transaction. Please try again.');
+    }
+  };
+
+  const handleRejectTransaction = async (transaction) => {
+    try {
+      await updateDoc(doc(db, 'transactions', transaction.id), {
+        status: 'rejected',
+        processedAt: serverTimestamp(),
+        processedBy: currentUser.uid
+      });
+
+      fetchTransactions();
+    } catch (error) {
+      console.error('Error rejecting transaction:', error);
+      alert('Error rejecting transaction. Please try again.');
+    }
+  };
+
+  const renderTransactions = () => (
+    <TransactionsCard>
+      <h2>Transaction Management</h2>
+      
+      <div style={{ marginBottom: '20px' }}>
+        <TabButton 
+          active={transactionType === 'pending'} 
+          onClick={() => setTransactionType('pending')}
+        >
+          Pending
+        </TabButton>
+        <TabButton 
+          active={transactionType === 'completed'} 
+          onClick={() => setTransactionType('completed')}
+        >
+          Completed
+        </TabButton>
+        <TabButton 
+          active={transactionType === 'rejected'} 
+          onClick={() => setTransactionType('rejected')}
+        >
+          Rejected
+        </TabButton>
+      </div>
+
+      {loading ? (
+        <p>Loading transactions...</p>
+      ) : (
+        <TransactionTable>
+          <thead>
+            <tr>
+              <th>User ID</th>
+              <th>Type</th>
+              <th>Amount</th>
+              <th>Token</th>
+              <th>Chain</th>
+              <th>Status</th>
+              <th>Timestamp</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map(transaction => (
+              <tr key={transaction.id}>
+                <td>{transaction.userId.substring(0, 8)}...</td>
+                <td>{transaction.type}</td>
+                <td>{transaction.amount}</td>
+                <td>{transaction.token}</td>
+                <td>{transaction.chain}</td>
+                <td>
+                  <StatusBadge $status={transaction.status}>
+                    {transaction.status}
+                  </StatusBadge>
+                </td>
+                <td>
+                  {transaction.timestamp?.toDate().toLocaleString()}
+                </td>
+                <td>
+                  {transaction.status === 'pending' && (
+                    <>
+                      <ActionButton 
+                        className="approve"
+                        onClick={() => handleApproveTransaction(transaction)}
+                      >
+                        Approve
+                      </ActionButton>
+                      <ActionButton 
+                        className="reject"
+                        onClick={() => handleRejectTransaction(transaction)}
+                      >
+                        Reject
+                      </ActionButton>
+                    </>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </TransactionTable>
+      )}
+    </TransactionsCard>
+  );
+
   return (
     <AdminLayout>
       <Sidebar>
@@ -1077,6 +1311,7 @@ function AdminPanel() {
         {activeTab === 'dashboard' && renderDashboard()}
         {(activeTab === 'addCoin' || activeTab === 'coinList') && renderCoinManagement()}
         {(activeTab === 'userList' || activeTab === 'balances') && renderUserManagement()}
+        {activeTab === 'transactions' && renderTransactions()}
       </MainContent>
     </AdminLayout>
   );

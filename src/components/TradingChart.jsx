@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import styled from 'styled-components';
+import { makeCleanable, safeCleanup } from '../utils/cleanup';
 
 const ChartContainer = styled.div`
   height: 100%;
@@ -24,7 +25,8 @@ const TradingChart = ({
   container_id = 'tradingview_chart',
   autosize = true,
   allow_symbol_change = false,
-  hide_side_toolbar = true
+  hide_side_toolbar = true,
+  onPriceUpdate
 }) => {
   const container = useRef(null);
   const tvWidget = useRef(null);
@@ -34,21 +36,46 @@ const TradingChart = ({
   const safelyCleanupWidget = () => {
     try {
       if (tvWidget.current) {
+        // Always ensure destroy exists
+        if (typeof tvWidget.current.destroy !== 'function') {
+          tvWidget.current.destroy = function() {
+            console.log('TradingView widget destroy function called');
+          };
+        }
+      
         // Different ways to cleanup based on what methods are available
         if (typeof tvWidget.current.remove === 'function') {
-          tvWidget.current.remove();
+          try {
+            tvWidget.current.remove();
+          } catch (err) {
+            console.warn('Error removing TradingView widget:', err);
+          }
         } else if (typeof tvWidget.current.cleanup === 'function') {
-          tvWidget.current.cleanup();
+          try {
+            tvWidget.current.cleanup();
+          } catch (err) {
+            console.warn('Error cleaning up TradingView widget:', err);
+          }
         }
+        
         tvWidget.current = null;
       }
       
       // Also manually clean up the container element
-      const containerElement = document.getElementById(container_id);
-      if (containerElement) {
-        while (containerElement.firstChild) {
-          containerElement.removeChild(containerElement.firstChild);
+      try {
+        const containerElement = document.getElementById(container_id);
+        if (containerElement) {
+          while (containerElement.firstChild) {
+            try {
+              containerElement.removeChild(containerElement.firstChild);
+            } catch (err) {
+              console.warn('Error removing child from container:', err);
+              break; // Stop if we encounter an error
+            }
+          }
         }
+      } catch (err) {
+        console.warn('Error accessing container element:', err);
       }
     } catch (error) {
       console.error('Error cleaning up TradingView widget:', error);
@@ -75,8 +102,20 @@ const TradingChart = ({
     const initializeWidget = () => {
       if (window.TradingView && symbol) {
         try {
+          // Make sure the container element exists before initializing
+          const containerElement = document.getElementById(container_id);
+          if (!containerElement) {
+            console.error(`TradingView container element with ID "${container_id}" not found`);
+            return; // Exit early if the container doesn't exist
+          }
+
+          // Clear any existing content to avoid initialization conflicts
+          while (containerElement.firstChild) {
+            containerElement.removeChild(containerElement.firstChild);
+          }
+          
           // Create the widget
-          tvWidget.current = new window.TradingView.widget({
+          const widget = new window.TradingView.widget({
             symbol: symbol,
             interval: timeframe,
             container_id: container_id,
@@ -106,8 +145,43 @@ const TradingChart = ({
               'paneProperties.background': theme === 'dark' ? '#1E2026' : '#ffffff',
               'paneProperties.vertGridProperties.color': theme === 'dark' ? '#2A2E39' : '#f0f3fa',
               'paneProperties.horzGridProperties.color': theme === 'dark' ? '#2A2E39' : '#f0f3fa',
+            },
+            onChartReady: function() {
+              try {
+                const chart = widget.chart();
+                chart.onSymbolChange().subscribe(null, function() {
+                  try {
+                    const lastPrice = chart.crosshairPrice();
+                    if (onPriceUpdate && lastPrice) {
+                      onPriceUpdate(lastPrice);
+                    }
+                  } catch (e) {
+                    console.warn('Error in onSymbolChange handler:', e);
+                  }
+                });
+                console.log(`Chart for ${symbol} is ready`);
+              } catch (e) {
+                console.warn('Error in onChartReady handler:', e);
+              }
             }
           });
+          
+          // Add destroy method immediately to make React cleanup-friendly
+          widget.destroy = function() {
+            console.log('TradingView widget custom destroy called');
+            try {
+              if (typeof this.remove === 'function') {
+                this.remove();
+              } else if (typeof this.cleanup === 'function') {
+                this.cleanup();
+              }
+            } catch (e) {
+              console.warn('Error in TradingView widget custom destroy:', e);
+            }
+          };
+          
+          // Make widget cleanup-friendly
+          tvWidget.current = makeCleanable(widget);
           
           console.log(`TradingView widget initialized for ${symbol}`);
         } catch (error) {
@@ -125,14 +199,14 @@ const TradingChart = ({
     }
 
     // Cleanup function
-    return () => {
+    return safeCleanup(() => {
       // Safely clean up widget
       safelyCleanupWidget();
       
       // We'll leave the script in the document to avoid repeated loads
       // This prevents issues with removing scripts that might be in use by other components
-    };
-  }, [symbol, theme, timeframe, container_id, autosize, allow_symbol_change, hide_side_toolbar]);
+    });
+  }, [symbol, theme, timeframe, container_id, autosize, allow_symbol_change, hide_side_toolbar, onPriceUpdate]);
 
   if (!symbol) {
     return (
@@ -143,7 +217,14 @@ const TradingChart = ({
     );
   }
 
-  return <ChartContainer ref={container} id={container_id} />;
+  return <ChartContainer ref={container} id={container_id} data-testid="trading-chart-container" />;
 };
 
-export default TradingChart; 
+export default React.memo(TradingChart, (prevProps, nextProps) => {
+  // Only re-render if key props change
+  return (
+    prevProps.symbol === nextProps.symbol &&
+    prevProps.timeframe === nextProps.timeframe &&
+    prevProps.theme === nextProps.theme
+  );
+}); 

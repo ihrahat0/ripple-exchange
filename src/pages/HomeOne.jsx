@@ -119,50 +119,42 @@ const Container = styled.div`
   padding: 0 20px;
 `;
 
-const HeroBanner = styled.div`
-  background: #0b0b0f;
-  padding: 60px 0;
+const HeroSection = styled.section`
+  padding: 80px 0;
+  background: linear-gradient(180deg, #0B0B0F 0%, #121218 100%);
   position: relative;
   overflow: hidden;
-  margin-bottom: 40px;
   
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: 
-      radial-gradient(circle at 20% 50%, rgba(247, 147, 26, 0.08) 0%, rgba(0, 0, 0, 0) 50%), 
-      radial-gradient(circle at 80% 30%, rgba(247, 147, 26, 0.08) 0%, rgba(0, 0, 0, 0) 60%);
-    z-index: 1;
-    animation: ${backgroundGlow} 8s ease-in-out infinite;
+  @media (max-width: 768px) {
+    padding: 60px 0;
   }
   
-  &::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: 
-      linear-gradient(rgba(247, 147, 26, 0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(247, 147, 26, 0.02) 1px, transparent 1px);
-    background-size: 40px 40px;
-    background-position: center center;
-    z-index: 1;
-    animation: ${gridGlow} 4s ease-in-out infinite;
+  @media (max-width: 480px) {
+    padding: 40px 0;
+  }
+`;
+
+const HeroContainer = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  
+  @media (max-width: 992px) {
+    flex-direction: column;
+    text-align: center;
   }
 `;
 
 const HeroContent = styled.div`
-  position: relative;
-  z-index: 2;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  max-width: 600px;
+  
+  @media (max-width: 992px) {
+    max-width: 100%;
+    margin-bottom: 40px;
+  }
 `;
 
 const HeroLeft = styled.div`
@@ -202,23 +194,48 @@ const CoinIcon = styled.img`
 `;
 
 const HeroTitle = styled.h1`
-  color: #fff;
-  font-size: 40px;
+  font-size: 48px;
   font-weight: 700;
   margin-bottom: 20px;
-  animation: ${textGlow} 3s ease-in-out infinite;
+  background: linear-gradient(90deg, #F7931A, #FF6B6B);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  
+  @media (max-width: 768px) {
+    font-size: 36px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 28px;
+  }
 `;
 
-const HeroDescription = styled.p`
-  color: rgba(255, 255, 255, 0.8);
+const HeroSubtitle = styled.p`
   font-size: 18px;
-  max-width: 600px;
-  margin-bottom: 40px;
   line-height: 1.6;
+  margin-bottom: 30px;
+  color: rgba(255, 255, 255, 0.8);
+  
+  @media (max-width: 768px) {
+    font-size: 16px;
+  }
 `;
 
-const HeroHighlight = styled.span`
-  color: #F7931A;
+const HeroImage = styled.div`
+  max-width: 500px;
+  
+  img {
+    width: 100%;
+    height: auto;
+  }
+  
+  @media (max-width: 992px) {
+    max-width: 400px;
+  }
+  
+  @media (max-width: 480px) {
+    max-width: 300px;
+  }
 `;
 
 const SignupBox = styled.div`
@@ -264,47 +281,37 @@ const StyledInput = styled.input`
 `;
 
 const Button = styled.button`
-  background: ${props => props.$secondary ? 'transparent' : '#F7931A'};
-  color: #fff;
-  border: ${props => props.$secondary ? '1px solid #F7931A' : 'none'};
   padding: 12px 24px;
   border-radius: 8px;
+  font-weight: 600;
   font-size: 16px;
-  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s;
-  position: relative;
-  overflow: hidden;
   
-  ${props => props.$secondary ? css`
-    animation: ${borderGlow} 3s ease-in-out infinite;
-  ` : css`
-    animation: ${glow} 3s ease-in-out infinite;
-  `}
+  @media (max-width: 768px) {
+    padding: 10px 20px;
+    font-size: 14px;
+  }
+`;
+
+const PrimaryButton = styled(Button)`
+  background: var(--primary);
+  color: white;
+  border: none;
   
   &:hover {
-    transform: translateY(-2px);
-    ${props => props.$secondary ? css`
-      background: rgba(247, 147, 26, 0.1);
-    ` : css`
-      background: #e88a18;
-    `}
+    background: var(--primary-dark);
+    box-shadow: 0 0 15px rgba(247, 147, 26, 0.5);
   }
+`;
+
+const SecondaryButton = styled(Button)`
+  background: transparent;
+  color: var(--primary);
+  border: 1px solid var(--primary);
   
-  &::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0) 70%);
-    opacity: 0;
-    transition: opacity 0.3s;
-  }
-  
-  &:hover::after {
-    opacity: 1;
+  &:hover {
+    background: rgba(247, 147, 26, 0.1);
   }
 `;
 
@@ -328,23 +335,19 @@ const MarketSection = styled.div`
 `;
 
 const SectionTitle = styled.h2`
-  color: #fff;
-  font-size: 32px;
-  font-weight: 600;
-  margin-bottom: 30px;
-  position: relative;
-  display: inline-block;
-  animation: ${textGlow} 3s ease-in-out infinite;
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 40px;
+  text-align: center;
   
-  &::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    bottom: -8px;
-    width: 60px;
-    height: 3px;
-    background: #F7931A;
-    animation: ${glow} 3s ease-in-out infinite;
+  @media (max-width: 768px) {
+    font-size: 28px;
+    margin-bottom: 30px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 24px;
+    margin-bottom: 20px;
   }
 `;
 
@@ -386,6 +389,12 @@ const StepsContainer = styled.div`
   grid-template-columns: repeat(3, 1fr);
   gap: 30px;
   margin-top: 40px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+    margin: 40px auto 0;
+  }
 `;
 
 const StepCard = styled.div`
@@ -397,6 +406,10 @@ const StepCard = styled.div`
   
   &:hover {
     transform: translateY(-5px);
+  }
+  
+  @media (max-width: 768px) {
+    margin-top: ${props => props.$firstStep ? '20px' : '0'};
   }
 `;
 
@@ -630,34 +643,54 @@ const FAQAnswer = styled.div`
   display: ${props => props.$isOpen ? 'block' : 'none'};
 `;
 
-const CTASection = styled.div`
-  background: linear-gradient(90deg, #F7931A 0%, #e88a18 100%);
-  border-radius: 16px;
-  padding: 60px 0;
-  margin: 60px 0;
+const CTASection = styled.section`
+  padding: 80px 0;
+  background: linear-gradient(135deg, #0B0B0F 0%, #1A1A25 100%);
   text-align: center;
+  
+  @media (max-width: 768px) {
+    padding: 60px 0;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 40px 0;
+  }
+`;
+
+const CTAContainer = styled.div`
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px;
+  
+  @media (max-width: 768px) {
+    max-width: 100%;
+  }
 `;
 
 const CTATitle = styled.h2`
-  color: #fff;
-  font-size: 32px;
-  font-weight: 600;
+  font-size: 36px;
+  font-weight: 700;
   margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    font-size: 28px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 24px;
+  }
 `;
 
-const CTAButton = styled.button`
-  background: #fff;
-  color: #F7931A;
-  border: none;
-  border-radius: 6px;
-  padding: 14px 28px;
-  font-weight: 600;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.3s;
+const CTAButtons = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 30px;
   
-  &:hover {
-    background: rgba(255, 255, 255, 0.9);
+  @media (max-width: 480px) {
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
   }
 `;
 
@@ -778,20 +811,20 @@ function HomeOne() {
   
     return (
         <div className='home-1'>
-      <HeroBanner>
+      <HeroSection>
         <GlowingOrb />
         <GlowingOrb2 />
         <GlowingBottom />
         <Container>
-          <HeroContent>
+          <HeroContainer>
             <HeroLeft>
               <HeroTitle>
                 Welcome to the World's <br />
                 Best Crypto Trading Exchange
               </HeroTitle>
-              <HeroDescription>
+              <HeroSubtitle>
                 Buy, trade, and hold hundreds of cryptocurrencies on Ripple Exchange, with industry-leading security and best trading experience.
-              </HeroDescription>
+              </HeroSubtitle>
               
               <SignupBox>
                 <StyledInput 
@@ -800,10 +833,10 @@ function HomeOne() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
-                <Button onClick={handleSignUp}>Sign Up Now</Button>
+                <PrimaryButton onClick={handleSignUp}>Sign Up Now</PrimaryButton>
               </SignupBox>
               
-              <Button $secondary onClick={handleSignUpForRewards}>Sign Up for Rewards →</Button>
+              <SecondaryButton $secondary onClick={handleSignUpForRewards}>Sign Up for Rewards →</SecondaryButton>
             </HeroLeft>
             
             <HeroRight>
@@ -814,7 +847,7 @@ function HomeOne() {
                 <CoinIcon src={bnbIcon} alt="Binance Coin" style={{ right: '25%', bottom: '15%', animation: 'float 9s ease-in-out infinite' }} />
               </FloatingCoins>
             </HeroRight>
-          </HeroContent>
+          </HeroContainer>
           
           {/* Add Marquee Banner */}
           <MarqueeBanner>
@@ -851,7 +884,7 @@ function HomeOne() {
           <CryptoImage src={ethIcon} style={{ top: '60%', right: '30%', width: '30px', height: '30px', animationDelay: '0.5s' }} />
           <CryptoImage src={bnbIcon} style={{ top: '40%', right: '15%', width: '35px', height: '35px', animationDelay: '0.8s' }} />
         </Container>
-      </HeroBanner>
+      </HeroSection>
 
       <Container>
                 <CryptoPrices />
@@ -868,7 +901,7 @@ function HomeOne() {
             <SectionText $center>Begin your cryptocurrency journey with these simple steps</SectionText>
             
             <StepsContainer>
-              <StepCard>
+              <StepCard $firstStep={true}>
                 <StepNumber>1</StepNumber>
                 <StepIcon>📝</StepIcon>
                 <StepTitle>Create Account</StepTitle>
@@ -1024,10 +1057,12 @@ function HomeOne() {
         </FAQSection>
         
         <CTASection>
-          <Container>
+          <CTAContainer>
             <CTATitle>Embark on Your Crypto Journey Today!</CTATitle>
-            <CTAButton onClick={() => navigate('/register')}>Sign Up Now</CTAButton>
-          </Container>
+            <CTAButtons>
+              <PrimaryButton onClick={() => navigate('/register')}>Sign Up Now</PrimaryButton>
+            </CTAButtons>
+          </CTAContainer>
         </CTASection>
       </Container>
         </div>

@@ -4,7 +4,7 @@ import HomeThree from "./HomeThree";
 import BuyCrypto from "./BuyCrypto";
 import BuyCryptoConfirm from "./BuyCryptoConfirm";
 import BuyCryptoDetails from "./BuyCryptoDetails";
-import Markets from "./Markets";
+import Market from "./Market";
 import SellSelect from "./SellSelect";
 import SellCryptoAmount from "./SellCryptoAmount";
 import SellCryptoConfirm from "./SellCryptoConfirm";
@@ -30,7 +30,7 @@ const routes = [
   { path: '/buy-crypto-select', component: <BuyCrypto />},
   { path: '/buy-crypto-confirm', component: <BuyCryptoConfirm />},
   { path: '/buy-crypto-details', component: <BuyCryptoDetails />},
-  { path: '/markets', component: <Markets />},
+  { path: '/market', component: <Market />},
   { path: '/sell-select', component: <SellSelect />},
   { path: '/sell-crypto-amount', component: <SellCryptoAmount />},
   { path: '/sell-crypto-confirm', component: <SellCryptoConfirm />},
