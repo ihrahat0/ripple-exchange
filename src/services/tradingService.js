@@ -9,8 +9,11 @@ import {
     getDocs,
     query,
     where,
-    arrayUnion
+    arrayUnion,
+    addDoc,
+    deleteDoc
 } from 'firebase/firestore';
+import { v4 as uuidv4 } from 'uuid';
 
 export const tradingService = {
     async openPosition(userId, tradeData) {
@@ -551,6 +554,114 @@ export const tradingService = {
             console.error('Error fetching bonus account:', error);
             throw new Error('Failed to fetch bonus account details');
         }
+    },
+
+    /**
+     * Get all open positions for a user
+     * @param {string} userId - User ID
+     * @returns {Promise<Array>} - Array of positions
+     */
+    async getUserPositions(userId) {
+        try {
+            const q = query(
+                collection(db, 'positions'),
+                where('userId', '==', userId),
+                where('status', '==', 'OPEN')
+            );
+            
+            const querySnapshot = await getDocs(q);
+            return querySnapshot.docs.map(doc => ({
+                ...doc.data(),
+                id: doc.id
+            }));
+        } catch (error) {
+            console.error('Error getting user positions:', error);
+            return [];
+        }
+    },
+
+    /**
+     * Execute a pending limit order by moving it to positions
+     * @param {string|Object} order - ID of the limit order to execute or the order object itself
+     * @returns {Promise<Object>} - Result of the execution
+     */
+    async executeLimitOrder(order) {
+        try {
+            // Handle either order ID or full order object
+            let orderId, orderData;
+            
+            if (typeof order === 'string') {
+                // If we got an order ID string
+                orderId = order;
+                const orderRef = doc(db, 'limitOrders', orderId);
+                const orderSnap = await getDoc(orderRef);
+                
+                if (!orderSnap.exists()) {
+                    console.error(`Limit order with ID ${orderId} not found`);
+                    throw new Error(`Limit order with ID ${orderId} not found`);
+                }
+                
+                orderData = orderSnap.data();
+                orderData.id = orderId; // Set the ID in the data
+            } else {
+                // If we got a full order object
+                orderId = order.id;
+                orderData = {...order}; // clone to avoid mutations
+                
+                // Double-check that the order exists in Firestore
+                const orderRef = doc(db, 'limitOrders', orderId);
+                const orderSnap = await getDoc(orderRef);
+                
+                if (!orderSnap.exists()) {
+                    console.error(`Limit order with ID ${orderId} not found in database`);
+                    throw new Error(`Limit order with ID ${orderId} not found in database`);
+                }
+            }
+            
+            console.log(`Executing limit order: ${orderData.side || orderData.type} ${orderData.amount} ${orderData.symbol} at ${orderData.price || orderData.targetPrice}`);
+            
+            // Create a position from the limit order
+            const position = {
+                id: uuidv4(),
+                userId: orderData.userId,
+                symbol: orderData.symbol,
+                tokenAddress: orderData.tokenAddress,
+                tokenType: orderData.tokenType,
+                chainId: orderData.chainId,
+                side: orderData.side || orderData.type, // Handle either field name
+                amount: orderData.amount,
+                entryPrice: orderData.price || orderData.targetPrice, // Handle either field name
+                leverage: orderData.leverage,
+                liquidationPrice: calculateLiquidationPrice(orderData),
+                margin: orderData.margin,
+                pnl: 0,
+                status: 'OPEN',
+                openTime: new Date().toISOString()
+            };
+            
+            // Add position to Firebase
+            const positionRef = await addDoc(collection(db, 'positions'), position);
+            
+            // Delete the limit order
+            await deleteDoc(doc(db, 'limitOrders', orderId));
+            
+            console.log(`Successfully executed limit order ${orderId} and created position ${positionRef.id}`);
+            
+            // Return the created position
+            return {
+                success: true,
+                position: {
+                    ...position,
+                    id: positionRef.id
+                }
+            };
+        } catch (error) {
+            console.error('Error executing limit order:', error);
+            return {
+                success: false,
+                error: error.message
+            };
+        }
     }
 };
 
@@ -566,4 +677,16 @@ function calculatePnL(position, closePrice) {
         const percentageChange = (priceDiff / entryPrice) * 100;
         return +(margin * (percentageChange / 100) * leverage).toFixed(2);
     }
-} 
+}
+
+function calculateLiquidationPrice(order) {
+    // Implementation of calculateLiquidationPrice function
+    // This function should return the liquidation price based on the order data
+    // For now, we'll return a placeholder value
+    return 0; // Placeholder value, actual implementation needed
+}
+
+// Export all services
+export default {
+    ...tradingService
+}; 
