@@ -10,6 +10,7 @@ import {
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { DEFAULT_COINS } from '../utils/constants';
+import { collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
 
 const AuthContext = createContext();
 
@@ -22,8 +23,63 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
   const [isEmailVerified, setIsEmailVerified] = useState(false);
 
+  // Add a function to check if an email is already used and verified
+  async function isEmailVerifiedAndRegistered(email) {
+    try {
+      // Query users collection to find documents with the provided email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      // If no documents found, email is not registered
+      if (querySnapshot.empty) {
+        return false;
+      }
+      
+      // Check if any of the found documents has a verified email
+      for (const docSnapshot of querySnapshot.docs) {
+        const userData = docSnapshot.data();
+        if (userData.emailVerified === true) {
+          return true; // Found a verified account with this email
+        }
+      }
+      
+      // If we found documents but none are verified, we can allow registration
+      return false;
+    } catch (error) {
+      console.error('Error checking email verification status:', error);
+      // In case of error, assume email is not registered to avoid blocking registration
+      return false;
+    }
+  }
+
   async function signup(email, password) {
     try {
+      // Check if email is already registered and verified
+      const isVerified = await isEmailVerifiedAndRegistered(email);
+      if (isVerified) {
+        throw new Error('This email is already in use with a verified account.');
+      }
+      
+      // Delete any existing unverified accounts with this email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', email));
+      const querySnapshot = await getDocs(q);
+      
+      if (!querySnapshot.empty) {
+        // Delete each unverified account with this email
+        const batch = writeBatch(db);
+        for (const docSnapshot of querySnapshot.docs) {
+          const userData = docSnapshot.data();
+          if (userData.emailVerified !== true) {
+            // This is an unverified account, mark for deletion
+            batch.delete(docSnapshot.ref);
+          }
+        }
+        // Commit the batch
+        await batch.commit();
+      }
+      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       
       // Initialize balances for all coins
@@ -50,6 +106,9 @@ export function AuthProvider({ children }) {
         }
       });
       
+      // Sign out immediately after registration to ensure verification is required
+      await signOut(auth);
+      
       return userCredential;
     } catch (error) {
       console.error('Error in signup:', error);
@@ -59,6 +118,27 @@ export function AuthProvider({ children }) {
 
   function login(email, password) {
     return signInWithEmailAndPassword(auth, email, password);
+  }
+
+  async function loginWithVerification(email, password) {
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+      
+      // Check if the user's email is verified
+      const isVerified = await checkEmailVerificationStatus(user);
+      
+      if (!isVerified) {
+        // Email not verified, sign out and throw error
+        await signOut(auth);
+        throw new Error('Please verify your email before logging in.');
+      }
+      
+      return userCredential;
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
+    }
   }
 
   async function loginWithGoogle() {
@@ -177,11 +257,13 @@ export function AuthProvider({ children }) {
     isEmailVerified,
     signup,
     login,
+    loginWithVerification,
     loginWithGoogle,
     logout,
     checkAdminStatus,
     isUserAdmin,
-    checkEmailVerificationStatus
+    checkEmailVerificationStatus,
+    isEmailVerifiedAndRegistered
   };
 
   return (

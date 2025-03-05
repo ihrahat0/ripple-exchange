@@ -7,7 +7,8 @@ import {
     signInWithPopup, 
     sendEmailVerification,
     updateProfile,
-    sendSignInLinkToEmail 
+    sendSignInLinkToEmail,
+    signOut
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -297,6 +298,10 @@ function Register(props) {
                 });
 
                 setSuccess('Account verified successfully! You can now log in.');
+                
+                // Sign out the user after verification to ensure they have to log in properly
+                await signOut(auth);
+                
                 setTimeout(() => {
                     navigate('/login');
                 }, 2000);

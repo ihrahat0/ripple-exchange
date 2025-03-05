@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import PropTypes from 'prop-types';
 import Sale01 from '../components/sale/Sale01';
 import { auth, googleProvider, db } from '../firebase';
-import { signInWithEmailAndPassword, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signInWithPopup, signOut } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
 import { doc, getDoc } from 'firebase/firestore';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
@@ -18,7 +18,7 @@ Login.propTypes = {
 
 function Login(props) {
     const navigate = useNavigate();
-    const { checkEmailVerificationStatus } = useAuth();
+    const { loginWithVerification, checkEmailVerificationStatus } = useAuth();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [phone, setPhone] = useState('');
@@ -34,25 +34,14 @@ function Login(props) {
         setVerificationPrompt(false);
 
         try {
-            const userCredential = await signInWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            
-            // Check if email is verified in Firestore
-            const isVerified = await checkEmailVerificationStatus(user);
-            
-            if (!isVerified) {
-                // Email is not verified - show message but don't redirect
-                setVerificationPrompt(true);
-                setError('Please verify your email before logging in.');
-                setLoading(false);
-                // Sign the user out to prevent access without verification
-                await auth.signOut();
-                return;
-            }
-            
-            console.log('Logged in user:', user);
+            // Use our enhanced login function that verifies email
+            await loginWithVerification(email, password);
             navigate('/user-profile');
         } catch (err) {
+            if (err.message.includes('verify your email')) {
+                // Email is not verified
+                setVerificationPrompt(true);
+            }
             setError(err.message);
             console.error('Login error:', err);
         } finally {

@@ -11,7 +11,9 @@ import {
     where,
     arrayUnion,
     addDoc,
-    deleteDoc
+    deleteDoc,
+    updateDoc,
+    runTransaction
 } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -57,10 +59,13 @@ export const tradingService = {
                     throw new Error('Insufficient balance');
                 }
                 
+                console.log('Creating position with data:', JSON.stringify(tradeData));
+                
                 const position = {
                     userId,
                     symbol: tradeData.symbol,
                     type: tradeData.type,
+                    side: tradeData.side || tradeData.type, // Ensure side is always set
                     amount: tradeData.amount,
                     leverage: tradeData.leverage,
                     entryPrice: tradeData.entryPrice,
@@ -268,6 +273,10 @@ export const tradingService = {
     // Create a new limit order
     async createLimitOrder(userId, tradeData) {
         try {
+            console.log('===== CREATING LIMIT ORDER IN SERVICE =====');
+            console.log('User ID:', userId);
+            console.log('Trade data:', tradeData);
+            
             const batch = writeBatch(db);
             const orderRef = doc(collection(db, 'limitOrders'));
             const userRef = doc(db, 'users', userId);
@@ -302,19 +311,23 @@ export const tradingService = {
                 throw new Error('Insufficient balance for limit order');
             }
             
+            // Create a consistent limit order object with all necessary fields
             const limitOrder = {
                 userId,
                 symbol: tradeData.symbol,
                 type: tradeData.type,
+                side: tradeData.side || tradeData.type, // Ensure side is consistent with type if not provided
                 amount: tradeData.amount,
                 leverage: tradeData.leverage,
                 targetPrice: tradeData.entryPrice, // The price at which the order should execute
+                price: tradeData.entryPrice, // Add price field for compatibility
                 margin: tradeData.margin,
                 status: 'PENDING',
                 createdAt: serverTimestamp(),
                 lastUpdated: serverTimestamp()
             };
 
+            console.log('Creating limit order in Firestore:', limitOrder);
             batch.set(orderRef, limitOrder);
             
             // Update user balance based on document structure
@@ -343,6 +356,7 @@ export const tradingService = {
             }
 
             await batch.commit();
+            console.log('Limit order created successfully:', orderRef.id);
 
             return {
                 success: true,
@@ -394,6 +408,7 @@ export const tradingService = {
     // Get limit orders for a user
     async getLimitOrders(userId, symbol = null) {
         try {
+            console.log('Getting limit orders for user:', userId, 'symbol:', symbol);
             let q;
             if (symbol) {
                 q = query(
@@ -402,29 +417,43 @@ export const tradingService = {
                     where('symbol', '==', symbol),
                     where('status', '==', 'PENDING')
                 );
+                console.log('Querying with symbol filter:', symbol);
             } else {
                 q = query(
                     collection(db, 'limitOrders'), 
                     where('userId', '==', userId),
                     where('status', '==', 'PENDING')
                 );
+                console.log('Querying without symbol filter');
             }
             
             const snapshot = await getDocs(q);
             const orders = [];
             
             snapshot.forEach(doc => {
+                const data = doc.data();
                 orders.push({
                     id: doc.id,
-                    ...doc.data()
+                    ...data
                 });
             });
             
+            console.log(`Found ${orders.length} pending limit orders:`, orders);
             return orders;
         } catch (error) {
             console.error('Error getting limit orders:', error);
             throw new Error('Failed to fetch limit orders');
         }
+    },
+    
+    /**
+     * Get pending limit orders for a user - alias for getLimitOrders
+     * @param {string} userId - User ID
+     * @param {string} symbol - Optional symbol to filter by
+     * @returns {Promise<Array>} - Array of pending limit orders
+     */
+    async getPendingLimitOrders(userId, symbol = null) {
+        return this.getLimitOrders(userId, symbol);
     },
     
     // Check and execute limit orders if conditions are met
@@ -453,69 +482,260 @@ export const tradingService = {
     
     // Determine if a limit order should be executed based on price
     shouldExecuteLimitOrder(order, currentPrice) {
-        if (order.type === 'buy') {
+        console.log('Checking if order should execute:', order);
+        console.log('Current price:', currentPrice);
+        
+        // Handle both field naming conventions
+        const orderType = (order.side || order.type || '').toLowerCase();
+        const orderPrice = parseFloat(order.price || order.targetPrice);
+        const marketPrice = parseFloat(currentPrice);
+        
+        console.log(`Order type: ${orderType}, Order price: ${orderPrice}, Market price: ${marketPrice}`);
+        
+        if (orderType === 'buy') {
             // Buy order executes when price falls to or below target price
-            return currentPrice <= order.targetPrice;
-        } else {
+            const shouldExecute = marketPrice <= orderPrice;
+            console.log(`Buy order should execute? ${shouldExecute} (${marketPrice} <= ${orderPrice})`);
+            return shouldExecute;
+        } else if (orderType === 'sell') {
             // Sell order executes when price rises to or above target price
-            return currentPrice >= order.targetPrice;
+            const shouldExecute = marketPrice >= orderPrice;
+            console.log(`Sell order should execute? ${shouldExecute} (${marketPrice} >= ${orderPrice})`);
+            return shouldExecute;
         }
+        
+        console.log('Unknown order type:', orderType);
+        return false;
     },
     
-    // Execute a limit order by creating a position
-    async executeLimitOrder(order, currentPrice) {
+    /**
+     * Execute a pending limit order by creating a market position
+     * Simplified and robust implementation
+     */
+    async executeLimitOrder(order) {
         try {
-            const batch = writeBatch(db);
-            const positionRef = doc(collection(db, 'positions'));
-            const orderRef = doc(db, 'limitOrders', order.id);
-            const userRef = doc(db, 'users', order.userId);
+            console.log('⚙️ EXECUTE LIMIT ORDER SERVICE:', order);
+            let orderId, orderData;
             
-            // Create position from the limit order
-            const position = {
-                userId: order.userId,
-                symbol: order.symbol,
-                type: order.type,
-                amount: order.amount,
-                leverage: order.leverage,
-                entryPrice: order.targetPrice, // Use the target price as entry price
-                margin: order.margin,
-                orderMode: 'limit',
-                status: 'OPEN',
-                openTime: serverTimestamp(),
-                currentPnL: 0,
-                lastUpdated: serverTimestamp(),
-                closePrice: null,
-                closeTime: null,
-                finalPnL: null,
-                limitOrderId: order.id // Keep a reference to the original order
-            };
-
-            // Set the new position
-            batch.set(positionRef, position);
+            // Handle case when order is passed as an object
+            if (typeof order === 'object' && order.id) {
+                orderId = order.id;
+                orderData = {...order};
+            } 
+            // Handle case when order is passed as an ID string
+            else if (typeof order === 'string') {
+                orderId = order;
+                const orderDoc = await getDoc(doc(db, 'limitOrders', orderId));
+                if (!orderDoc.exists()) {
+                    throw new Error(`Limit order ${orderId} not found`);
+                }
+                orderData = {
+                    ...orderDoc.data(),
+                    id: orderId
+                };
+            } else {
+                throw new Error('Invalid order format');
+            }
             
-            // Move reserved funds to used funds (already deducted from available balance)
-            batch.update(userRef, {
-                [`reservedBalance.USDT`]: increment(-order.margin),
-                lastUpdated: serverTimestamp()
-            });
+            // Verify the order exists and get latest data
+            const orderRef = doc(db, 'limitOrders', orderId);
+            const orderSnapshot = await getDoc(orderRef);
             
-            // Mark the limit order as executed
-            batch.update(orderRef, {
-                status: 'EXECUTED',
-                executedPrice: currentPrice,
-                executedAt: serverTimestamp(),
-                lastUpdated: serverTimestamp()
-            });
-
-            await batch.commit();
-
-            return {
-                success: true,
-                positionId: positionRef.id
-            };
+            if (!orderSnapshot.exists()) {
+                throw new Error(`Limit order not found: ${orderId}`);
+            }
+            
+            // Get fresh order data
+            const freshOrderData = orderSnapshot.data();
+            
+            // Handle case where order was already executed
+            if (freshOrderData.status !== 'PENDING') {
+                console.log(`Order ${orderId} is already ${freshOrderData.status}`);
+                return { 
+                    success: false, 
+                    error: `Order is already ${freshOrderData.status}`
+                };
+            }
+            
+            // Check if a position already exists for this limit order
+            const existingPositionsQuery = query(
+                collection(db, 'positions'),
+                where('limitOrderId', '==', orderId)
+            );
+            
+            const existingPositionsSnapshot = await getDocs(existingPositionsQuery);
+            
+            if (!existingPositionsSnapshot.empty) {
+                console.log(`Position already exists for limit order ${orderId}`);
+                
+                // Return the first existing position
+                const existingPosition = {
+                    ...existingPositionsSnapshot.docs[0].data(),
+                    id: existingPositionsSnapshot.docs[0].id
+                };
+                
+                // Convert timestamp to string for UI
+                if (existingPosition.openTime) {
+                    existingPosition.openTime = new Date(existingPosition.openTime.seconds * 1000).toISOString();
+                }
+                
+                return {
+                    success: true,
+                    position: existingPosition,
+                    message: 'Position already exists for this order'
+                };
+            }
+            
+            console.log('⚙️ Creating position from order:', orderData);
+            
+            // Try to use a transaction for atomic operations
+            try {
+                // Start transaction
+                const result = await runTransaction(db, async (transaction) => {
+                    // 1. Create position document
+                    const positionRef = doc(collection(db, 'positions'));
+                    const position = {
+                        userId: orderData.userId,
+                        symbol: orderData.symbol,
+                        type: (orderData.side || orderData.type || 'buy').toLowerCase(),
+                        side: (orderData.side || orderData.type || 'buy').toLowerCase(),
+                        amount: parseFloat(orderData.amount),
+                        leverage: parseInt(orderData.leverage || 1),
+                        entryPrice: parseFloat(orderData.price || orderData.targetPrice),
+                        margin: parseFloat(orderData.margin),
+                        status: 'OPEN',
+                        openTime: serverTimestamp(),
+                        lastUpdated: serverTimestamp(),
+                        orderMode: 'market',
+                        limitOrderId: orderId,
+                        pnl: 0,
+                        closePrice: null,
+                        closeTime: null,
+                        finalPnL: null
+                    };
+                    
+                    transaction.set(positionRef, position);
+                    
+                    // 2. Delete the limit order
+                    transaction.delete(orderRef);
+                    
+                    // 3. Update user's reserved balance if needed
+                    if (orderData.userId) {
+                        const userRef = doc(db, 'users', orderData.userId);
+                        const userDoc = await transaction.get(userRef);
+                        
+                        if (userDoc.exists() && userDoc.data().reservedBalance?.USDT) {
+                            transaction.update(userRef, {
+                                'reservedBalance.USDT': increment(-orderData.margin),
+                                lastUpdated: serverTimestamp()
+                            });
+                        }
+                    }
+                    
+                    // Return the position with ID for the caller
+                    return {
+                        success: true,
+                        position: {
+                            ...position,
+                            id: positionRef.id,
+                            openTime: new Date().toISOString() // Convert timestamp for UI
+                        }
+                    };
+                });
+                
+                console.log('⚙️ Transaction completed successfully:', result);
+                return result;
+            } catch (txError) {
+                console.error('⚙️ Transaction failed:', txError);
+                
+                // Check again if position was created (could be race condition)
+                const checkAgainQuery = query(
+                    collection(db, 'positions'),
+                    where('limitOrderId', '==', orderId)
+                );
+                
+                const checkAgainSnapshot = await getDocs(checkAgainQuery);
+                
+                if (!checkAgainSnapshot.empty) {
+                    console.log(`Position was actually created for limit order ${orderId}`);
+                    
+                    // Return the existing position
+                    const existingPosition = {
+                        ...checkAgainSnapshot.docs[0].data(),
+                        id: checkAgainSnapshot.docs[0].id
+                    };
+                    
+                    // Convert timestamp to string for UI
+                    if (existingPosition.openTime) {
+                        existingPosition.openTime = new Date(existingPosition.openTime.seconds * 1000).toISOString();
+                    }
+                    
+                    return {
+                        success: true,
+                        position: existingPosition,
+                        message: 'Position existed despite transaction error'
+                    };
+                }
+                
+                // Fallback approach if transaction fails
+                console.log('⚙️ Using fallback approach');
+                
+                // Create position document
+                const position = {
+                    userId: orderData.userId,
+                    symbol: orderData.symbol,
+                    type: (orderData.side || orderData.type || 'buy').toLowerCase(),
+                    side: (orderData.side || orderData.type || 'buy').toLowerCase(),
+                    amount: parseFloat(orderData.amount),
+                    leverage: parseInt(orderData.leverage || 1),
+                    entryPrice: parseFloat(orderData.price || orderData.targetPrice),
+                    margin: parseFloat(orderData.margin),
+                    status: 'OPEN',
+                    openTime: serverTimestamp(),
+                    lastUpdated: serverTimestamp(),
+                    orderMode: 'market',
+                    limitOrderId: orderId,
+                    pnl: 0,
+                    closePrice: null,
+                    closeTime: null,
+                    finalPnL: null
+                };
+                
+                // Add position directly
+                const positionRef = await addDoc(collection(db, 'positions'), position);
+                
+                // Delete the limit order
+                await deleteDoc(orderRef);
+                
+                // Update user's reserved balance if needed
+                if (orderData.userId) {
+                    try {
+                        const userRef = doc(db, 'users', orderData.userId);
+                        await updateDoc(userRef, {
+                            'reservedBalance.USDT': increment(-orderData.margin),
+                            lastUpdated: serverTimestamp()
+                        });
+                    } catch (userError) {
+                        console.error('Failed to update user balance:', userError);
+                        // Continue anyway, the position is created
+                    }
+                }
+                
+                return {
+                    success: true,
+                    position: {
+                        ...position,
+                        id: positionRef.id,
+                        openTime: new Date().toISOString() // Convert timestamp for UI
+                    }
+                };
+            }
         } catch (error) {
-            console.error('Error executing limit order:', error);
-            throw new Error('Failed to execute limit order');
+            console.error('⚙️ Error executing limit order:', error);
+            return {
+                success: false,
+                error: error.message
+            };
         }
     },
 
@@ -581,86 +801,52 @@ export const tradingService = {
     },
 
     /**
-     * Execute a pending limit order by moving it to positions
-     * @param {string|Object} order - ID of the limit order to execute or the order object itself
-     * @returns {Promise<Object>} - Result of the execution
+     * Updates the target price of a limit order
+     * @param {string} userId - User ID
+     * @param {string} orderId - Limit order ID
+     * @param {number} newPrice - New target price
+     * @returns {Promise<Object>} - Result of the update operation
      */
-    async executeLimitOrder(order) {
+    async updateLimitOrderPrice(userId, orderId, newPrice) {
         try {
-            // Handle either order ID or full order object
-            let orderId, orderData;
-            
-            if (typeof order === 'string') {
-                // If we got an order ID string
-                orderId = order;
-                const orderRef = doc(db, 'limitOrders', orderId);
-                const orderSnap = await getDoc(orderRef);
-                
-                if (!orderSnap.exists()) {
-                    console.error(`Limit order with ID ${orderId} not found`);
-                    throw new Error(`Limit order with ID ${orderId} not found`);
-                }
-                
-                orderData = orderSnap.data();
-                orderData.id = orderId; // Set the ID in the data
-            } else {
-                // If we got a full order object
-                orderId = order.id;
-                orderData = {...order}; // clone to avoid mutations
-                
-                // Double-check that the order exists in Firestore
-                const orderRef = doc(db, 'limitOrders', orderId);
-                const orderSnap = await getDoc(orderRef);
-                
-                if (!orderSnap.exists()) {
-                    console.error(`Limit order with ID ${orderId} not found in database`);
-                    throw new Error(`Limit order with ID ${orderId} not found in database`);
-                }
+            // Validate parameters
+            if (!userId) throw new Error('User ID is required');
+            if (!orderId) throw new Error('Order ID is required');
+            if (!newPrice || isNaN(newPrice) || newPrice <= 0) {
+                throw new Error('Invalid price');
             }
             
-            console.log(`Executing limit order: ${orderData.side || orderData.type} ${orderData.amount} ${orderData.symbol} at ${orderData.price || orderData.targetPrice}`);
+            // Get order reference
+            const orderRef = doc(db, 'limitOrders', orderId);
             
-            // Create a position from the limit order
-            const position = {
-                id: uuidv4(),
-                userId: orderData.userId,
-                symbol: orderData.symbol,
-                tokenAddress: orderData.tokenAddress,
-                tokenType: orderData.tokenType,
-                chainId: orderData.chainId,
-                side: orderData.side || orderData.type, // Handle either field name
-                amount: orderData.amount,
-                entryPrice: orderData.price || orderData.targetPrice, // Handle either field name
-                leverage: orderData.leverage,
-                liquidationPrice: calculateLiquidationPrice(orderData),
-                margin: orderData.margin,
-                pnl: 0,
-                status: 'OPEN',
-                openTime: new Date().toISOString()
-            };
+            // Get the order to check ownership
+            const orderSnap = await getDoc(orderRef);
             
-            // Add position to Firebase
-            const positionRef = await addDoc(collection(db, 'positions'), position);
+            if (!orderSnap.exists()) {
+                throw new Error('Order not found');
+            }
             
-            // Delete the limit order
-            await deleteDoc(doc(db, 'limitOrders', orderId));
+            const orderData = orderSnap.data();
             
-            console.log(`Successfully executed limit order ${orderId} and created position ${positionRef.id}`);
+            // Verify the order belongs to this user
+            if (orderData.userId !== userId) {
+                throw new Error('Unauthorized to update this order');
+            }
             
-            // Return the created position
-            return {
+            // Update the order
+            await updateDoc(orderRef, {
+                targetPrice: newPrice,
+                price: newPrice, // Update both fields for compatibility
+                lastUpdated: serverTimestamp()
+            });
+            
+            return { 
                 success: true,
-                position: {
-                    ...position,
-                    id: positionRef.id
-                }
+                message: 'Order updated successfully'
             };
         } catch (error) {
-            console.error('Error executing limit order:', error);
-            return {
-                success: false,
-                error: error.message
-            };
+            console.error('Error updating limit order price:', error);
+            throw new Error(`Failed to update order: ${error.message}`);
         }
     }
 };

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import styled from 'styled-components';
+import styled, { css, keyframes, useTheme } from 'styled-components';
 import { Tab, Tabs, TabList, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
 import { db } from '../firebase';
@@ -28,6 +28,12 @@ import TradingChartComponent from '../components/TradingChart';
 import { tradingService } from '../services/tradingService';
 import btcIcon from '../assets/images/coin/btc.png';
 import LightweightChartComponent from '../components/LightweightChartComponent';
+
+// Simple notification function using console.log
+const addNotification = ({ title, message, type }) => {
+  console.log(`[${type || 'info'}] ${title}: ${message}`);
+  // In a real app, we would use a proper notification library
+};
 
 const TradingContainer = styled.div`
   padding: 20px;
@@ -228,13 +234,8 @@ const Button = styled.button`
 
 // Update the TIMEFRAMES object
 const TIMEFRAMES = {
-  '1M': { label: '1M', tradingViewInterval: '1', binanceInterval: '1m', dexInterval: '1' },
-  '5M': { label: '5M', tradingViewInterval: '5', binanceInterval: '5m', dexInterval: '5' },
-  '15M': { label: '15M', tradingViewInterval: '15', binanceInterval: '15m', dexInterval: '15' },
-  '1H': { label: '1H', tradingViewInterval: '60', binanceInterval: '1h', dexInterval: '60' },
-  '4H': { label: '4H', tradingViewInterval: '240', binanceInterval: '4h', dexInterval: '240' },
-  '1D': { label: '1D', tradingViewInterval: 'D', binanceInterval: '1d', dexInterval: '1440' },
-  '1W': { label: '1W', tradingViewInterval: 'W', binanceInterval: '1w', dexInterval: '10080' }
+  '1D': { label: '1D', value: '1' },
+  '1W': { label: '1W', value: '7' }
 };
 
 // Update the styled component for the chart
@@ -791,85 +792,97 @@ const calculatePnL = (position, currentMarketPrice) => {
   }
 };
 
-// Enhance the function for generating more realistic order book data
-const generateMockOrderBookData = (currentPrice, depthCount = 15) => {
+// Generate order book data with extremely tight spreads (exactly 0.1% between each price level)
+const generateOrderBook = (currentPrice, depthCount = 10) => {
   if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
     console.warn('Invalid current price for order book generation:', currentPrice);
-    currentPrice = 0.04; // Fallback price if invalid
+    currentPrice = 100; // Reasonable fallback
   }
   
-  // Function to get appropriate step size based on price
-  const getStepSize = (price) => {
-    if (price < 0.0001) return 0.00000001;
-    if (price < 0.001) return 0.0000001;
-    if (price < 0.01) return 0.000001;
-    if (price < 0.1) return 0.00001;
-    if (price < 1) return 0.0001;
-    if (price < 10) return 0.001;
-    if (price < 100) return 0.01;
-    if (price < 1000) return 0.1;
-    return 1;
+  // We'll use a fixed percentage difference between each price level
+  const PRICE_STEP_PERCENT = 0.001; // Exactly 0.1%
+  
+  // Function to format price with appropriate decimals
+  const formatPrice = (price) => {
+    if (price >= 10000) return parseFloat(price.toFixed(0));
+    if (price >= 1000) return parseFloat(price.toFixed(1)); 
+    if (price >= 100) return parseFloat(price.toFixed(2));
+    if (price >= 10) return parseFloat(price.toFixed(3));
+    if (price >= 1) return parseFloat(price.toFixed(4));
+    if (price >= 0.1) return parseFloat(price.toFixed(5));
+    if (price >= 0.01) return parseFloat(price.toFixed(6));
+    if (price >= 0.001) return parseFloat(price.toFixed(7));
+    return parseFloat(price.toFixed(8));
   };
   
-  // Get the step size for this price range
-  const stepSize = getStepSize(currentPrice);
-  const spreadFactor = Math.random() * 0.004 + 0.001; // 0.1% to 0.5% spread
-  
-  // Generate ask prices (sell orders) above current price
+  // Create ask prices (sells above current price)
   const asks = [];
-  let askPrice = currentPrice * (1 + spreadFactor);
-  
-  // Create a realistic volume distribution - more volume near the current price
   for (let i = 0; i < depthCount; i++) {
-    // Round price to appropriate number of decimals
-    askPrice = Math.round(askPrice / stepSize) * stepSize;
+    // Calculate exact price step up (0.1% x step number)
+    const priceMultiplier = 1 + (PRICE_STEP_PERCENT * (i + 1));
+    const rawPrice = currentPrice * priceMultiplier;
+    const price = formatPrice(rawPrice);
     
-    // Volume decreases as we get further from current price (with some randomness)
-    const volumeBase = 10 / (i + 1) * (0.8 + Math.random() * 0.4);
-    const amount = parseFloat((volumeBase * (0.9 + Math.random() * 0.2)).toFixed(4));
+    // Generate realistic volume (higher near current price)
+    const volumeBase = 5 / (i + 1);
+    const amount = parseFloat((volumeBase * (0.95 + Math.random() * 0.1)).toFixed(4));
+    const total = parseFloat((price * amount).toFixed(4));
     
-    // Total value of this order
-    const total = parseFloat((askPrice * amount).toFixed(4));
-    
-    asks.push({
-      price: askPrice,
-      amount: amount,
-      total: total
-    });
-    
-    // Increase the next price with some randomness
-    const priceIncrement = stepSize * (1 + Math.random() * 2);
-    askPrice += priceIncrement;
+    asks.push({ price, amount, total });
   }
-
-  // Generate bid prices (buy orders) below current price
+  
+  // Create bid prices (buys below current price)
   const bids = [];
-  let bidPrice = currentPrice * (1 - spreadFactor);
-  
   for (let i = 0; i < depthCount; i++) {
-    // Round price to appropriate number of decimals
-    bidPrice = Math.round(bidPrice / stepSize) * stepSize;
+    // Calculate exact price step down (0.1% x step number)
+    const priceMultiplier = 1 - (PRICE_STEP_PERCENT * (i + 1));
+    const rawPrice = currentPrice * priceMultiplier;
+    const price = formatPrice(rawPrice);
     
-    // Volume decreases as we get further from current price (with some randomness)
-    const volumeBase = 10 / (i + 1) * (0.8 + Math.random() * 0.4);
-    const amount = parseFloat((volumeBase * (0.9 + Math.random() * 0.2)).toFixed(4));
+    // Generate realistic volume (higher near current price)
+    const volumeBase = 5 / (i + 1);
+    const amount = parseFloat((volumeBase * (0.95 + Math.random() * 0.1)).toFixed(4));
+    const total = parseFloat((price * amount).toFixed(4));
     
-    // Total value of this order
-    const total = parseFloat((bidPrice * amount).toFixed(4));
-    
-    bids.push({
-      price: bidPrice,
-      amount: amount,
-      total: total
-    });
-    
-    // Decrease the next price with some randomness
-    const priceDecrement = stepSize * (1 + Math.random() * 2);
-    bidPrice -= priceDecrement;
+    bids.push({ price, amount, total });
+  }
+  
+  return {
+    asks,
+    bids,
+    marketPrice: formatPrice(currentPrice)
+  };
+};
+
+// Export a single function for order book data that everyone will use
+const createOrderBookData = (marketPrice, symbol, buyRatio = 0.5) => {
+  if (!marketPrice || isNaN(marketPrice)) {
+    console.warn('Invalid market price for order book:', marketPrice);
+    return { asks: [], bids: [] };
   }
 
-  return { asks, bids };
+  // Generate consistent order book data
+  const orderBook = generateOrderBook(marketPrice, 10);
+  
+  // Adjust volume based on buy/sell ratio
+  const normalizedRatio = Math.min(Math.max(buyRatio / 100, 0.3), 0.7);
+  
+  orderBook.asks.forEach(ask => {
+    ask.amount = parseFloat((ask.amount * (2 - normalizedRatio * 1.5)).toFixed(4));
+    ask.total = parseFloat((ask.price * ask.amount).toFixed(4));
+  });
+  
+  orderBook.bids.forEach(bid => {
+    bid.amount = parseFloat((bid.amount * (normalizedRatio * 1.5)).toFixed(4));
+    bid.total = parseFloat((bid.price * bid.amount).toFixed(4));
+  });
+  
+  return orderBook;
 };
+
+// Replace all existing functions with this single implementation
+const generateMockOrderBookData = createOrderBookData;
+const generateDummyOrders = createOrderBookData;
 
 const formatSmallNumber = (num) => {
   // Convert string to number if needed
@@ -958,39 +971,6 @@ const getRandomUpdatedPrice = (currentPrice) => {
   return Math.round(newPrice * 10) / 10;
 };
 
-/**
- * Creates order book data based on market price
- * @param {number} marketPrice - Current market price
- * @param {string} symbol - Token symbol
- * @param {number} buyRatio - Ratio of buy orders vs sell orders
- * @returns {Object} - Order book data with asks and bids
- */
-const createOrderBookData = (marketPrice, symbol, buyRatio = 0.5) => {
-  if (!marketPrice || isNaN(marketPrice)) {
-    console.warn('Invalid market price for order book:', marketPrice);
-    return { asks: [], bids: [] };
-  }
-
-  // Ensure buyRatio is between 0.3 and 0.7
-  const normalizedBuyRatio = Math.min(Math.max(buyRatio / 100, 0.3), 0.7);
-  
-  // Generate mock data based on current price
-  const orderBookData = generateMockOrderBookData(marketPrice, 15);
-  
-  // Adjust volume based on buy/sell ratio
-  orderBookData.asks.forEach(ask => {
-    ask.amount = parseFloat((ask.amount * (2 - normalizedBuyRatio * 1.5)).toFixed(4));
-    ask.total = parseFloat((ask.price * ask.amount).toFixed(4));
-  });
-  
-  orderBookData.bids.forEach(bid => {
-    bid.amount = parseFloat((bid.amount * (normalizedBuyRatio * 1.5)).toFixed(4));
-    bid.total = parseFloat((bid.price * bid.amount).toFixed(4));
-  });
-  
-  return orderBookData;
-};
-
 function Trading() {
   const { cryptoId } = useParams();
   const location = useLocation();
@@ -1032,6 +1012,11 @@ function Trading() {
   const [orderBook, setOrderBook] = useState({ bids: [], asks: [] });
   // Add a state to track the last checked price to avoid too frequent checks
   const [lastCheckedPrice, setLastCheckedPrice] = useState(0);
+  // Add a state to track orders being executed to prevent duplicates
+  const [ordersBeingExecuted, setOrdersBeingExecuted] = useState([]);
+  // Add a state variable for the order being edited
+  const [editingOrderId, setEditingOrderId] = useState(null);
+  const [editTargetPrice, setEditTargetPrice] = useState('');
 
   // Refs for cleanup
   const ws = useRef(null);
@@ -1040,42 +1025,70 @@ function Trading() {
   const unsubscribeOrders = useRef(null);
   const unsubscribePositions = useRef(null);
 
-  // Function to fetch positions for the current user
+  // Function to fetch user balances
+  const fetchUserBalances = async () => {
+    if (!currentUser) return;
+    
+    try {
+      setIsLoadingBalance(true);
+      const userDoc = await getDoc(doc(db, 'users', currentUser.uid));
+      
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        if (userData.balances) {
+          setUserBalance(userData.balances);
+        } else {
+          // For legacy users, check the separate balances collection
+          const balanceDoc = await getDoc(doc(db, 'balances', currentUser.uid));
+          if (balanceDoc.exists()) {
+            setUserBalance(balanceDoc.data());
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching user balances:', error);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
+
+  // Function to fetch pending limit orders for the current symbol
+  const fetchPendingLimitOrders = useCallback(async () => {
+    if (!currentUser || !cryptoData?.token?.symbol) return;
+    
+    try {
+      console.log('Fetching pending limit orders for:', currentUser.uid, cryptoData?.token?.symbol);
+      const limitOrders = await tradingService.getLimitOrders(currentUser.uid, cryptoData?.token?.symbol);
+      console.log('Received limit orders:', limitOrders);
+      setPendingLimitOrders(limitOrders);
+    } catch (error) {
+      console.error('Error fetching limit orders:', error);
+    }
+  }, [currentUser, cryptoData?.token?.symbol]);
+
+  // Function to fetch positions
   const fetchPositions = useCallback(async () => {
     if (!currentUser) return;
     
     try {
       setIsLoadingPositions(true);
       
-      // Get open positions
+      // Query for open positions
       const openPositionsQuery = query(
         collection(db, 'positions'),
         where('userId', '==', currentUser.uid),
         where('status', '==', 'OPEN')
       );
       
+      // Fetch both open positions
       const openPositionsSnapshot = await getDocs(openPositionsQuery);
       const openPositionsData = openPositionsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
       
-      // Get closed positions
-      const closedPositionsQuery = query(
-        collection(db, 'positions'),
-        where('userId', '==', currentUser.uid),
-        where('status', '==', 'CLOSED')
-      );
-      
-      const closedPositionsSnapshot = await getDocs(closedPositionsQuery);
-      const closedPositionsData = closedPositionsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      
-      // Update the state
+      // Set the positions
       setOpenPositions(openPositionsData);
-      setClosedPositions(closedPositionsData);
     } catch (error) {
       console.error('Error fetching positions:', error);
     } finally {
@@ -1083,84 +1096,13 @@ function Trading() {
     }
   }, [currentUser]);
 
-  // Function to fetch pending limit orders for the current symbol
-  const fetchPendingLimitOrders = useCallback(async () => {
-    if (!currentUser || !cryptoData?.token?.symbol) return;
-    
-    try {
-      const limitOrders = await tradingService.getLimitOrders(currentUser.uid, cryptoData?.token?.symbol);
-      setPendingLimitOrders(limitOrders);
-    } catch (error) {
-      console.error('Error fetching limit orders:', error);
-    }
-  }, [currentUser, cryptoData?.token?.symbol]);
-
   // Effect to fetch positions on mount and when user changes
   useEffect(() => {
     if (currentUser) {
       fetchPositions();
+      fetchPendingLimitOrders(); // Also fetch pending limit orders when user changes
     }
-  }, [currentUser, fetchPositions]);
-
-  // Replace with a properly structured useEffect that doesn't have an early return
-  useEffect(() => {
-    let intervalId = null;
-    
-    // Only set up the limit order checking if we have the required data
-    if (currentUser && cryptoData?.token?.symbol && marketPrice) {
-      const executeLimitOrder = async (order) => {
-        try {
-          // Execute the limit order
-          await tradingService.executeLimitOrder(
-            currentUser.uid,
-            order.id,
-            cryptoData.token.symbol,
-            marketPrice
-          );
-          
-          // Refresh positions and limit orders
-          fetchPositions();
-          fetchPendingLimitOrders();
-          
-          console.log(`Limit order ${order.id} executed`);
-        } catch (error) {
-          console.error('Error executing limit order:', error);
-        }
-      };
-      
-      const checkLimitOrders = async () => {
-        try {
-          // Only check for limit order execution if there's a significant price change
-          const pendingOrders = [...pendingLimitOrders];
-          
-          for (const order of pendingOrders) {
-            // Check if the order should be executed
-            if (order.type === 'buy' && marketPrice <= order.targetPrice) {
-              // Execute buy limit order
-              await executeLimitOrder(order);
-            } else if (order.type === 'sell' && marketPrice >= order.targetPrice) {
-              // Execute sell limit order
-              await executeLimitOrder(order);
-            }
-          }
-        } catch (error) {
-          console.error('Error checking limit orders:', error);
-        }
-      };
-      
-      // Check limit orders when price changes
-      checkLimitOrders();
-      
-      // Set up interval to periodically check limit orders
-      intervalId = setInterval(checkLimitOrders, 10000);
-    }
-    
-    return () => {
-      if (intervalId) {
-        clearInterval(intervalId);
-      }
-    };
-  }, [currentUser, cryptoData?.token?.symbol, marketPrice, pendingLimitOrders, fetchPositions, fetchPendingLimitOrders]);
+  }, [currentUser]);
 
   // Move ensureUserBalances here, at the top level of the component
   const ensureUserBalances = useCallback(async () => {
@@ -1272,10 +1214,20 @@ function Trading() {
       // Your price update logic here
       const newPrice = currentPrice * (1 + (Math.random() - 0.5) * 0.001);
       setCurrentPrice(newPrice);
+      
+      // Also update market price for limit order checking
+      setMarketPrice(newPrice.toFixed(2));
+      
+      console.log(`💰 PRICE UPDATE: ${newPrice.toFixed(2)} USDT`);
+      
+      // If we have pending limit orders, log that we're checking them with the new price
+      if (pendingLimitOrders.length > 0) {
+        console.log(`💰 Checking ${pendingLimitOrders.length} pending orders with new price: ${newPrice.toFixed(2)}`);
+      }
     } catch (error) {
       console.error('Error updating price:', error);
     }
-  }, [currentPrice]);
+  }, [currentPrice, pendingLimitOrders.length]);
 
   // Cleanup effect
   useEffect(() => {
@@ -1883,7 +1835,7 @@ function Trading() {
     if (isPending) return;
 
     if (!currentUser) {
-      navigate('/login');
+      window.location.href = '/login';
       return;
     }
 
@@ -1903,7 +1855,8 @@ function Trading() {
 
     const tradeData = {
       symbol: cryptoData.token.symbol,
-      type: orderType,
+      type: orderType,      // Keep this for backward compatibility
+      side: orderType,      // Add the side field explicitly 
       amount: tradeAmount,
       leverage: parseInt(leverage),
       entryPrice: currentMarketPrice,
@@ -1927,6 +1880,7 @@ function Trading() {
           userId: currentUser.uid,
           symbol: tradeData.symbol,
           type: tradeData.type,
+          side: tradeData.side,   // Add side field to the position
           amount: tradeData.amount,
           leverage: tradeData.leverage,
           entryPrice: tradeData.entryPrice,
@@ -1952,16 +1906,24 @@ function Trading() {
         }
       } else if (orderMode === 'limit') {
         // For limit orders, create a provisional pending order for UI feedback
+        console.log('===== CREATING LIMIT ORDER =====');
+        console.log('Order data:', tradeData);
+        
         const provisionalId = `temp-${Date.now()}`;
         const now = new Date();
+        
+        // Ensure we're using the right field names consistently
         const provisionalOrder = {
           id: provisionalId,
           userId: currentUser.uid,
           symbol: tradeData.symbol,
+          // Explicitly set both type and side for consistency
           type: tradeData.type,
+          side: tradeData.side, // Add side field with same value as type
           amount: tradeData.amount,
           leverage: tradeData.leverage,
           targetPrice: tradeData.entryPrice,
+          price: tradeData.entryPrice, // Add price field with same value as targetPrice
           margin: tradeData.margin,
           status: 'PENDING',
           createdAt: now,
@@ -1969,10 +1931,13 @@ function Trading() {
           isProvisional: true // Flag to identify optimistic updates
         };
         
+        console.log('Provisional limit order:', provisionalOrder);
+        
         // Optimistically add to pending limit orders
         setPendingLimitOrders(prev => [provisionalOrder, ...prev]);
         
         const result = await tradingService.openPosition(currentUser.uid, tradeData);
+        console.log('Limit order creation result:', result);
         
         if (!result.success) {
           // Remove provisional order on error
@@ -2435,71 +2400,6 @@ function Trading() {
     return () => clearInterval(orderBookInterval);
   }, [marketPrice]);
 
-  // Generate dummy orders for the order book
-  const generateDummyOrders = (currentPrice) => {
-    try {
-      if (!currentPrice || isNaN(currentPrice) || currentPrice <= 0) {
-        console.warn('Invalid price for generating orders:', currentPrice);
-        currentPrice = 86470;
-      }
-
-      const isBtcStyle = currentPrice > 10000;
-      const numOrders = 10;
-      const bidSpread = 0.01;
-      const askSpread = 0.01;
-      
-    const bids = [];
-      let runningTotal = 0;
-      
-      for (let i = 1; i <= numOrders; i++) {
-        const bidPrice = isBtcStyle
-          ? currentPrice - (i * 0.5)
-          : Number((currentPrice * (1 - (bidSpread * i / numOrders))).toFixed(2));
-        
-        const size = isBtcStyle
-          ? (Math.random() * 3 + 0.001).toFixed(3)
-          : (Math.random() * 4.5 + 0.5).toFixed(4);
-        
-        runningTotal += parseFloat(size);
-
-      bids.push({
-        price: bidPrice,
-          amount: size,
-          total: runningTotal.toFixed(3)
-        });
-      }
-      
-      const asks = [];
-      runningTotal = 0;
-      
-      for (let i = 1; i <= numOrders; i++) {
-        const askPrice = isBtcStyle
-          ? currentPrice + (i * 0.5)
-          : Number((currentPrice * (1 + (askSpread * i / numOrders))).toFixed(2));
-        
-        const size = isBtcStyle
-          ? (Math.random() * 3 + 0.001).toFixed(3)
-          : (Math.random() * 4.5 + 0.5).toFixed(4);
-        
-        runningTotal += parseFloat(size);
-        
-        asks.push({
-          price: askPrice,
-          amount: size,
-          total: runningTotal.toFixed(3)
-        });
-      }
-      
-      bids.sort((a, b) => b.price - a.price);
-      asks.sort((a, b) => a.price - b.price);
-      
-      return { bids, asks };
-      } catch (error) {
-      console.error('Error generating dummy orders:', error);
-      return { bids: [], asks: [] };
-    }
-  };
-
   // Reset input fields when switching between buy/sell
   useEffect(() => {
     setInputKey(prev => prev + 1);
@@ -2762,16 +2662,16 @@ function Trading() {
 
   // Somewhere near the time frame selector buttons
   const renderTimeframeBar = () => (
-    <TimeframeSelector>
-      {Object.keys(TIMEFRAMES).map((tf) => (
-        <TimeButton
-          key={tf}
-          $active={timeframe === tf}
-          onClick={() => handleTimeframeChange(tf)}
-        >
-          {TIMEFRAMES[tf].label}
-        </TimeButton>
-      ))}
+        <TimeframeSelector>
+            {Object.keys(TIMEFRAMES).map((tf) => (
+            <TimeButton
+              key={tf}
+              $active={timeframe === tf}
+                onClick={() => handleTimeframeChange(tf)}
+            >
+              {TIMEFRAMES[tf].label}
+            </TimeButton>
+          ))}
       
       {/* Debug toggle button - only visible in development */}
       {process.env.NODE_ENV === 'development' && (
@@ -2783,7 +2683,7 @@ function Trading() {
           Debug
         </TimeButton>
       )}
-    </TimeframeSelector>
+        </TimeframeSelector>
   );
 
   // Update renderChartSection to use the new timeframe bar
@@ -2812,11 +2712,11 @@ function Trading() {
               {canShowTradingViewChart() ? (
                 // For major DEX tokens, try TradingView
                 <div id={chartContainerId} style={{ height: '100%', width: '100%' }}>
-                  <TradingChartComponent 
+        <TradingChartComponent
                     symbol={getDexTradingViewSymbol()}
-                    theme={theme}
+          theme={theme}
                     timeframe={TIMEFRAMES[timeframe]?.tradingViewInterval || '60'}
-                    autosize={true}
+          autosize={true}
                     container_id={chartContainerId}
                   />
                 </div>
@@ -2976,8 +2876,9 @@ function Trading() {
           </div>
         ))}
         
-        <div style={{ padding: '8px', textAlign: 'center', color: '#666' }}>
-          Current Price: <span dangerouslySetInnerHTML={{ __html: formatSmallNumber(currentPrice) }} />
+        <div style={{ padding: '8px', textAlign: 'center', color: '#666', background: '#1b1b2f', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+          <span style={{ color: '#e63946', marginRight: '5px' }}>↓</span> 
+          <span style={{ color: '#f1faee', fontWeight: 'bold' }} dangerouslySetInnerHTML={{ __html: formatSmallNumber(orderBook.marketPrice || currentPrice) }} />
         </div>
         
         {orderBook.bids.map((bid, index) => (
@@ -2989,6 +2890,65 @@ function Trading() {
         ))}
       </OrderBookTable>
     );
+  };
+
+  // Add function to handle editing an order
+  const handleEditOrderClick = (order) => {
+    setEditingOrderId(order.id);
+    setEditTargetPrice(order.targetPrice?.toString() || '');
+  };
+
+  // Add function to save the edited target price
+  const handleSaveTargetPrice = async (orderId) => {
+    if (isPending) return;
+    
+    try {
+      setIsPending(true);
+      
+      // Find the order in question
+      const orderToUpdate = pendingLimitOrders.find(o => o.id === orderId);
+      if (!orderToUpdate) {
+        throw new Error('Order not found');
+      }
+      
+      // Parse the new target price
+      const newTargetPrice = parseFloat(editTargetPrice);
+      if (isNaN(newTargetPrice) || newTargetPrice <= 0) {
+        throw new Error('Invalid price');
+      }
+      
+      // Update the order in Firebase
+      await tradingService.updateLimitOrderPrice(currentUser.uid, orderId, newTargetPrice);
+      
+      // Update local state
+      setPendingLimitOrders(prev => 
+        prev.map(order => 
+          order.id === orderId 
+            ? { ...order, targetPrice: newTargetPrice, price: newTargetPrice } 
+            : order
+        )
+      );
+      
+      // Clear edit state
+      setEditingOrderId(null);
+      setEditTargetPrice('');
+      
+      // Notify user
+      addNotification({
+        title: 'Order Updated',
+        message: `Target price updated to $${newTargetPrice.toFixed(2)}`,
+        type: 'success'
+      });
+    } catch (error) {
+      console.error('Error updating order:', error);
+      addNotification({
+        title: 'Update Failed',
+        message: error.message || 'Failed to update order',
+        type: 'error'
+      });
+    } finally {
+      setIsPending(false);
+    }
   };
 
   const renderPendingLimitOrders = () => {
@@ -3029,10 +2989,78 @@ function Trading() {
                   <TableCell style={{ 
                     color: order.type === 'buy' ? '#0ECB81' : '#F6465D' 
                   }}>
-                    {order.type?.toUpperCase() || 'N/A'}
+                    {(order.side || order.type)?.toUpperCase() || 'N/A'}
         </TableCell>
                   <TableCell>{order.amount || 0} {order.symbol || ''}</TableCell>
-                  <TableCell>${order.targetPrice?.toFixed(2) || '0.00'}</TableCell>
+                  <TableCell>
+                    {editingOrderId === order.id ? (
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <input 
+                          type="number"
+                          style={{ 
+                            width: '80px',
+                            background: 'rgba(255,255,255,0.05)',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            color: 'white',
+                            marginRight: '8px'
+                          }}
+                          value={editTargetPrice}
+                          onChange={(e) => setEditTargetPrice(e.target.value)}
+                          min="0.01"
+                          step="0.01"
+                        />
+                        <button
+                          style={{
+                            background: '#2E7D32',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            color: 'white',
+                            cursor: 'pointer',
+                            marginRight: '4px'
+                          }}
+                          onClick={() => handleSaveTargetPrice(order.id)}
+                          disabled={isPending}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          style={{
+                            background: '#C62828',
+                            border: 'none',
+                            borderRadius: '4px',
+                            padding: '4px 8px',
+                            color: 'white', 
+                            cursor: 'pointer'
+                          }}
+                          onClick={() => setEditingOrderId(null)}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                        ${order.targetPrice?.toFixed(2) || '0.00'}
+                        <button
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#64B5F6',
+                            cursor: 'pointer',
+                            marginLeft: '8px',
+                            fontSize: '14px'
+                          }}
+                          onClick={() => handleEditOrderClick(order)}
+                          disabled={isPending || order.isProvisional}
+                          title="Edit Target Price"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    )}
+                  </TableCell>
                   <TableCell>${marketPrice?.toFixed(2) || '0.00'}</TableCell>
                   <TableCell>{order.leverage || 1}x</TableCell>
                   <TableCell>${order.margin?.toFixed(2) || '0.00'}</TableCell>
@@ -3042,7 +3070,7 @@ function Trading() {
         <TableCell>
           <Button
             onClick={() => handleCancelLimitOrder(order.id)}
-                      disabled={isPending || order.isProvisional}
+                      disabled={isPending || order.isProvisional || editingOrderId === order.id}
           >
                       {isPending && order.isProvisional ? 'Processing...' : 'Cancel'}
           </Button>
@@ -3056,99 +3084,340 @@ function Trading() {
     );
   };
 
-  // Now, add a synchronized order book update effect
-  useEffect(() => {
-    let orderBookUpdateInterval = null;
-    
-    // Only set up the interval if we have valid data
-    if (cryptoData && marketPrice) {
-      console.log('Setting up synchronized order book updates with market price:', marketPrice);
-      
-      // Generate initial order book based on market price
-      const initialOrderBook = createOrderBookData(marketPrice, cryptoData.token?.symbol || 'BTC', buyRatio);
-      setOrderBook(initialOrderBook);
-      
-      // Set up interval for updating the order book
-      orderBookUpdateInterval = setInterval(() => {
-        setOrderBook(prevOrderBook => {
-          // Use the current market price for accurate order book data
-          const newOrderBook = createOrderBookData(marketPrice, cryptoData.token?.symbol || 'BTC', buyRatio);
-          
-          // Calculate which rows have changed significantly to highlight them
-          const flashStates = {};
-          
-          // Compare asks to previous asks and highlight significant changes
-          if (prevOrderBook?.asks?.length) {
-            newOrderBook.asks.forEach((ask, i) => {
-              if (i < prevOrderBook.asks.length) {
-                const prevAsk = prevOrderBook.asks[i];
-                // If price or amount changed by more than 0.5%
-                const priceChanged = Math.abs(ask.price - prevAsk.price) / prevAsk.price > 0.005;
-                const amountChanged = Math.abs(ask.amount - prevAsk.amount) / prevAsk.amount > 0.05;
-                
-                if (priceChanged || amountChanged) {
-                  flashStates[`ask-${i}`] = true;
-                }
-              }
-            });
-          }
-          
-          // Compare bids to previous bids and highlight significant changes
-          if (prevOrderBook?.bids?.length) {
-            newOrderBook.bids.forEach((bid, i) => {
-              if (i < prevOrderBook.bids.length) {
-                const prevBid = prevOrderBook.bids[i];
-                // If price or amount changed by more than 0.5%
-                const priceChanged = Math.abs(bid.price - prevBid.price) / prevBid.price > 0.005;
-                const amountChanged = Math.abs(bid.amount - prevBid.amount) / prevBid.amount > 0.05;
-                
-                if (priceChanged || amountChanged) {
-                  flashStates[`bid-${i}`] = true;
-                }
-              }
-            });
-          }
-          
-          // Set flash states and clear them after animation
-          if (Object.keys(flashStates).length > 0) {
-            setOrderBookFlash(flashStates);
-            setTimeout(() => setOrderBookFlash({}), 800);
-          }
-          
-          return newOrderBook;
-        });
-      }, 2000); // Update every 2 seconds for smoother appearance
-    }
-    
-    // Cleanup function
-    return () => {
-      if (orderBookUpdateInterval) {
-        clearInterval(orderBookUpdateInterval);
-      }
-    };
-  }, [cryptoData, marketPrice, buyRatio]);
-
   // Add this function inside the Trading component before the render method to ensure 
   // we display prices consistently throughout the order book
   const formatOrderPrice = (price) => {
-    if (!price) return '0.00000';
+    if (!price) return '0.00';
     
-    // Convert to number if it's a string
-    const numPrice = typeof price === 'number' ? price : parseFloat(price);
+    // Match the same formatting logic used in the order book generation
+    if (price >= 10000) return price.toFixed(0);
+    if (price >= 1000) return price.toFixed(1);
+    if (price >= 100) return price.toFixed(2);
+    if (price >= 10) return price.toFixed(3);
+    if (price >= 1) return price.toFixed(4);
+    if (price >= 0.1) return price.toFixed(5);
+    if (price >= 0.01) return price.toFixed(6);
+    if (price >= 0.001) return price.toFixed(7);
+    return price.toFixed(8);
+  };
+
+  // Load user's positions and pending limit orders when authenticated
+  useEffect(() => {
+    if (!currentUser) return;
     
-    // For small numbers, use more decimal places
-    if (numPrice < 0.1) {
-      return numPrice.toFixed(5);
-    } else if (numPrice < 1) {
-      return numPrice.toFixed(4);
-    } else if (numPrice < 10) {
-      return numPrice.toFixed(3);
-    } else if (numPrice < 1000) {
-      return numPrice.toFixed(2);
+    const fetchUserData = async () => {
+      try {
+        // Load existing positions
+        const positionsData = await tradingService.getUserPositions(currentUser.uid);
+        setPositions(positionsData);
+        
+        // Load existing pending limit orders
+        const pendingOrders = await tradingService.getPendingLimitOrders(currentUser.uid);
+        console.log('Loaded pending limit orders:', pendingOrders);
+        if (pendingOrders.length > 0) {
+          setPendingLimitOrders(pendingOrders);
+        }
+      } catch (error) {
+        console.error('Error loading user data:', error);
+      }
+    };
+    
+    fetchUserData();
+  }, [currentUser]);
+  
+// COMMENTED OUT:   // Improved limit order checking mechanism
+// COMMENTED OUT:   useEffect(() => {
+// COMMENTED OUT:     if (!pendingLimitOrders.length || !marketPrice || !currentUser) return;
+// COMMENTED OUT:     
+// COMMENTED OUT:     console.log('💹 LIMIT ORDER CHECK: Current price:', marketPrice);
+// COMMENTED OUT:     console.log('💹 Pending orders:', pendingLimitOrders);
+// COMMENTED OUT:     
+// COMMENTED OUT:     const checkAndExecuteOrders = async () => {
+// COMMENTED OUT:       for (const order of pendingLimitOrders) {
+// COMMENTED OUT:         // Skip provisional orders
+// COMMENTED OUT:         if (order.isProvisional) continue;
+// COMMENTED OUT:         
+// COMMENTED OUT:         // Skip orders already being executed
+// COMMENTED OUT:         if (ordersBeingExecuted.includes(order.id)) {
+// COMMENTED OUT:           console.log(`💹 Order ${order.id} is already being executed, skipping`);
+// COMMENTED OUT:           continue;
+// COMMENTED OUT:         }
+// COMMENTED OUT:         
+// COMMENTED OUT:         // Normalize values for comparison
+// COMMENTED OUT:         const orderType = (order.side || order.type || '').toUpperCase();
+// COMMENTED OUT:         const targetPrice = parseFloat(order.price || order.targetPrice);
+// COMMENTED OUT:         const currentPrice = parseFloat(marketPrice);
+// COMMENTED OUT:         
+// COMMENTED OUT:         if (isNaN(targetPrice) || isNaN(currentPrice)) {
+// COMMENTED OUT:           console.error('Invalid price values', { targetPrice, currentPrice });
+// COMMENTED OUT:           continue;
+// COMMENTED OUT:         }
+// COMMENTED OUT:         
+// COMMENTED OUT:         console.log(`💹 Checking ${orderType} order ${order.id}: Target ${targetPrice} vs Current ${currentPrice}`);
+// COMMENTED OUT:         
+// COMMENTED OUT:         let shouldExecute = false;
+// COMMENTED OUT:         
+// COMMENTED OUT:         // Simple price comparison - BUY when price falls to or below target, SELL when price rises to or above target
+// COMMENTED OUT:         if (orderType === 'BUY') {
+// COMMENTED OUT:           shouldExecute = currentPrice <= targetPrice;
+// COMMENTED OUT:         } else if (orderType === 'SELL') {
+// COMMENTED OUT:           shouldExecute = currentPrice >= targetPrice;
+// COMMENTED OUT:         }
+// COMMENTED OUT:         
+// COMMENTED OUT:         if (shouldExecute) {
+// COMMENTED OUT:           console.log(`🔔 EXECUTING ${orderType} ORDER at ${targetPrice}`);
+// COMMENTED OUT:           
+// COMMENTED OUT:           try {
+// COMMENTED OUT:             // Mark this order as being executed
+// COMMENTED OUT:             setOrdersBeingExecuted(prev => [...prev, order.id]);
+// COMMENTED OUT:             
+// COMMENTED OUT:             // 1. Remove the order from pending orders immediately (optimistic update)
+// COMMENTED OUT:             setPendingLimitOrders(prev => prev.filter(o => o.id !== order.id));
+// COMMENTED OUT:             
+// COMMENTED OUT:             // 2. Create the market position directly
+// COMMENTED OUT:             const position = {
+// COMMENTED OUT:               userId: order.userId,
+// COMMENTED OUT:               symbol: order.symbol,
+// COMMENTED OUT:               type: orderType.toLowerCase(),
+// COMMENTED OUT:               side: orderType.toLowerCase(),
+// COMMENTED OUT:               amount: order.amount,
+// COMMENTED OUT:               leverage: order.leverage || 1,
+// COMMENTED OUT:               entryPrice: targetPrice, 
+// COMMENTED OUT:               margin: order.margin,
+// COMMENTED OUT:               status: 'OPEN',
+// COMMENTED OUT:               openTime: new Date(),
+// COMMENTED OUT:               orderMode: 'market',
+// COMMENTED OUT:               limitOrderId: order.id
+// COMMENTED OUT:             };
+// COMMENTED OUT:             
+// COMMENTED OUT:             // 3. Try to execute the limit order via the service
+// COMMENTED OUT:             const result = await tradingService.executeLimitOrder(order);
+// COMMENTED OUT:             
+// COMMENTED OUT:             if (result.success) {
+// COMMENTED OUT:               console.log('✅ Order executed successfully:', result);
+// COMMENTED OUT:               
+// COMMENTED OUT:               // 4. Update the open positions
+// COMMENTED OUT:               if (result.position) {
+// COMMENTED OUT:                 setOpenPositions(prev => {
+// COMMENTED OUT:                   // Check if position already exists to avoid duplicates
+// COMMENTED OUT:                   const exists = prev.some(p => p.id === result.position.id);
+// COMMENTED OUT:                   if (!exists) {
+// COMMENTED OUT:                     return [...prev, result.position];
+// COMMENTED OUT:                   }
+// COMMENTED OUT:                   return prev;
+// COMMENTED OUT:                 });
+// COMMENTED OUT:               }
+// COMMENTED OUT:               
+// COMMENTED OUT:               // 5. Show success notification
+// COMMENTED OUT:               addNotification({
+// COMMENTED OUT:                 title: 'Limit Order Executed',
+// COMMENTED OUT:                 message: `Your ${orderType} order for ${order.amount} ${order.symbol} at ${targetPrice} has been executed!`,
+// COMMENTED OUT:                 type: 'success'
+// COMMENTED OUT:               });
+// COMMENTED OUT:               
+// COMMENTED OUT:               // 6. Refresh user data
+// COMMENTED OUT:               if (typeof fetchUserBalances === 'function') {
+// COMMENTED OUT:                 fetchUserBalances();
+// COMMENTED OUT:               }
+// COMMENTED OUT:               
+// COMMENTED OUT:               // 7. Refresh positions list
+// COMMENTED OUT:               if (typeof fetchPositions === 'function') {
+// COMMENTED OUT:                 fetchPositions();
+// COMMENTED OUT:               }
+// COMMENTED OUT:             } else {
+// COMMENTED OUT:               console.error('❌ Failed to execute order:', result.error);
+// COMMENTED OUT:               
+// COMMENTED OUT:               // If execution failed, re-add the order to the list
+// COMMENTED OUT:               setPendingLimitOrders(prev => [...prev, order]);
+// COMMENTED OUT:               
+// COMMENTED OUT:               addNotification({
+// COMMENTED OUT:                 title: 'Execution Failed',
+// COMMENTED OUT:                 message: `Failed to execute your order: ${result.error}`,
+// COMMENTED OUT:                 type: 'error'
+// COMMENTED OUT:               });
+// COMMENTED OUT:             }
+// COMMENTED OUT:             
+// COMMENTED OUT:             // Remove the order from being executed regardless of success/failure
+// COMMENTED OUT:             setOrdersBeingExecuted(prev => prev.filter(id => id !== order.id));
+// COMMENTED OUT:           } catch (error) {
+// COMMENTED OUT:             console.error('❌ Error executing order:', error);
+// COMMENTED OUT:             
+// COMMENTED OUT:             // If execution failed, re-add the order to the list
+// COMMENTED OUT:             setPendingLimitOrders(prev => [...prev, order]);
+// COMMENTED OUT:             
+// COMMENTED OUT:             addNotification({
+// COMMENTED OUT:               title: 'Execution Error',
+// COMMENTED OUT:               message: `Error executing your order: ${error.message}`,
+// COMMENTED OUT:               type: 'error'
+// COMMENTED OUT:             });
+// COMMENTED OUT:             
+// COMMENTED OUT:             // Remove the order from being executed
+// COMMENTED OUT:             setOrdersBeingExecuted(prev => prev.filter(id => id !== order.id));
+// COMMENTED OUT:           }
+// COMMENTED OUT:         }
+// COMMENTED OUT:       }
+// COMMENTED OUT:     };
+// COMMENTED OUT:     
+// COMMENTED OUT:     // Check immediately when price or orders change
+// COMMENTED OUT:     checkAndExecuteOrders();
+// COMMENTED OUT:     
+// COMMENTED OUT:     // Also set up interval for continuous checking
+// COMMENTED OUT:     const intervalId = setInterval(checkAndExecuteOrders, 2000);
+// COMMENTED OUT:     
+// COMMENTED OUT:     return () => {
+// COMMENTED OUT:       clearInterval(intervalId);
+// COMMENTED OUT:     };
+// COMMENTED OUT:   }, [pendingLimitOrders, marketPrice, currentUser, addNotification, ordersBeingExecuted]);
+
+  // Improved market price update effect
+  useEffect(() => {
+    // Ensure the chart price and displayed price stay in sync
+    if (cryptoData?.token?.symbol && cryptoData?.chartData?.price) {
+      const chartPrice = parseFloat(cryptoData.chartData.price);
+      console.log('📊 Chart price update:', chartPrice);
+      
+      if (!isNaN(chartPrice) && chartPrice > 0) {
+        setMarketPrice(chartPrice.toFixed(2));
+        
+        // Check limit orders immediately whenever price updates
+        if (pendingLimitOrders.length > 0) {
+          console.log('📊 Price updated, checking pending orders...');
+        }
+      }
+    }
+  }, [cryptoData, pendingLimitOrders.length]);
+
+  // Direct price listener for immediate limit order execution
+  useEffect(() => {
+    if (!pendingLimitOrders.length || !marketPrice || !currentUser) return;
+    
+    console.log(`🔍 Direct price check: ${marketPrice} USDT`);
+    
+    // Process each limit order against the current price
+    pendingLimitOrders.forEach(order => {
+      // Skip provisional orders
+      if (order.isProvisional) return;
+      
+      // Skip orders already being executed
+      if (ordersBeingExecuted.includes(order.id)) {
+        console.log(`🔍 Order ${order.id} is already being executed, skipping direct price check`);
+        return;
+      }
+      
+      // Get normalized values
+      const orderType = (order.side || order.type || '').toUpperCase();
+      const targetPrice = parseFloat(order.price || order.targetPrice);
+      const currentPrice = parseFloat(marketPrice);
+      
+      // Simple comparison logic
+      let shouldExecute = false;
+      
+      if (orderType === 'BUY' && currentPrice <= targetPrice) {
+        shouldExecute = true;
+        console.log(`🎯 BUY MATCH: Current ${currentPrice} <= Target ${targetPrice}`);
+      } else if (orderType === 'SELL' && currentPrice >= targetPrice) {
+        shouldExecute = true;
+        console.log(`🎯 SELL MATCH: Current ${currentPrice} >= Target ${targetPrice}`);
+      }
+      
+      if (shouldExecute) {
+        // Mark this order as being executed
+        setOrdersBeingExecuted(prev => [...prev, order.id]);
+        
+        // Make the conversion here - this is a simpler alternative to the interval-based check
+        console.log(`🚀 EXECUTING ORDER ${order.id} immediately on price change!`);
+        
+        // Remove from pending orders immediately (optimistic)
+        setPendingLimitOrders(prev => prev.filter(o => o.id !== order.id));
+        
+        tradingService.executeLimitOrder(order)
+          .then(result => {
+            if (result.success) {
+              // Add to open positions
+              if (result.position) {
+                setOpenPositions(prev => {
+                  // Check if position already exists to avoid duplicates
+                  const exists = prev.some(p => p.id === result.position.id);
+                  if (!exists) {
+                    return [...prev, result.position];
+                  }
+                  return prev;
+                });
+              }
+              
+              // Notify user
+              addNotification({
+                title: 'Limit Order Executed',
+                message: `Your ${orderType} order for ${order.amount} ${order.symbol} at ${targetPrice} has been executed!`,
+                type: 'success'
+              });
+              
+              // Refresh data
+              if (typeof fetchUserBalances === 'function') fetchUserBalances();
+              if (typeof fetchPositions === 'function') fetchPositions();
+            } else {
+              // Add back to pending orders if failed
+              setPendingLimitOrders(prev => [...prev, order]);
+              
+              console.error('Failed to execute limit order:', result.error);
+              addNotification({
+                title: 'Execution Failed',
+                message: `Failed to execute your order: ${result.error}`,
+                type: 'error'
+              });
+            }
+            
+            // Remove from being executed tracking
+            setOrdersBeingExecuted(prev => prev.filter(id => id !== order.id));
+          })
+          .catch(error => {
+            // Add back to pending orders if failed
+            setPendingLimitOrders(prev => [...prev, order]);
+            
+            console.error('Failed to execute limit order:', error);
+            addNotification({
+              title: 'Execution Error',
+              message: `Error executing your order: ${error.message}`,
+              type: 'error'
+            });
+            
+            // Remove from being executed tracking
+            setOrdersBeingExecuted(prev => prev.filter(id => id !== order.id));
+          });
+      }
+    });
+  }, [marketPrice, pendingLimitOrders, currentUser, ordersBeingExecuted]);
+
+  // Add a function to calculate liquidation price based on position details
+  const calculateLiquidationPrice = (position) => {
+    if (!position || !position.type || !position.entryPrice || !position.leverage) {
+      return 0;
     }
     
-    // For large numbers, use fewer decimal places
-    return numPrice.toFixed(2);
+    // Extract position details
+    const { type, entryPrice, leverage, margin } = position;
+    const entryPriceNum = parseFloat(entryPrice);
+    const leverageNum = parseFloat(leverage);
+    const marginNum = parseFloat(margin || 0);
+    
+    if (isNaN(entryPriceNum) || isNaN(leverageNum) || leverageNum === 0 || marginNum === 0) {
+      return 0;
+    }
+    
+    // Calculate the liquidation threshold (percentage of margin that triggers liquidation)
+    // Typically this is around 80% of the margin, but can vary based on exchange rules
+    const liquidationThreshold = 0.8;
+    
+    // Calculate liquidation price based on position type (buy/long or sell/short)
+    if (type.toLowerCase() === 'buy' || type.toLowerCase() === 'long') {
+      // For long positions, liquidation happens when price falls
+      // Formula: entry_price - (entry_price / leverage) * liquidationThreshold
+      return entryPriceNum * (1 - (liquidationThreshold / leverageNum));
+    } else {
+      // For short positions, liquidation happens when price rises
+      // Formula: entry_price + (entry_price / leverage) * liquidationThreshold
+      return entryPriceNum * (1 + (liquidationThreshold / leverageNum));
+    }
   };
 
   return (
@@ -3157,19 +3426,12 @@ function Trading() {
         <CoinInfo>
           <CoinIcon src={cryptoData.token?.image || btcIcon} theme={theme} alt={cryptoData.token?.name || 'Crypto'} />
           <div>
-            <CoinName>
-              {cryptoData.token?.name || cryptoId?.split('-')[0] || 'Cryptocurrency'} 
-              <CoinSymbol> {cryptoData.pairInfo?.symbol || cryptoId?.replace('-', '/') || 'BTC/USDT'}</CoinSymbol>
-            </CoinName>
-            <PriceInfo>
-              <Price>${marketPrice ? marketPrice.toFixed(2) : '0.00'}</Price>
-              {cryptoData.chartData?.change24h !== undefined && (
-                <Change $isPositive={cryptoData.chartData.change24h >= 0}>
-                  {cryptoData.chartData.change24h >= 0 ? '+' : ''}{cryptoData.chartData.change24h}%
-                </Change>
-              )}
-            </PriceInfo>
+            <CoinName>{cryptoData.token?.name || 'Bitcoin'}</CoinName>
+            <CoinSymbol>{cryptoData.token?.symbol || 'BTC'}</CoinSymbol>
           </div>
+          <PriceInfo>
+            <CurrentPrice>${marketPrice ? parseFloat(marketPrice).toFixed(2) : '0.00'}</CurrentPrice>
+          </PriceInfo>
         </CoinInfo>
       )}
 
@@ -3205,15 +3467,7 @@ function Trading() {
                       className={orderBookFlash[`ask-${i}`] ? 'flash' : ''}
                     >
                       <span style={{ color: '#F6465D' }}>
-                                {typeof ask.price === 'number' ? 
-                                  Number(ask.price).toLocaleString(undefined, {
-                                    minimumFractionDigits: ask.price < 0.1 ? 5 : 
-                                                         ask.price < 1 ? 4 : 
-                                                         ask.price < 10 ? 3 : 2,
-                                    maximumFractionDigits: ask.price < 0.1 ? 5 : 
-                                                         ask.price < 1 ? 4 : 
-                                                         ask.price < 10 ? 3 : 2
-                                  }) : '0.00000'}
+                                {formatOrderPrice(ask.price)}
                       </span>
                         <span>{typeof ask.amount === 'number' ? 
                           ask.amount.toFixed(4) : 
@@ -3239,16 +3493,8 @@ function Trading() {
                         <OrderBookArrow $direction={marketPrice > lastPrice ? 'up' : 'down'}>
                           {marketPrice > lastPrice ? '↑' : '↓'}
                         </OrderBookArrow>
-                        {marketPrice ? 
-                          Number(marketPrice).toLocaleString(undefined, {
-                            minimumFractionDigits: marketPrice < 0.1 ? 5 : 
-                                                 marketPrice < 1 ? 4 : 
-                                                 marketPrice < 10 ? 3 : 2,
-                            maximumFractionDigits: marketPrice < 0.1 ? 5 : 
-                                                 marketPrice < 1 ? 4 : 
-                                                 marketPrice < 10 ? 3 : 2
-                          }) : '0.00000'}
-                        {Math.random() > 0.8 && <OrderBookFlag>⚑</OrderBookFlag>}
+                        {formatOrderPrice(marketPrice)}
+                        {/* Remove random flag */}
                   </CurrentPrice>
 
                       <BidsContainer>
@@ -3267,15 +3513,7 @@ function Trading() {
                       className={orderBookFlash[`bid-${i}`] ? 'flash' : ''}
                     >
                       <span style={{ color: '#0ECB81' }}>
-                                {typeof bid.price === 'number' ? 
-                                  Number(bid.price).toLocaleString(undefined, {
-                                    minimumFractionDigits: bid.price < 0.1 ? 5 : 
-                                                         bid.price < 1 ? 4 : 
-                                                         bid.price < 10 ? 3 : 2,
-                                    maximumFractionDigits: bid.price < 0.1 ? 5 : 
-                                                         bid.price < 1 ? 4 : 
-                                                         bid.price < 10 ? 3 : 2
-                                  }) : '0.00000'}
+                                {formatOrderPrice(bid.price)}
                       </span>
                         <span>{typeof bid.amount === 'number' ? 
                           bid.amount.toFixed(4) : 
@@ -3417,8 +3655,8 @@ function Trading() {
               <h3>Login to Trade</h3>
               <p>Create an account or login to start trading {cryptoData?.name || 'cryptocurrencies'}.</p>
               <ButtonGroup>
-                <StyledButton onClick={() => navigate('/login')}>Login</StyledButton>
-                <StyledButton onClick={() => navigate('/register')}>Register</StyledButton>
+                <StyledButton onClick={() => window.location.href = '/login'}>Login</StyledButton>
+                <StyledButton onClick={() => window.location.href = '/register'}>Register</StyledButton>
               </ButtonGroup>
             </LoginPrompt>
           )}
@@ -3446,6 +3684,7 @@ function Trading() {
                 <TableHeader>Amount</TableHeader>
                 <TableHeader>Entry Price</TableHeader>
                 <TableHeader>Mark Price</TableHeader>
+                <TableHeader>Liquidation</TableHeader>
                 <TableHeader>Leverage</TableHeader>
                 <TableHeader>PnL (ROE %)</TableHeader>
                 <TableHeader>Actions</TableHeader>
@@ -3457,29 +3696,33 @@ function Trading() {
                       .map(position => {
                       const pnl = calculatePnL(position, marketPrice) || 0;
                       const roe = position.margin ? ((pnl / position.margin) * 100).toFixed(2) : '0.00';
+                      const liquidationPrice = calculateLiquidationPrice(position);
                 
                 return (
                   <tr key={position.id}>
                     <TableCell style={{ 
-                      color: position.type === 'buy' ? '#0ECB81' : '#F6465D' 
+                      color: (position.side || position.type) === 'buy' ? '#0ECB81' : '#F6465D' 
                     }}>
-                            {position.type?.toUpperCase() || 'N/A'}
+                      {(position.side || position.type)?.toUpperCase() || 'N/A'}
                     </TableCell>
-                          <TableCell>{position.amount || 0} {position.symbol || ''}</TableCell>
-                          <TableCell>${position.entryPrice?.toFixed(2) || '0.00'}</TableCell>
-                          <TableCell>${marketPrice?.toFixed(2) || '0.00'}</TableCell>
-                          <TableCell>{position.leverage || 1}x</TableCell>
+                    <TableCell>{position.amount || 0} {position.symbol || ''}</TableCell>
+                    <TableCell>${position.entryPrice?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell>${marketPrice?.toFixed(2) || '0.00'}</TableCell>
+                    <TableCell style={{ color: '#F44336' }}>
+                      ${liquidationPrice.toFixed(2)}
+                    </TableCell>
+                    <TableCell>{position.leverage || 1}x</TableCell>
                     <TableCell>
                       <PnLValue value={pnl}>
-                              ${pnl.toFixed(2)} ({roe}%)
+                        ${pnl.toFixed(2)} ({roe}%)
                       </PnLValue>
                     </TableCell>
                     <TableCell>
                       <Button
-                              onClick={() => handleClosePosition(position)}
-                              disabled={isPending && closingPositionId === position.id}
-                            >
-                              {isPending && closingPositionId === position.id ? 'Processing...' : 'Close'}
+                        onClick={() => handleClosePosition(position)}
+                        disabled={isPending && closingPositionId === position.id}
+                      >
+                        {isPending && closingPositionId === position.id ? 'Processing...' : 'Close'}
                       </Button>
                     </TableCell>
                   </tr>
