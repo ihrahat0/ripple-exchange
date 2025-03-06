@@ -51,23 +51,23 @@ const TradingContainer = styled.div`
   padding: 20px;
   background: var(--bg1);
   min-height: calc(100vh - 100px);
-  margin-top: 10px;
+  margin-top: 0;
   
   @media (max-width: 768px) {
     padding: 10px;
-    margin-top: 5px;
+    margin-top: 0;
   }
 `;
 
 const TradingGrid = styled.div`
   display: grid;
-  grid-template-columns: auto 600px;
+  grid-template-columns: 65% 35%;
   gap: 1px;
-  margin-top: 20px;
+  margin-top: 5px;
   background: var(--bg);
   
   @media (max-width: 1200px) {
-    grid-template-columns: auto 450px;
+    grid-template-columns: 60% 40%;
   }
   
   @media (max-width: 992px) {
@@ -75,14 +75,14 @@ const TradingGrid = styled.div`
   }
   
   @media (max-width: 768px) {
-    margin-top: 10px;
+    margin-top: 3px;
   }
 `;
 
 const ChartSection = styled.div`
   background: var(--bg);
   border-right: 1px solid var(--line);
-  height: 500px;
+  height: 430px;
   
   @media (max-width: 992px) {
     border-right: none;
@@ -95,15 +95,11 @@ const ChartSection = styled.div`
 `;
 
 const RightSection = styled.div`
-  width: 600px;
+  width: 100%;
   background: var(--bg);
   display: grid;
   grid-template-rows: auto;
-  height: 500px;
-  
-  @media (max-width: 1200px) {
-    width: 450px;
-  }
+  height: 430px;
   
   @media (max-width: 992px) {
     width: 100%;
@@ -116,12 +112,8 @@ const RightSection = styled.div`
 
 const TradingInterface = styled.div`
   display: grid;
-  grid-template-columns: 300px 300px;
-  border-left: 1px solid var(--line);
-  
-  @media (max-width: 1200px) {
-    grid-template-columns: 225px 225px;
-  }
+  grid-template-columns: 50% 50%;
+  width: 100%;
   
   @media (max-width: 992px) {
     grid-template-columns: 1fr 1fr;
@@ -134,11 +126,15 @@ const TradingInterface = styled.div`
 `;
 
 const OrderBookSection = styled.div`
-  height: 500px;
-  border-right: 1px solid var(--line);
-  padding: 12px;
+  height: 430px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
+  border: 1px solid #D4AF37;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+  border-radius: 12px;
+  margin: 3px;
+  overflow: hidden;
   
   @media (max-width: 992px) {
     height: 400px;
@@ -146,19 +142,18 @@ const OrderBookSection = styled.div`
   
   @media (max-width: 768px) {
     height: 350px;
-  }
-  
-  @media (max-width: 576px) {
-    border-right: none;
-    border-bottom: 1px solid var(--line);
   }
 `;
 
 const OrderFormSection = styled.div`
-  padding: 12px;
-  height: 500px;
+  padding: 6px;
+  height: 430px;
   display: flex;
   flex-direction: column;
+  border: 1px solid #D4AF37;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+  border-radius: 12px;
+  margin: 3px;
   
   @media (max-width: 992px) {
     height: 400px;
@@ -166,7 +161,6 @@ const OrderFormSection = styled.div`
   
   @media (max-width: 768px) {
     height: 350px;
-    padding: 10px;
   }
 `;
 
@@ -285,95 +279,108 @@ const Change = styled.span`
 const OrderForm = styled.form`
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  padding: 6px 0;
+  gap: 6px;
   height: 100%;
   
   @media (max-width: 768px) {
-    gap: 8px;
+    padding: 4px 0;
+    gap: 4px;
   }
 `;
 
 const TabGroup = styled.div`
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
+  margin-bottom: 6px;
+  gap: 6px;
   
   @media (max-width: 768px) {
-    gap: 4px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    margin-bottom: 4px;
+    gap: 3px;
   }
 `;
 
 const OrderTab = styled.button`
-  background: none;
+  background: ${props => props.$active ? 'var(--primary)' : 'var(--bg2)'};
+  color: ${props => props.$active ? 'var(--text-white)' : 'var(--text)'};
   border: none;
-  padding: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  outline: none;
-  color: ${props => props.$active ? 'var(--primary)' : 'var(--text)'};
-  opacity: 0.9;
   transition: all 0.2s;
-  border-bottom: 2px solid ${props => props.$active ? 'var(--primary)' : 'transparent'};
-
+  flex: 1;
+  outline: none;
+  
   &:hover {
-    opacity: 1;
+    background: ${props => props.$active ? 'var(--primary)' : 'var(--bg3)'};
   }
   
   @media (max-width: 768px) {
-    padding: 8px;
-    font-size: 14px;
-    white-space: nowrap;
+    padding: 5px 10px;
+    font-size: 12px;
   }
 `;
 
 const AmountInput = styled.input`
-  width: 100%;
-  padding: 8px 12px;
-  margin: 8px 0;
-  border: 1px solid var(--border);
-  border-radius: 4px;
   background: var(--bg2);
   color: var(--text);
-  font-size: 14px;
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  font-size: 13px;
+  border-radius: 8px;
   outline: none;
-  transition: all 0.3s ease;
-
+  transition: all 0.2s;
+  width: 100%;
+  margin: 2px 0;
+  
   &:focus {
-    border-color: var(--primary);
+    border-color: #D4AF37;
+    box-shadow: 0 0 4px rgba(212, 175, 55, 0.3);
   }
-
+  
   @media (max-width: 768px) {
-    padding: 6px 10px;
-    margin: 6px 0;
-    font-size: 13px;
+    padding: 5px 8px;
+    font-size: 12px;
+    margin: 1px 0;
   }
 `;
 
 const Button = styled.button`
-  background: var(--primary);
-  color: #fff;
+  background: ${props => props.$variant === 'buy' ? 'var(--success)' : props.$variant === 'sell' ? 'var(--danger)' : 'var(--primary)'};
+  color: white;
   border: none;
+  padding: 8px;
   border-radius: 8px;
-  padding: 14px;
-  font-size: 16px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background 0.3s;
-
+  transition: all 0.2s;
+  margin-top: 5px;
+  border: 1px solid ${props => {
+    if (props.$variant === 'buy') return 'rgba(212, 175, 55, 0.5)';
+    if (props.$variant === 'sell') return 'rgba(212, 175, 55, 0.5)';
+    return '#D4AF37';
+  }};
+  box-shadow: 0 0 4px ${props => {
+    if (props.$variant === 'buy') return 'rgba(52, 199, 89, 0.3)';
+    if (props.$variant === 'sell') return 'rgba(255, 59, 48, 0.3)';
+    return 'rgba(212, 175, 55, 0.3)';
+  }};
+  
   &:hover {
-    opacity: 0.9;
+    filter: brightness(1.1);
+  }
+  
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  
+  @media (max-width: 768px) {
+    padding: 6px;
+    font-size: 13px;
   }
 `;
 
@@ -562,18 +569,16 @@ const QuickLeverageButton = styled.button`
 `;
 
 const OrderDetails = styled.div`
-  margin-top: 16px;
-  padding: 16px;
-  background: var(--bg1);
-  border-radius: 8px;
+  margin-top: 5px;
+  margin-bottom: 5px;
 `;
 
 const DetailRow = styled.div`
   display: flex;
   justify-content: space-between;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   color: var(--text);
-  font-size: 14px;
+  font-size: 12px;
 `;
 
 // Add these new styled components
@@ -582,7 +587,10 @@ const OrderBook = styled.div`
   display: flex;
   flex-direction: column;
   background: var(--bg2);
-  border-radius: 4px;
+  border-radius: 12px;
+  border: 1px solid #D4AF37; /* Golden border color */
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2); /* Subtle golden glow */
+  overflow: hidden;
   
   @media (max-width: 768px) {
     max-height: 300px;
@@ -593,70 +601,71 @@ const OrderBook = styled.div`
 const OrderBookHeader = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  color: #7A7A7A;
-  font-size: 11px;
-  padding: 4px 8px;
+  padding: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
   border-bottom: 1px solid var(--line);
-  margin-bottom: 2px;
-
-  & > span:nth-child(2),
-  & > span:last-child {
-    text-align: right;
+  text-align: right;
+  
+  span:first-child {
+    text-align: left;
   }
   
   @media (max-width: 768px) {
-    font-size: 10px;
-    padding: 3px 6px;
+    padding: 6px;
+    font-size: 11px;
   }
 `;
 
 const OrderBookRow = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
-  padding: 2px 8px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 12px;
   cursor: pointer;
   position: relative;
-  height: 20px;
-  line-height: 20px;
-  color: var(--text);
+  text-align: right;
+  transition: background 0.1s;
   
   &:hover {
-  background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.1)' : 'rgba(14, 203, 129, 0.1)'};
+    background: rgba(255, 255, 255, 0.05);
   }
   
   &::before {
     content: '';
     position: absolute;
-    right: 0;
     top: 0;
-    bottom: 0;
+    ${props => props.$side === 'buy' ? 'right' : 'left'}: 0;
+    height: 100%;
     width: ${props => props.$depth || 0}%;
-    background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.05)' : 'rgba(14, 203, 129, 0.05)'};
+    background: ${props => props.$side === 'buy' 
+      ? 'rgba(52, 199, 89, 0.1)' 
+      : 'rgba(255, 59, 48, 0.1)'};
     z-index: 0;
+    pointer-events: none;
   }
-
-  & > span {
+  
+  span {
     position: relative;
     z-index: 1;
-    &:nth-child(2),
-    &:last-child {
-      text-align: right;
-    }
   }
   
-  /* Add subtle animations for updates */
+  span:first-child {
+    text-align: left;
+  }
+  
   &.flash {
-    animation: flashUpdate 0.5s ease-out;
+    animation: flash 0.5s;
   }
   
-  @keyframes flashUpdate {
-    0% {
-      background: ${props => props.$side === 'sell' ? 'rgba(246, 70, 93, 0.3)' : 'rgba(14, 203, 129, 0.3)'};
-    }
-    100% {
-      background: transparent;
-    }
+  @keyframes flash {
+    0% { background-color: rgba(255, 255, 255, 0.1); }
+    100% { background-color: transparent; }
+  }
+  
+  @media (max-width: 768px) {
+    padding: 3px 6px;
+    font-size: 11px;
   }
 `;
 
@@ -665,15 +674,27 @@ const OrderButton = styled.button`
   background: ${props => props.$orderType === 'buy' ? '#0ECB81' : '#F6465D'};
   color: white;
   border: none;
-  padding: 12px;
-  border-radius: 4px;
+  padding: 8px;
+  border-radius: 6px;
   cursor: pointer;
   width: 100%;
   font-weight: 500;
+  font-size: 13px;
+  border: 1px solid ${props => props.$orderType === 'buy' ? 'rgba(14, 203, 129, 0.5)' : 'rgba(246, 70, 93, 0.5)'};
+  box-shadow: 0 0 4px ${props => props.$orderType === 'buy' ? 'rgba(14, 203, 129, 0.3)' : 'rgba(246, 70, 93, 0.3)'};
   
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  
+  &:hover:not(:disabled) {
+    filter: brightness(1.1);
+  }
+  
+  @media (max-width: 768px) {
+    padding: 6px;
+    font-size: 12px;
   }
 `;
 
@@ -715,20 +736,22 @@ const PnLValue = styled.span`
 
 // Add these styled components at the top with your other styled components
 const TradeInfo = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 15px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  margin: 10px 0;
+  margin-top: 5px;
+  background: rgba(30, 41, 59, 0.4);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
 `;
 
 const InfoItem = styled.div`
   display: flex;
   justify-content: space-between;
-  color: ${props => props.$highlight ? '#00C087' : '#fff'};
-  font-size: 14px;
+  color: ${props => props.$highlight ? 'var(--primary)' : 'var(--text-secondary)'};
+  margin-bottom: 3px;
+  
+  &:last-child {
+    margin-bottom: 0;
+  }
 `;
 
 // Add this helper function before the Trading component
@@ -758,9 +781,11 @@ const LeverageInput = styled.input`
 const ChartContainer = styled.div`
   position: relative;
   background: var(--bg1);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 16px;
   margin-bottom: 20px;
+  border: 1px solid #D4AF37; /* Golden border color */
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2); /* Subtle golden glow */
 `;
 
 const DexLink = styled.a`
@@ -937,7 +962,7 @@ const calculatePnL = (position, currentMarketPrice) => {
 const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   // Ensure we have a valid price to work with
   const validPrice = currentPrice && !isNaN(currentPrice) && currentPrice > 0 
-    ? currentPrice 
+    ? Number(currentPrice) // Ensure it's converted to a number 
     : 100;
   
   // Determine price step based on the current price - using 0.01% as requested
@@ -945,7 +970,7 @@ const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   
   const asks = [];
   const bids = [];
-  const numOrders = 10; // Number of asks and bids to generate
+  const numOrders = 8; // Reduced number of asks and bids to generate to fit without scrolling
   
   // Calculate the spread price (very small spread)
   const spreadAmount = validPrice * 0.0001; // 0.01% spread
@@ -954,12 +979,12 @@ const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   
   // Generate ask prices (sells above current price)
   for (let i = 0; i < numOrders; i++) {
-    const price = askStartPrice + (i * priceStep);
+    const price = Number(askStartPrice + (i * priceStep));
     // Generate random volume between 0.01 and 0.5 for high value coins
     const quantity = validPrice > 100 
-      ? (Math.random() * 0.49 + 0.01) 
-      : (Math.random() * 10 + 1);
-    const total = price * quantity;
+      ? Number(Math.random() * 0.49 + 0.01) 
+      : Number(Math.random() * 10 + 1);
+    const total = Number(price * quantity);
     
     asks.push({
       price,
@@ -970,12 +995,12 @@ const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   
   // Generate bid prices (buys below current price)
   for (let i = 0; i < numOrders; i++) {
-    const price = bidStartPrice - (i * priceStep);
+    const price = Number(bidStartPrice - (i * priceStep));
     // Generate random volume between 0.01 and 0.5 for high value coins
     const quantity = validPrice > 100 
-      ? (Math.random() * 0.49 + 0.01) 
-      : (Math.random() * 10 + 1);
-    const total = price * quantity;
+      ? Number(Math.random() * 0.49 + 0.01) 
+      : Number(Math.random() * 10 + 1);
+    const total = Number(price * quantity);
     
     bids.push({
       price,
@@ -1148,23 +1173,37 @@ const OrderPrice = styled.div`
 
 const OrderBookTable = styled.div`
   width: 100%;
-  font-size: 14px;
+  font-size: 11px;
+  border: 1px solid #D4AF37;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+  height: 95%;
+  display: flex;
+  flex-direction: column;
   
   .header {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    padding: 8px;
+    padding: 3px 4px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     color: #666;
+    font-size: 10px;
+    position: sticky;
+    top: 0;
+    background: var(--bg2);
+    z-index: 1;
   }
   
   .row {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    padding: 8px;
-    border-bottom: 1px solid rgba(11, 11, 25, 0.5);
+    padding: 2px 4px;
+    cursor: pointer;
+    transition: background 0.1s;
+    
     &:hover {
-      background-color: rgba(255, 255, 255, 0.03);
+      background: rgba(255, 255, 255, 0.05);
     }
   }
 `;
@@ -1846,8 +1885,13 @@ const Trading = () => {
           
           // Update market price with the latest price
           if (pair.priceUsd) {
-            setMarketPrice(parseFloat(pair.priceUsd));
-            setCurrentPrice(parseFloat(pair.priceUsd));
+            const priceUsd = Number(parseFloat(pair.priceUsd));
+            if (!isNaN(priceUsd) && priceUsd > 0) {
+              setMarketPrice(priceUsd);
+              setCurrentPrice(priceUsd);
+            } else {
+              console.warn('Invalid price from DexScreener:', pair.priceUsd);
+            }
           }
           
           // Update pairInfo with any additional data we got from DexScreener
@@ -1968,6 +2012,8 @@ const Trading = () => {
       
       // If we found a valid price, update market price and order book
       if (priceToUse !== null && priceToUse > 0) {
+        // Ensure the price is a valid number
+        priceToUse = Number(priceToUse);
         setMarketPrice(priceToUse);
         
         // Generate a new order book with the updated price
@@ -2426,7 +2472,14 @@ const Trading = () => {
     const isBuy = Math.random() > 0.5;
     // Use a smaller price variation for more realistic trades
     const priceVariation = basePrice * (0.0005 * (Math.random() - 0.5));
-    const price = Number((basePrice + priceVariation).toFixed(basePrice < 10 ? 4 : (basePrice < 100 ? 3 : 2)));
+    
+    // Ensure we're working with proper numbers before using toFixed
+    const sum = Number(basePrice) + Number(priceVariation);
+    const decimals = basePrice < 10 ? 4 : (basePrice < 100 ? 3 : 2);
+    
+    // Safe conversion to avoid the toFixed is not a function error
+    const price = Number(sum.toFixed(decimals));
+    
     // Generate smaller amounts for more realistic trades
     const amount = Number((Math.random() * 0.2 + 0.05).toFixed(4));
     
@@ -2809,23 +2862,27 @@ const Trading = () => {
 
   // Replace the renderLeverageInput function with this:
   const renderLeverageControls = () => (
-    <div style={{ marginBottom: '8px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
-        <span style={{ fontSize: '12px', color: 'var(--text)' }}>Leverage</span>
-        <span style={{ fontSize: '12px', color: 'var(--text)' }}>{leverage}x</span>
+    <div style={{ marginBottom: '6px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2px' }}>
+        <span style={{ fontSize: '11px', color: 'var(--text)' }}>Leverage</span>
+        <span style={{ fontSize: '11px', color: 'var(--text)' }}>{leverage}x</span>
       </div>
-      <LeverageSlider
-        type="range"
-        min="1"
-        max="40"
-        value={leverage}
-        onChange={(e) => setLeverage(parseInt(e.target.value))}
-      />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <LeverageSlider
+          type="range"
+          min="1"
+          max="40"
+          value={leverage}
+          onChange={(e) => setLeverage(parseInt(e.target.value))}
+          style={{ flex: 1 }}
+        />
+        <span style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text)' }}>{leverage}x</span>
+      </div>
       <QuickLeverageButtons>
-        {leverageOptions.map(value => (
+        {[1, 5, 10, 20, 30, 40].map(value => (
           <QuickLeverageButton
             key={value}
-            active={leverage === value}
+            $active={leverage === value}
             onClick={(e) => {
               e.preventDefault();
               setLeverage(value);
@@ -3342,21 +3399,34 @@ const Trading = () => {
 
   const OrderBookTable = styled.div`
     width: 100%;
-    font-size: 14px;
+    font-size: 11px;
+    border: 1px solid #D4AF37;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 8px rgba(212, 175, 55, 0.2);
+    height: 95%;
+    display: flex;
+    flex-direction: column;
     
     .header {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      padding: 8px;
+      padding: 3px 4px;
       border-bottom: 1px solid rgba(255, 255, 255, 0.1);
       color: #666;
+      font-size: 10px;
+      position: sticky;
+      top: 0;
+      background: var(--bg2);
+      z-index: 1;
     }
     
     .row {
       display: grid;
       grid-template-columns: 1fr 1fr 1fr;
-      padding: 4px 8px;
+      padding: 2px 4px;
       cursor: pointer;
+      transition: background 0.1s;
       
       &:hover {
         background: rgba(255, 255, 255, 0.05);
@@ -3368,6 +3438,17 @@ const Trading = () => {
     // Get the current token symbol from cryptoData
     const tokenSymbol = cryptoData?.token?.symbol || 'BNB';
     
+    // Ensure orderBook contains valid data
+    const safeOrderBook = {
+      asks: (orderBook?.asks || []).filter(ask => 
+        !isNaN(ask.price) && !isNaN(ask.quantity) && !isNaN(ask.total)
+      ),
+      bids: (orderBook?.bids || []).filter(bid => 
+        !isNaN(bid.price) && !isNaN(bid.quantity) && !isNaN(bid.total)
+      ),
+      marketPrice: !isNaN(orderBook?.marketPrice) ? orderBook.marketPrice : currentPrice
+    };
+    
     return (
       <OrderBookTable>
         <div className="header">
@@ -3376,26 +3457,32 @@ const Trading = () => {
           <div>Total</div>
         </div>
         
-        {orderBook.asks.map((ask, index) => (
-          <div key={`ask-${index}`} className="row">
-            <OrderPrice type="ask">{Number(ask.price).toFixed(2)}</OrderPrice>
-            <div>{Number(ask.quantity).toFixed(4)}</div>
-            <div>{Number(ask.total).toFixed(2)}</div>
+        <div style={{overflow: 'auto', height: 'calc(100% - 38px)', display: 'flex', flexDirection: 'column'}}>
+          <div style={{flex: 1, overflow: 'auto', maxHeight: '46%'}}>
+            {safeOrderBook.asks.map((ask, index) => (
+              <div key={`ask-${index}`} className="row">
+                <OrderPrice type="ask">{Number(ask.price).toFixed(2)}</OrderPrice>
+                <div>{Number(ask.quantity).toFixed(4)}</div>
+                <div>{Number(ask.total).toFixed(2)}</div>
+              </div>
+            ))}
           </div>
-        ))}
-        
-        <div style={{ padding: '8px', textAlign: 'center', color: '#666', background: '#1b1b2f', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
-          <span style={{ color: '#e63946', marginRight: '5px' }}>↓</span> 
-          <span style={{ color: '#f1faee', fontWeight: 'bold' }}>{Number(orderBook.marketPrice || currentPrice).toFixed(2)}</span>
+          
+          <div style={{ padding: '4px', textAlign: 'center', color: '#666', background: '#1b1b2f', borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+            <span style={{ color: '#e63946', marginRight: '5px' }}>↓</span> 
+            <span style={{ color: '#f1faee', fontWeight: 'bold' }}>{Number(safeOrderBook.marketPrice || currentPrice).toFixed(2)}</span>
+          </div>
+          
+          <div style={{flex: 1, overflow: 'auto', maxHeight: '46%'}}>
+            {safeOrderBook.bids.map((bid, index) => (
+              <div key={`bid-${index}`} className="row">
+                <OrderPrice type="bid">{Number(bid.price).toFixed(2)}</OrderPrice>
+                <div>{Number(bid.quantity).toFixed(4)}</div>
+                <div>{Number(bid.total).toFixed(2)}</div>
+              </div>
+            ))}
+          </div>
         </div>
-        
-        {orderBook.bids.map((bid, index) => (
-          <div key={`bid-${index}`} className="row">
-            <OrderPrice type="bid">{Number(bid.price).toFixed(2)}</OrderPrice>
-            <div>{Number(bid.quantity).toFixed(4)}</div>
-            <div>{Number(bid.total).toFixed(2)}</div>
-          </div>
-        ))}
       </OrderBookTable>
     );
   };
@@ -4033,29 +4120,31 @@ const Trading = () => {
               </OrderTypeSelector>
 
               <OrderForm onSubmit={handleSubmit}>
-                <AmountInput
-                  key={`amount-${inputKey}`}
-                  type="number"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder={`Amount in ${cryptoData.token.symbol}`}
-                  min="0"
-                  step="0.000001"
-                  required
-                />
-
-                    {renderLeverageControls()}
-
-                {orderMode === 'limit' && (
+                <div style={{ display: 'grid', gridTemplateColumns: orderMode === 'limit' ? '1fr 1fr' : '1fr', gap: '6px', marginBottom: '6px' }}>
                   <AmountInput
-                    key={`limit-${inputKey}`}
+                    key={`amount-${inputKey}`}
                     type="number"
-                    value={limitPrice}
-                    onChange={(e) => setLimitPrice(e.target.value)}
-                    placeholder="Limit Price (USDT)"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder={`Amount in ${cryptoData.token.symbol}`}
+                    min="0"
+                    step="0.000001"
                     required
                   />
-                )}
+
+                  {orderMode === 'limit' && (
+                    <AmountInput
+                      key={`limit-${inputKey}`}
+                      type="number"
+                      value={limitPrice}
+                      onChange={(e) => setLimitPrice(e.target.value)}
+                      placeholder="Limit Price (USDT)"
+                      required
+                    />
+                  )}
+                </div>
+
+                {renderLeverageControls()}
 
                 <OrderDetails>
                   <DetailRow>

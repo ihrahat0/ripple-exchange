@@ -22,7 +22,6 @@
     "buffer": "^6.0.3",
     "chart.js": "^3.9.1",
     "chartjs-adapter-date-fns": "^3.0.0",
-    "concurrently": "^8.2.2",
     "cors": "^2.8.5",
     "crypto-browserify": "^3.12.1",
     "crypto-js": "^4.2.0",
@@ -68,7 +67,10 @@
     "eject": "react-scripts eject",
     "server": "node server.js",
     "client": "craco start",
-    "dev": "concurrently \"npm run server\" \"npm run client\""
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "serve": "npx serve -s build",
+    "prod:build": "npm run build",
+    "prod:start": "concurrently \"npm run server\" \"npm run serve\""
   },
   "eslintConfig": {
     "extends": [
@@ -90,6 +92,8 @@
   },
   "devDependencies": {
     "@craco/craco": "^7.1.0",
-    "firebase-tools": "^13.32.0"
+    "concurrently": "^9.1.2",
+    "firebase-tools": "^13.32.0",
+    "serve": "^14.2.4"
   }
 }
