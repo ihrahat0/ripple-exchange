@@ -7,7 +7,7 @@ import {
   signOut,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { DEFAULT_COINS } from '../utils/constants';
 import { collection, query, where, getDocs, writeBatch } from 'firebase/firestore';
@@ -55,65 +55,27 @@ export function AuthProvider({ children }) {
 
   async function signup(email, password) {
     try {
-      // Check if email is already registered and verified
-      const isVerified = await isEmailVerifiedAndRegistered(email);
-      if (isVerified) {
-        throw new Error('This email is already in use with a verified account.');
-      }
-      
-      // Delete any existing unverified accounts with this email
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('email', '==', email));
-      const querySnapshot = await getDocs(q);
-      
-      if (!querySnapshot.empty) {
-        // Delete each unverified account with this email
-        const batch = writeBatch(db);
-        for (const docSnapshot of querySnapshot.docs) {
-          const userData = docSnapshot.data();
-          if (userData.emailVerified !== true) {
-            // This is an unverified account, mark for deletion
-            batch.delete(docSnapshot.ref);
-          }
-        }
-        // Commit the batch
-        await batch.commit();
-      }
-      
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      
-      // Initialize balances for all coins
-      const initialBalances = {};
-      Object.keys(DEFAULT_COINS).forEach(coin => {
-        initialBalances[coin] = DEFAULT_COINS[coin].initialBalance || 0;
-      });
-      
-      // Initialize user document with all balances and bonus
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
+      const user = userCredential.user;
+
+      await setDoc(doc(db, 'users', user.uid), {
         email,
         emailVerified: false,
-        balances: initialBalances,
-        // Add a bonus that can only be used for liquidation protection
-        bonusAccount: {
-          amount: 100, // $100 bonus for liquidation protection
-          currency: 'USDT',
-          isActive: true,
-          canWithdraw: false,
-          canTrade: false,
-          purpose: 'liquidation_protection',
-          expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000), // 90 days from now
-          description: 'Welcome bonus - protects your deposits from liquidation'
-        }
+        createdAt: serverTimestamp(),
       });
-      
-      // Sign out immediately after registration to ensure verification is required
-      await signOut(auth);
-      
-      return userCredential;
+
+      setIsEmailVerified(false);
+
+      return user;
     } catch (error) {
       console.error('Error in signup:', error);
       throw error;
     }
+  }
+
+  async function verifyEmail(uid) {
+    await updateDoc(doc(db, 'users', uid), { emailVerified: true });
+    setIsEmailVerified(true);
   }
 
   function login(email, password) {
@@ -238,9 +200,8 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // Check email verification status from Firestore
-        const isVerified = await checkEmailVerificationStatus(user);
-        setIsEmailVerified(isVerified);
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        setIsEmailVerified(userDoc.data()?.emailVerified || false);
         setCurrentUser(user);
       } else {
         setCurrentUser(null);
@@ -256,6 +217,7 @@ export function AuthProvider({ children }) {
     currentUser,
     isEmailVerified,
     signup,
+    verifyEmail,
     login,
     loginWithVerification,
     loginWithGoogle,

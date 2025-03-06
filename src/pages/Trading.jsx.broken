@@ -65,7 +65,7 @@ const TradingGrid = styled.div`
   display: grid;
   grid-template-columns: auto 600px;
   gap: 1px;
-  margin-top: 20px;
+  margin-top: 105px;
   background: var(--bg);
   
   @media (max-width: 1200px) {
@@ -689,7 +689,7 @@ const PositionsTable = styled.table`
   border-collapse: collapse;
   background: var(--bg);
   border-radius: 8px;
-  margin-top: 20px;
+  margin-top: 105px;
 `;
 
 const TableHeader = styled.th`

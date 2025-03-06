@@ -467,7 +467,7 @@ const NotificationBadge = styled.span`
 `;
 
 const Header = () => {
-    const { currentUser } = useAuth();
+    const { currentUser, isEmailVerified } = useAuth();
     const [user, setUser] = useState(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const navigate = useNavigate();
@@ -655,8 +655,11 @@ const Header = () => {
         setSearchTerm('');
     };
 
-    const handleProfileClick = () => {
-        window.location.href = '/user-profile';
+    const handleProfileClick = (e) => {
+        if (!isEmailVerified) {
+            e.preventDefault();
+            alert('Please verify your email before accessing your profile.');
+        }
     };
 
     const renderUserAvatar = () => {
