@@ -259,8 +259,10 @@ const StatusToggle = styled.span`
 // Predefined coin categories
 const COIN_CATEGORIES = [
   { id: 'popular', name: 'Popular' },
+  { id: 'recently_added', name: 'Recently Added' },
+  { id: 'trending', name: 'Trending' },
+  { id: 'memes', name: 'Memes' },
   { id: 'defi', name: 'DeFi' },
-  { id: 'meme', name: 'Meme' },
   { id: 'stablecoin', name: 'Stablecoin' },
   { id: 'layer1', name: 'Layer 1' },
   { id: 'layer2', name: 'Layer 2' },
@@ -598,6 +600,9 @@ function CoinManagement() {
         {success && <SuccessMessage>{success}</SuccessMessage>}
         
         <Form onSubmit={handleSubmit}>
+          {console.log("Rendering coin form with data:", formData)}
+          {console.log("Categories available:", COIN_CATEGORIES)}
+          
           <FormGroup>
             <Label>Coin Type</Label>
             <Select 
@@ -634,12 +639,13 @@ function CoinManagement() {
             />
           </FormGroup>
           
-          <FormGroup>
+          <FormGroup style={{ display: 'block', marginBottom: '15px' }}>
             <Label>Category</Label>
             <Select 
               name="category" 
               value={formData.category}
               onChange={handleChange}
+              style={{ width: '100%' }}
             >
               {COIN_CATEGORIES.map(category => (
                 <option key={category.id} value={category.id}>

@@ -68,6 +68,16 @@ const Container = styled.div`
   justify-content: center;
   align-items: flex-start;
   padding-top: 60px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+    padding-top: 40px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px;
+    padding-top: 30px;
+  }
 `;
 
 const WithdrawCard = styled(motion.div)`
@@ -79,6 +89,11 @@ const WithdrawCard = styled(motion.div)`
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    border-radius: 12px;
+    margin-bottom: 15px;
+  }
 `;
 
 const CardHeader = styled.div`
@@ -87,6 +102,15 @@ const CardHeader = styled.div`
   padding: 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   gap: 12px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 12px;
+    gap: 8px;
+  }
 `;
 
 const WalletIcon = styled.div`
@@ -105,42 +129,57 @@ const HeaderText = styled.h2`
   font-weight: 500;
   margin: 0;
   flex-grow: 1;
+  
+  @media (max-width: 480px) {
+    font-size: 16px;
+  }
 `;
 
 const TabsContainer = styled.div`
   display: flex;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    margin-bottom: 15px;
+  }
 `;
 
-const Tab = styled.button`
-  flex: 1;
-  padding: 16px;
+const TabButton = styled.button`
   background: none;
   border: none;
-  color: ${props => props.active ? '#00ff9d' : 'rgba(255, 255, 255, 0.6)'};
+  color: ${props => props.$active ? '#fff' : 'rgba(255, 255, 255, 0.6)'};
+  padding: 12px 20px;
   font-size: 16px;
   cursor: pointer;
-  position: relative;
-  transition: color 0.2s;
-
-  &:after {
-    content: '';
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    height: 2px;
-    background: ${props => props.active ? '#00ff9d' : 'transparent'};
-    transition: background 0.2s;
-  }
-
+  border-bottom: 2px solid ${props => props.$active ? '#00ff9d' : 'transparent'};
+  transition: all 0.2s;
+  
   &:hover {
-    color: ${props => props.active ? '#00ff9d' : '#fff'};
+    color: #fff;
+  }
+  
+  @media (max-width: 768px) {
+    padding: 10px 15px;
+    font-size: 14px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 8px 12px;
+    font-size: 13px;
   }
 `;
 
-const ContentSection = styled.div`
+const CardContent = styled.div`
   padding: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 12px;
+  }
 `;
 
 const Description = styled.p`
@@ -151,6 +190,10 @@ const Description = styled.p`
 
 const FormGroup = styled.div`
   margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    margin-bottom: 15px;
+  }
 `;
 
 const Label = styled.label`
@@ -158,6 +201,11 @@ const Label = styled.label`
   color: #fff;
   margin-bottom: 8px;
   font-size: 14px;
+  
+  @media (max-width: 480px) {
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
 `;
 
 const Select = styled.select`
@@ -445,103 +493,103 @@ function Withdraw() {
         <WithdrawCard
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.3 }}
+          transition={{ duration: 0.5 }}
         >
           <CardHeader>
-            <WalletIcon>{activeTab === 'withdraw' ? '↑' : '⏱️'}</WalletIcon>
-            <HeaderText>{activeTab === 'withdraw' ? 'Withdraw Funds' : 'Withdrawal History'}</HeaderText>
+            <WalletIcon>💸</WalletIcon>
+            <HeaderText>Withdraw Crypto</HeaderText>
           </CardHeader>
           
           <TabsContainer>
-            <Tab 
-              active={activeTab === 'withdraw'} 
+            <TabButton 
+              $active={activeTab === 'withdraw'} 
               onClick={() => setActiveTab('withdraw')}
             >
               Withdraw
-            </Tab>
-            <Tab 
-              active={activeTab === 'history'} 
+            </TabButton>
+            <TabButton 
+              $active={activeTab === 'history'} 
               onClick={() => setActiveTab('history')}
             >
               History
-            </Tab>
+            </TabButton>
           </TabsContainer>
           
-          {activeTab === 'withdraw' ? (
-            <ContentSection>
-              <Description>
-                Withdraw your crypto to external wallets. All withdrawals are subject to review for security purposes.
-                Withdrawals are typically processed within 24 hours after approval.
-              </Description>
-              
-              {error && <ErrorMessage>{error}</ErrorMessage>}
-              {success && <SuccessMessage>{success}</SuccessMessage>}
-              
-              <FormGroup>
-                <Label>Select Coin</Label>
-                <Select value={selectedCoin} onChange={handleCoinChange}>
-                  {Object.entries(userBalances)
-                    .filter(([_, balance]) => balance > 0)
-                    .map(([coin]) => (
-                      <option key={coin} value={coin}>
-                        {coin} - {COIN_NAMES[coin] || coin}
-                      </option>
-                    ))
-                  }
-                </Select>
+          <CardContent>
+            {activeTab === 'withdraw' ? (
+              <>
+                <Description>
+                  Withdraw your crypto to external wallets. All withdrawals are subject to review for security purposes.
+                  Withdrawals are typically processed within 24 hours after approval.
+                </Description>
                 
-                <AvailableBalance>
-                  <span>Available: {(userBalances[selectedCoin] || 0).toFixed(8)} {selectedCoin}</span>
-                </AvailableBalance>
-              </FormGroup>
-              
-              <FormGroup>
-                <Label>Amount to Withdraw</Label>
-                <Input 
-                  type="number" 
-                  placeholder={`Enter amount in ${selectedCoin}`}
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  min="0"
-                  step="0.00000001"
-                />
+                {error && <ErrorMessage>{error}</ErrorMessage>}
+                {success && <SuccessMessage>{success}</SuccessMessage>}
                 
-                <AvailableBalance>
-                  <span>Transaction fee: 0.0001 {selectedCoin}</span>
-                  <MaxButton onClick={handleSetMaxAmount}>MAX</MaxButton>
-                </AvailableBalance>
-              </FormGroup>
-              
-              <FormGroup>
-                <Label>Withdrawal Address</Label>
-                <Input 
-                  type="text"
-                  placeholder={`Enter your ${selectedCoin} address`}
-                  value={withdrawalAddress}
-                  onChange={(e) => setWithdrawalAddress(e.target.value)}
-                />
-              </FormGroup>
-              
-              <InfoBox>
-                <span>ℹ️</span>
-                <InfoText>
-                  Please double-check your withdrawal address. Transactions sent to incorrect addresses cannot be recovered.
-                  All withdrawals require admin approval for security purposes.
-                </InfoText>
-              </InfoBox>
-              
-              <WithdrawButton 
-                onClick={handleWithdraw} 
-                disabled={withdrawing || !amount || !withdrawalAddress}
-              >
-                {withdrawing ? 'Processing...' : 'Submit Withdrawal Request'}
-              </WithdrawButton>
-            </ContentSection>
-          ) : (
-            <ContentSection>
+                <FormGroup>
+                  <Label>Select Coin</Label>
+                  <Select value={selectedCoin} onChange={handleCoinChange}>
+                    {Object.entries(userBalances)
+                      .filter(([_, balance]) => balance > 0)
+                      .map(([coin]) => (
+                        <option key={coin} value={coin}>
+                          {coin} - {COIN_NAMES[coin] || coin}
+                        </option>
+                      ))
+                    }
+                  </Select>
+                  
+                  <AvailableBalance>
+                    <span>Available: {(userBalances[selectedCoin] || 0).toFixed(8)} {selectedCoin}</span>
+                  </AvailableBalance>
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label>Amount to Withdraw</Label>
+                  <Input 
+                    type="number" 
+                    placeholder={`Enter amount in ${selectedCoin}`}
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    min="0"
+                    step="0.00000001"
+                  />
+                  
+                  <AvailableBalance>
+                    <span>Transaction fee: 0.0001 {selectedCoin}</span>
+                    <MaxButton onClick={handleSetMaxAmount}>MAX</MaxButton>
+                  </AvailableBalance>
+                </FormGroup>
+                
+                <FormGroup>
+                  <Label>Withdrawal Address</Label>
+                  <Input 
+                    type="text"
+                    placeholder={`Enter your ${selectedCoin} address`}
+                    value={withdrawalAddress}
+                    onChange={(e) => setWithdrawalAddress(e.target.value)}
+                  />
+                </FormGroup>
+                
+                <InfoBox>
+                  <span>ℹ️</span>
+                  <InfoText>
+                    Please double-check your withdrawal address. Transactions sent to incorrect addresses cannot be recovered.
+                    All withdrawals require admin approval for security purposes.
+                  </InfoText>
+                </InfoBox>
+                
+                <WithdrawButton 
+                  onClick={handleWithdraw} 
+                  disabled={withdrawing || !amount || !withdrawalAddress}
+                >
+                  {withdrawing ? 'Processing...' : 'Submit Withdrawal Request'}
+                </WithdrawButton>
+              </>
+            ) : (
               <TransactionHistory type="withdrawal" limit={10} />
-            </ContentSection>
-          )}
+            )}
+          </CardContent>
         </WithdrawCard>
       </div>
     </Container>

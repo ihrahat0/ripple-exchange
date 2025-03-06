@@ -4,7 +4,7 @@ import CryptoPrices from '../components/CryptoPrices';
 
 const Container = styled.div`
   min-height: 100vh;
-  background: linear-gradient(135deg, rgba(0, 40, 20, 0.8), rgba(0, 20, 40, 0.8));
+  background: linear-gradient(180deg, #0B0B0F 0%, #121218 100%);
   padding: 20px;
 `;
 

@@ -866,10 +866,34 @@ function calculatePnL(position, closePrice) {
 }
 
 function calculateLiquidationPrice(order) {
-    // Implementation of calculateLiquidationPrice function
-    // This function should return the liquidation price based on the order data
-    // For now, we'll return a placeholder value
-    return 0; // Placeholder value, actual implementation needed
+    if (!order) return 0;
+    
+    try {
+        const entryPriceNum = parseFloat(order.entryPrice);
+        const leverageNum = parseFloat(order.leverage);
+        
+        if (isNaN(entryPriceNum) || isNaN(leverageNum) || leverageNum === 0) {
+            console.warn("Invalid entry price or leverage for liquidation calculation", order);
+            return 0;
+        }
+        
+        // Calculate the liquidation threshold (percentage of margin that triggers liquidation)
+        const liquidationThreshold = 0.8;
+        
+        // Calculate liquidation price based on position type (buy/long or sell/short)
+        if (order.type === 'buy') {
+            // For long positions, liquidation happens when price falls
+            // Formula: entry_price - (entry_price / leverage) * liquidationThreshold
+            return entryPriceNum * (1 - (liquidationThreshold / leverageNum));
+        } else {
+            // For short positions, liquidation happens when price rises
+            // Formula: entry_price + (entry_price / leverage) * liquidationThreshold
+            return entryPriceNum * (1 + (liquidationThreshold / leverageNum));
+        }
+    } catch (error) {
+        console.error("Error calculating liquidation price:", error);
+        return 0;
+    }
 }
 
 // Export all services

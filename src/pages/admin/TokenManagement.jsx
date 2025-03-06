@@ -166,6 +166,30 @@ const SuccessMessage = styled.div`
   margin-bottom: 20px;
 `;
 
+// Add token categories based on the screenshot
+const TOKEN_CATEGORIES = [
+  { id: 'popular', name: 'Popular' },
+  { id: 'recently_added', name: 'Recently Added' },
+  { id: 'trending', name: 'Trending' },
+  { id: 'memes', name: 'Memes' },
+  { id: 'defi', name: 'DeFi' },
+  { id: 'stablecoin', name: 'Stablecoin' },
+  { id: 'layer1', name: 'Layer 1' },
+  { id: 'layer2', name: 'Layer 2' },
+  { id: 'other', name: 'Other' }
+];
+
+// Add a styled component for the category badge
+const CategoryBadge = styled.span`
+  display: inline-block;
+  padding: 4px 8px;
+  background: var(--bg2);
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+`;
+
 const TokensList = () => {
   const [tokens, setTokens] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -248,41 +272,35 @@ const TokensList = () => {
               <TableHeader>Symbol</TableHeader>
               <TableHeader>Name</TableHeader>
               <TableHeader>Type</TableHeader>
-              <TableHeader>Chain</TableHeader>
-              <TableHeader>Address</TableHeader>
+              <TableHeader>Category</TableHeader>
               <TableHeader>Actions</TableHeader>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
-                <TableCell colSpan="6" style={{textAlign: 'center'}}>Loading...</TableCell>
+                <TableCell colSpan="5" style={{ textAlign: 'center' }}>Loading tokens...</TableCell>
               </tr>
             ) : tokens.length === 0 ? (
               <tr>
-                <TableCell colSpan="6" style={{textAlign: 'center'}}>No tokens found</TableCell>
+                <TableCell colSpan="5" style={{ textAlign: 'center' }}>No tokens found</TableCell>
               </tr>
             ) : (
               tokens.map(token => (
                 <tr key={token.id}>
                   <TableCell>{token.symbol}</TableCell>
                   <TableCell>{token.name}</TableCell>
-                  <TableCell>{token.type === 'dex' ? 'DEX' : 'CEX'}</TableCell>
-                  <TableCell>{token.chainId || 'N/A'}</TableCell>
                   <TableCell>
-                    {token.address ? (
-                      <div style={{ 
-                        maxWidth: '200px', 
-                        overflow: 'hidden', 
-                        textOverflow: 'ellipsis', 
-                        whiteSpace: 'nowrap' 
-                      }}>
-                        {token.address}
-                      </div>
-                    ) : 'N/A'}
+                    {token.type === 'dex' ? 'DEX' : 'CEX'}
+                    {token.type === 'dex' && token.chainId && <span style={{ marginLeft: '5px', opacity: 0.7 }}>({token.chainId})</span>}
                   </TableCell>
                   <TableCell>
-                    <ActionButton primary onClick={() => navigate(`/admin/tokens/edit/${token.id}`)}>
+                    <CategoryBadge>
+                      {TOKEN_CATEGORIES.find(cat => cat.id === token.category)?.name || 'Other'}
+                    </CategoryBadge>
+                  </TableCell>
+                  <TableCell>
+                    <ActionButton onClick={() => navigate(`/admin/tokens/edit/${token.id}`)}>
                       Edit
                     </ActionButton>
                     <ActionButton danger onClick={() => handleDelete(token.id)}>
@@ -305,7 +323,7 @@ const AddToken = () => {
   const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // Use more detailed form data with chainId
+  // Update form data to include category
   const [formData, setFormData] = useState({
     name: '',
     symbol: '',
@@ -313,7 +331,8 @@ const AddToken = () => {
     chainId: 'ethereum',
     address: '',
     decimals: 18,
-    logoUrl: ''
+    logoUrl: '',
+    category: 'recently_added' // Default to Recently Added
   });
 
   const handleChange = (e) => {
@@ -356,7 +375,8 @@ const AddToken = () => {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         logoUrl: formData.logoUrl || null,
-        decimals: parseInt(formData.decimals) || 18
+        decimals: parseInt(formData.decimals) || 18,
+        category: formData.category || 'recently_added' // Add category to token data
       };
       
       // Add chain-specific data for DEX tokens
@@ -377,7 +397,8 @@ const AddToken = () => {
         chainId: 'ethereum',
         address: '',
         decimals: 18,
-        logoUrl: ''
+        logoUrl: '',
+        category: 'recently_added'
       });
     } catch (error) {
       console.error('Error adding token:', error);
@@ -433,6 +454,22 @@ const AddToken = () => {
             >
               <option value="cex">CEX (Centralized Exchange)</option>
               <option value="dex">DEX (Decentralized Exchange)</option>
+            </Select>
+          </FormGroup>
+          
+          {/* Add category selection */}
+          <FormGroup>
+            <Label>Category</Label>
+            <Select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+            >
+              {TOKEN_CATEGORIES.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
             </Select>
           </FormGroup>
           
@@ -513,7 +550,8 @@ const EditToken = () => {
     chainId: 'ethereum',
     address: '',
     decimals: 18,
-    logoUrl: ''
+    logoUrl: '',
+    category: 'recently_added' // Add category to form data
   });
   
   // Extract token ID from URL
@@ -538,14 +576,15 @@ const EditToken = () => {
           chainId: tokenData.chainId || 'ethereum',
           address: tokenData.address || '',
           decimals: tokenData.decimals || 18,
-          logoUrl: tokenData.logoUrl || ''
+          logoUrl: tokenData.logoUrl || '',
+          category: tokenData.category || 'recently_added' // Set category from token data
         });
       } else {
         setError('Token not found');
       }
     } catch (error) {
       console.error('Error fetching token:', error);
-      setError(error.message);
+      setError('Failed to load token data');
     } finally {
       setLoading(false);
     }
@@ -575,33 +614,28 @@ const EditToken = () => {
         throw new Error('Token address is required for DEX tokens');
       }
       
-      // Create the token update data
+      // Update the token document in Firestore
+      const tokenRef = doc(db, 'tokens', tokenId);
       const tokenData = {
         name: formData.name,
         symbol: formData.symbol.toUpperCase(),
         type: formData.type,
         updatedAt: serverTimestamp(),
         logoUrl: formData.logoUrl || null,
-        decimals: parseInt(formData.decimals) || 18
+        decimals: parseInt(formData.decimals) || 18,
+        category: formData.category || 'recently_added' // Add category to update data
       };
       
       // Add chain-specific data for DEX tokens
       if (formData.type === 'dex') {
         tokenData.chainId = formData.chainId;
         tokenData.address = formData.address;
-      } else {
-        // Remove chain-specific fields if changing from DEX to CEX
-        if (token.type === 'dex') {
-          // Note: We can't actually remove fields with updateDoc,
-          // but we can set them to null or empty values
-          tokenData.chainId = null;
-          tokenData.address = null;
-        }
       }
       
-      await updateDoc(doc(db, 'tokens', tokenId), tokenData);
+      await updateDoc(tokenRef, tokenData);
       
       setSuccess(`Token ${formData.symbol.toUpperCase()} updated successfully`);
+      setToken({ ...token, ...tokenData });
     } catch (error) {
       console.error('Error updating token:', error);
       setError(error.message);
@@ -631,7 +665,7 @@ const EditToken = () => {
         ← Back to Tokens
       </ActionButton>
       
-      <h2 style={{ color: 'var(--text)' }}>Edit Token: {token.symbol}</h2>
+      <h2 style={{ color: 'var(--text)' }}>Edit Token</h2>
       
       {error && <ErrorMessage>{error}</ErrorMessage>}
       {success && <SuccessMessage>{success}</SuccessMessage>}
@@ -645,6 +679,7 @@ const EditToken = () => {
               name="name" 
               value={formData.name} 
               onChange={handleChange}
+              placeholder="Bitcoin"
               required
             />
           </FormGroup>
@@ -656,7 +691,9 @@ const EditToken = () => {
               name="symbol" 
               value={formData.symbol} 
               onChange={handleChange}
+              placeholder="BTC"
               required
+              disabled // Symbol should not be editable
             />
           </FormGroup>
           
@@ -669,6 +706,22 @@ const EditToken = () => {
             >
               <option value="cex">CEX (Centralized Exchange)</option>
               <option value="dex">DEX (Decentralized Exchange)</option>
+            </Select>
+          </FormGroup>
+          
+          {/* Add category selection to edit form */}
+          <FormGroup>
+            <Label>Category</Label>
+            <Select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+            >
+              {TOKEN_CATEGORIES.map(category => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
             </Select>
           </FormGroup>
           
@@ -697,6 +750,7 @@ const EditToken = () => {
                   name="address" 
                   value={formData.address} 
                   onChange={handleChange}
+                  placeholder="0x..."
                   required={formData.type === 'dex'}
                 />
               </FormGroup>
@@ -722,11 +776,12 @@ const EditToken = () => {
               name="logoUrl" 
               value={formData.logoUrl} 
               onChange={handleChange}
+              placeholder="https://example.com/logo.png"
             />
           </FormGroup>
           
           <Button type="submit" disabled={loading}>
-            {loading ? 'Saving...' : 'Save Changes'}
+            {loading ? 'Updating...' : 'Update Token'}
           </Button>
         </Form>
       </FormContainer>

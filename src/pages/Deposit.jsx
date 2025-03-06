@@ -50,6 +50,16 @@ const Container = styled.div`
   justify-content: center;
   align-items: flex-start;
   padding-top: 60px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+    padding-top: 40px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px;
+    padding-top: 30px;
+  }
 `;
 
 const WalletCard = styled(motion.div)`
@@ -60,6 +70,10 @@ const WalletCard = styled(motion.div)`
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
+  
+  @media (max-width: 768px) {
+    border-radius: 12px;
+  }
 `;
 
 const CardHeader = styled.div`
@@ -68,6 +82,15 @@ const CardHeader = styled.div`
   padding: 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   gap: 12px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 12px;
+    gap: 8px;
+  }
 `;
 
 const WalletIcon = styled.div`
@@ -86,6 +109,10 @@ const HeaderText = styled.h2`
   font-weight: 500;
   margin: 0;
   flex-grow: 1;
+  
+  @media (max-width: 480px) {
+    font-size: 16px;
+  }
 `;
 
 const CloseButton = styled.button`
@@ -135,8 +162,16 @@ const Tab = styled.button`
   }
 `;
 
-const ContentSection = styled.div`
+const CardContent = styled.div`
   padding: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 12px;
+  }
 `;
 
 const Description = styled.p`
@@ -146,12 +181,21 @@ const Description = styled.p`
 `;
 
 const WalletAddress = styled.div`
-  background: rgba(0, 255, 157, 0.1);
-  border: 1px solid rgba(0, 255, 157, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
-  padding: 16px;
-  position: relative;
+  padding: 12px;
   margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 10px;
+    margin-bottom: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 8px;
+    margin-bottom: 12px;
+  }
 `;
 
 const AddressHeader = styled.div`
@@ -161,43 +205,117 @@ const AddressHeader = styled.div`
   margin-bottom: 12px;
 `;
 
-const AddressLabel = styled.span`
-  color: #00ff9d;
-  font-size: 14px;
-  font-weight: 500;
-`;
-
-const CopyButton = styled.button`
-  background: rgba(0, 255, 157, 0.2);
-  border: none;
-  border-radius: 4px;
-  color: #00ff9d;
-  padding: 4px 8px;
+const AddressLabel = styled.div`
+  color: rgba(255, 255, 255, 0.6);
   font-size: 12px;
-  cursor: pointer;
-  transition: background 0.2s;
+  margin-bottom: 8px;
   
-  &:hover {
-    background: rgba(0, 255, 157, 0.3);
+  @media (max-width: 480px) {
+    font-size: 11px;
+    margin-bottom: 6px;
   }
 `;
 
-const AddressText = styled.div`
+const AddressValue = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  
+  @media (max-width: 480px) {
+    gap: 8px;
+  }
+`;
+
+const Address = styled.div`
   color: #fff;
-  font-family: monospace;
   font-size: 14px;
+  font-family: monospace;
   word-break: break-all;
+  
+  @media (max-width: 768px) {
+    font-size: 13px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 12px;
+  }
+`;
+
+const CopyButton = styled.button`
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 4px;
+  color: #fff;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+  
+  @media (max-width: 480px) {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
 `;
 
 const QRCodeContainer = styled.div`
   display: flex;
   justify-content: center;
   margin: 20px 0;
-  background: white;
-  padding: 12px;
+  
+  @media (max-width: 768px) {
+    margin: 15px 0;
+  }
+  
+  @media (max-width: 480px) {
+    margin: 12px 0;
+  }
+`;
+
+const StyledQRCode = styled.div`
+  background: #fff;
+  padding: 15px;
   border-radius: 8px;
-  width: fit-content;
-  margin: 0 auto 20px;
+  
+  @media (max-width: 768px) {
+    padding: 12px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px;
+    
+    & > svg {
+      width: 150px !important;
+      height: 150px !important;
+    }
+  }
+`;
+
+const Warning = styled.div`
+  background: rgba(255, 165, 0, 0.1);
+  border: 1px solid rgba(255, 165, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  color: #FFA500;
+  font-size: 14px;
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 10px;
+    font-size: 13px;
+    margin-bottom: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 8px;
+    font-size: 12px;
+    margin-bottom: 12px;
+  }
 `;
 
 const WarningBox = styled.div`
@@ -327,11 +445,31 @@ const InfoText = styled.p`
 `;
 
 const CoinLogo = styled.img`
-  width: 24px;
-  height: 24px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   margin-right: 8px;
   vertical-align: middle;
+  
+  @media (max-width: 768px) {
+    width: 32px;
+    height: 32px;
+  }
+  
+  @media (max-width: 480px) {
+    width: 28px;
+    height: 28px;
+  }
+`;
+
+const CoinName = styled.div`
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  
+  @media (max-width: 480px) {
+    font-size: 12px;
+  }
 `;
 
 const TokenTag = styled.span`
@@ -460,6 +598,101 @@ const HighlightText = styled.span`
 
 const BoldText = styled.span`
   font-weight: 600;
+`;
+
+const CoinSelector = styled.div`
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  
+  @media (max-width: 480px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+`;
+
+const CoinOption = styled.div`
+  background: ${props => props.$selected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)'};
+  border: 1px solid ${props => props.$selected ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'};
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+    transform: translateY(-2px);
+  }
+  
+  @media (max-width: 768px) {
+    padding: 10px;
+    gap: 6px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 8px;
+    gap: 4px;
+  }
+`;
+
+const NetworkSelector = styled.div`
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    margin-bottom: 15px;
+  }
+`;
+
+const SectionTitle = styled.h3`
+  color: #fff;
+  font-size: 16px;
+  font-weight: 500;
+  margin: 0 0 12px 0;
+  
+  @media (max-width: 480px) {
+    font-size: 14px;
+    margin-bottom: 10px;
+  }
+`;
+
+const NetworkOptions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  
+  @media (max-width: 480px) {
+    gap: 8px;
+  }
+`;
+
+const NetworkOption = styled.div`
+  background: ${props => props.$selected ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.05)'};
+  border: 1px solid ${props => props.$selected ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.1)'};
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.1);
+  }
+  
+  @media (max-width: 480px) {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
 `;
 
 const Deposit = () => {
@@ -661,7 +894,7 @@ const Deposit = () => {
             <WalletIcon>🔐</WalletIcon>
             <HeaderText>Generate Your Wallet</HeaderText>
           </CardHeader>
-          <ContentSection>
+          <CardContent>
             <Description>
               You need to generate a wallet to start depositing funds. This wallet will work across all supported networks, 
               with specialized wallet generation for Solana SPL tokens. Your private keys will be securely stored in your account.
@@ -692,7 +925,7 @@ const Deposit = () => {
                 </GenerateWalletButton>
               </>
             )}
-          </ContentSection>
+          </CardContent>
         </WalletCard>
       </Container>
     );
@@ -766,7 +999,7 @@ const Deposit = () => {
           </Tab>
         </TabsContainer>
         
-        <ContentSection>
+        <CardContent>
           {activeTab === 'deposit' ? (
             <>
               <Description>
@@ -817,30 +1050,31 @@ const Deposit = () => {
                         Deposit Address ({SUPPORTED_CHAINS[selectedChain]?.name})
                         {SUPPORTED_CHAINS[selectedChain]?.isSPL && <TokenTag isSPL>SPL</TokenTag>}
                       </AddressLabel>
-                      <CopyButton onClick={() => copyToClipboard(depositAddress)}>
-                        {copied ? 'Copied!' : 'Copy'}
-                      </CopyButton>
+                      <AddressValue>
+                        <CopyButton onClick={() => copyToClipboard(depositAddress)}>
+                          {copied ? 'Copied!' : 'Copy'}
+                        </CopyButton>
+                      </AddressValue>
                     </AddressHeader>
-                    <AddressText>{depositAddress}</AddressText>
+                    <Address>{depositAddress}</Address>
                   </WalletAddress>
                   
                   <QRCodeContainer>
-                    <QRCode 
-                      value={depositAddress} 
-                      size={150} 
-                      level="H"
-                    />
+                    <StyledQRCode>
+                      <QRCode 
+                        value={depositAddress} 
+                        size={150} 
+                        level="H"
+                      />
+                    </StyledQRCode>
                   </QRCodeContainer>
                   
-                  <WarningBox>
-                    <span>⚠️</span>
-                    <WarningText>
-                      {SUPPORTED_CHAINS[selectedChain]?.isSPL ? 
-                        `This is a Solana SPL token address. Only send ${selectedCoin} using the Solana network.` : 
-                        `Only send ${selectedCoin} on the ${SUPPORTED_CHAINS[selectedChain]?.name} network to this address.`} 
-                      Sending any other asset may result in permanent loss.
-                    </WarningText>
-                  </WarningBox>
+                  <Warning>
+                    {SUPPORTED_CHAINS[selectedChain]?.isSPL ? 
+                      `This is a Solana SPL token address. Only send ${selectedCoin} using the Solana network.` : 
+                      `Only send ${selectedCoin} on the ${SUPPORTED_CHAINS[selectedChain]?.name} network to this address.`} 
+                    Sending any other asset may result in permanent loss.
+                  </Warning>
                 </>
               )}
             </>
@@ -849,7 +1083,7 @@ const Deposit = () => {
               Your deposit history will appear here.
             </Description>
           )}
-        </ContentSection>
+        </CardContent>
       </WalletCard>
     </Container>
   );

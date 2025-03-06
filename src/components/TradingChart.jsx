@@ -26,7 +26,8 @@ const TradingChart = ({
   autosize = true,
   allow_symbol_change = false,
   hide_side_toolbar = true,
-  onPriceUpdate
+  onPriceUpdate,
+  targetPrices = [] // Array of {price, amount, orderId} objects for limit orders
 }) => {
   const container = useRef(null);
   const tvWidget = useRef(null);
@@ -159,6 +160,39 @@ const TradingChart = ({
                     console.warn('Error in onSymbolChange handler:', e);
                   }
                 });
+                
+                // Add target price lines for limit orders
+                if (targetPrices && targetPrices.length > 0) {
+                  // Clear any existing lines first
+                  chart.removeAllShapes();
+                  
+                  // Add each target price line
+                  targetPrices.forEach((order, index) => {
+                    if (order.price) {
+                      try {
+                        // Create a horizontal line at the target price
+                        const lineProperties = {
+                          text: `Target: $${order.price} (${order.amount || ''})`,
+                          shape: 'horizontal_line',
+                          overrides: {
+                            linecolor: '#2196F3',
+                            linestyle: 0,
+                            linewidth: 2,
+                            showLabel: true,
+                            textcolor: '#2196F3',
+                            fontsize: 12
+                          }
+                        };
+                        
+                        chart.createShape({ price: order.price }, lineProperties);
+                        console.log(`Added target price line at ${order.price}`);
+                      } catch (err) {
+                        console.warn('Error adding target price line:', err);
+                      }
+                    }
+                  });
+                }
+                
                 console.log(`Chart for ${symbol} is ready`);
               } catch (e) {
                 console.warn('Error in onChartReady handler:', e);
@@ -206,7 +240,7 @@ const TradingChart = ({
       // We'll leave the script in the document to avoid repeated loads
       // This prevents issues with removing scripts that might be in use by other components
     });
-  }, [symbol, theme, timeframe, container_id, autosize, allow_symbol_change, hide_side_toolbar, onPriceUpdate]);
+  }, [symbol, theme, timeframe, container_id, autosize, allow_symbol_change, hide_side_toolbar, onPriceUpdate, targetPrices]);
 
   if (!symbol) {
     return (

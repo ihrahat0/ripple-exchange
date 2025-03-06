@@ -1,0 +1,6 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+When working on fixing linter errors, build before you finish and dont stop until the building is succeed.

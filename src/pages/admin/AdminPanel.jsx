@@ -354,11 +354,11 @@ const AdminPanel = () => {
               <i className="bi bi-people"></i> Users
             </NavLink>
           </NavItem>
-          <NavItem>
+          {/* <NavItem>
             <NavLink to="/admin/tokens" active={location.pathname.includes('/admin/tokens') ? 'true' : undefined}>
               <i className="bi bi-coin"></i> Tokens
             </NavLink>
-          </NavItem>
+          </NavItem> */}
           <NavItem>
             <NavLink to="/admin/coins" active={location.pathname.includes('/admin/coins') ? 'true' : undefined}>
               <i className="bi bi-coin"></i> Coins

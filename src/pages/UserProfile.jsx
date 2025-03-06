@@ -97,11 +97,13 @@ const AnimatedBorder = styled.div`
     border-radius: 15px;
     z-index: 0;
   }
-
-  @keyframes animatedgradient {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  
+  @media (max-width: 768px) {
+    border-radius: 12px;
+    
+    &:before {
+      border-radius: 11px;
+    }
   }
 `;
 
@@ -134,6 +136,375 @@ const GalaxyBackground = styled.div`
   @keyframes rotate {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+`;
+
+const ProfileContainer = styled.div`
+  padding: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 10px;
+  }
+`;
+
+const ProfileGrid = styled.div`
+  display: grid;
+  grid-template-columns: 300px 1fr;
+  gap: 20px;
+  
+  @media (max-width: 992px) {
+    grid-template-columns: 250px 1fr;
+    gap: 15px;
+  }
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+`;
+
+const ProfileSidebar = styled.div`
+  background: rgba(26, 27, 35, 0.6);
+  border-radius: 16px;
+  padding: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+    border-radius: 12px;
+  }
+`;
+
+const ProfileContent = styled.div`
+  background: rgba(26, 27, 35, 0.6);
+  border-radius: 16px;
+  padding: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 15px;
+    border-radius: 12px;
+  }
+`;
+
+const ProfileAvatar = styled.div`
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto 20px;
+  
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  
+  @media (max-width: 768px) {
+    width: 100px;
+    height: 100px;
+    margin-bottom: 15px;
+  }
+  
+  @media (max-width: 480px) {
+    width: 80px;
+    height: 80px;
+    margin-bottom: 10px;
+  }
+`;
+
+const ProfileName = styled.h2`
+  font-size: 24px;
+  color: #fff;
+  text-align: center;
+  margin-bottom: 10px;
+  
+  @media (max-width: 768px) {
+    font-size: 20px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 18px;
+  }
+`;
+
+const ProfileEmail = styled.p`
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  text-align: center;
+  margin-bottom: 20px;
+  
+  @media (max-width: 480px) {
+    font-size: 12px;
+    margin-bottom: 15px;
+  }
+`;
+
+const ProfileMenu = styled.ul`
+  list-style: none;
+  padding: 0;
+  margin: 0;
+`;
+
+const ProfileMenuItem = styled.li`
+  margin-bottom: 10px;
+  
+  a, button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 15px;
+    border-radius: 8px;
+    color: #fff;
+    text-decoration: none;
+    transition: all 0.3s;
+    background: ${props => props.$active ? 'rgba(255, 255, 255, 0.1)' : 'transparent'};
+    border: none;
+    width: 100%;
+    text-align: left;
+    cursor: pointer;
+    font-size: 16px;
+    
+    &:hover {
+      background: rgba(255, 255, 255, 0.1);
+    }
+  }
+  
+  @media (max-width: 768px) {
+    margin-bottom: 8px;
+    
+    a, button {
+      padding: 10px 12px;
+      font-size: 14px;
+    }
+  }
+`;
+
+const WalletCard = styled.div`
+  background: rgba(26, 27, 35, 0.8);
+  border-radius: 12px;
+  padding: 15px;
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    padding: 12px;
+    margin-bottom: 15px;
+  }
+`;
+
+const WalletHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  
+  h3 {
+    font-size: 18px;
+    color: #fff;
+    margin: 0;
+  }
+  
+  @media (max-width: 768px) {
+    margin-bottom: 12px;
+    
+    h3 {
+      font-size: 16px;
+    }
+  }
+`;
+
+const WalletBalance = styled.div`
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  margin-bottom: 15px;
+  
+  @media (max-width: 768px) {
+    font-size: 20px;
+    margin-bottom: 12px;
+  }
+`;
+
+const WalletActions = styled.div`
+  display: flex;
+  gap: 10px;
+  
+  button {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+    
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+  
+  @media (max-width: 768px) {
+    gap: 8px;
+    
+    button {
+      padding: 8px;
+      font-size: 14px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    flex-direction: column;
+  }
+`;
+
+const AssetList = styled.div`
+  margin-top: 20px;
+  
+  @media (max-width: 768px) {
+    margin-top: 15px;
+  }
+`;
+
+const AssetItem = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  @media (max-width: 768px) {
+    padding: 10px 0;
+  }
+`;
+
+const AssetInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  
+  img {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+  }
+  
+  @media (max-width: 768px) {
+    gap: 8px;
+    
+    img {
+      width: 24px;
+      height: 24px;
+    }
+  }
+`;
+
+const AssetName = styled.div`
+  h4 {
+    font-size: 16px;
+    color: #fff;
+    margin: 0 0 4px;
+  }
+  
+  p {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    margin: 0;
+  }
+  
+  @media (max-width: 768px) {
+    h4 {
+      font-size: 14px;
+      margin: 0 0 2px;
+    }
+    
+    p {
+      font-size: 11px;
+    }
+  }
+`;
+
+const AssetValue = styled.div`
+  text-align: right;
+  
+  h4 {
+    font-size: 16px;
+    color: #fff;
+    margin: 0 0 4px;
+  }
+  
+  p {
+    font-size: 12px;
+    color: ${props => props.$isPositive ? '#0ECB81' : '#F6465D'};
+    margin: 0;
+  }
+  
+  @media (max-width: 768px) {
+    h4 {
+      font-size: 14px;
+      margin: 0 0 2px;
+    }
+    
+    p {
+      font-size: 11px;
+    }
+  }
+`;
+
+const StyledTabs = styled(Tabs)`
+  .react-tabs__tab-list {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    margin: 0 0 20px;
+    padding: 0;
+    display: flex;
+    overflow-x: auto;
+    scrollbar-width: none;
+    
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+  
+  .react-tabs__tab {
+    display: inline-block;
+    border: none;
+    border-bottom: 2px solid transparent;
+    bottom: -1px;
+    position: relative;
+    list-style: none;
+    padding: 12px 20px;
+    cursor: pointer;
+    color: rgba(255, 255, 255, 0.6);
+    background: transparent;
+    white-space: nowrap;
+    
+    &--selected {
+      color: #fff;
+      border-bottom: 2px solid #f79533;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .react-tabs__tab-list {
+      margin: 0 0 15px;
+    }
+    
+    .react-tabs__tab {
+      padding: 10px 15px;
+      font-size: 14px;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .react-tabs__tab {
+      padding: 8px 12px;
+      font-size: 13px;
+    }
   }
 `;
 

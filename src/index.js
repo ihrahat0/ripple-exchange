@@ -10,6 +10,18 @@ import 'bootstrap-icons/font/bootstrap-icons.css';
 import { Buffer } from 'buffer';
 import process from 'process';
 
+// Disable specific styled-component warnings
+const originalConsoleError = console.error;
+console.error = function(msg, ...args) {
+  // Skip styled-component warnings about dynamic creation
+  if (typeof msg === 'string' && 
+     (msg.includes('has been created dynamically') || 
+      msg.includes('You may see this warning because you\'ve called styled inside another component'))) {
+    return;
+  }
+  return originalConsoleError.apply(console, [msg, ...args]);
+};
+
 // Import WebSocket patcher to ensure all WebSockets work with React
 import { patchWebSocket, monkeyPatchReactCleanup } from './utils/cleanup';
 

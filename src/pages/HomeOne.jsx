@@ -14,13 +14,13 @@ import qrCode from '../assets/images/layout/qr-code.png';
 // Define keyframe animations
 const glow = keyframes`
   0% {
-    box-shadow: 0 0 5px rgba(247, 147, 26, 0.5);
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.3), 0 0 20px rgba(247, 147, 26, 0.1);
   }
   50% {
-    box-shadow: 0 0 20px rgba(247, 147, 26, 0.8);
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.5), 0 0 40px rgba(247, 147, 26, 0.2);
   }
   100% {
-    box-shadow: 0 0 5px rgba(247, 147, 26, 0.5);
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.3), 0 0 20px rgba(247, 147, 26, 0.1);
   }
 `;
 
@@ -38,25 +38,28 @@ const gradientFlow = keyframes`
 
 const textGlow = keyframes`
   0% {
-    text-shadow: 0 0 5px rgba(247, 147, 26, 0.5);
+    text-shadow: 0 0 5px rgba(247, 147, 26, 0.3);
   }
   50% {
-    text-shadow: 0 0 20px rgba(247, 147, 26, 0.8), 0 0 30px rgba(247, 147, 26, 0.4);
+    text-shadow: 0 0 10px rgba(247, 147, 26, 0.6);
   }
   100% {
-    text-shadow: 0 0 5px rgba(247, 147, 26, 0.5);
+    text-shadow: 0 0 5px rgba(247, 147, 26, 0.3);
   }
 `;
 
 const borderGlow = keyframes`
   0% {
     border-color: rgba(247, 147, 26, 0.5);
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.3), inset 0 0 5px rgba(247, 147, 26, 0.1);
   }
   50% {
-    border-color: rgba(247, 147, 26, 1);
+    border-color: rgba(247, 147, 26, 0.8);
+    box-shadow: 0 0 20px rgba(247, 147, 26, 0.5), inset 0 0 10px rgba(247, 147, 26, 0.2);
   }
   100% {
     border-color: rgba(247, 147, 26, 0.5);
+    box-shadow: 0 0 10px rgba(247, 147, 26, 0.3), inset 0 0 5px rgba(247, 147, 26, 0.1);
   }
 `;
 
@@ -112,11 +115,44 @@ const gridGlow = keyframes`
   }
 `;
 
+// Add these keyframes animations
+const shine = keyframes`
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+`;
+
+const float = keyframes`
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+`;
+
 // Styled components for the new design
 const Container = styled.div`
   max-width: 1200px;
   margin: 0 auto;
   padding: 0 20px;
+  
+  @media (max-width: 768px) {
+    padding: 0 15px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 0 10px;
+  }
 `;
 
 const HeroSection = styled.section`
@@ -172,52 +208,76 @@ const FloatingCoins = styled.div`
   width: 300px;
   height: 300px;
   
-  @keyframes float {
-    0% {
-      transform: translateY(0px);
-    }
-    50% {
-      transform: translateY(-20px);
-    }
-    100% {
-      transform: translateY(0px);
-    }
+  @media (max-width: 992px) {
+    width: 250px;
+    height: 250px;
+  }
+  
+  @media (max-width: 480px) {
+    width: 200px;
+    height: 200px;
   }
 `;
 
 const CoinIcon = styled.img`
   position: absolute;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+  width: ${props => props.$size || '60px'};
+  height: ${props => props.$size || '60px'};
+  top: ${props => props.$top || '0'};
+  left: ${props => props.$left || '0'};
+  animation: ${float} ${props => props.$duration || '6s'} ease-in-out infinite;
+  animation-delay: ${props => props.$delay || '0s'};
+  filter: drop-shadow(0 0 10px rgba(247, 147, 26, 0.3));
+  
+  @media (max-width: 992px) {
+    width: ${props => props.$mobileSize || props.$size || '50px'};
+    height: ${props => props.$mobileSize || props.$size || '50px'};
+  }
+  
+  @media (max-width: 480px) {
+    width: ${props => props.$smallMobileSize || props.$mobileSize || props.$size || '40px'};
+    height: ${props => props.$smallMobileSize || props.$mobileSize || props.$size || '40px'};
+  }
 `;
 
 const HeroTitle = styled.h1`
   font-size: 48px;
   font-weight: 700;
   margin-bottom: 20px;
-  background: linear-gradient(90deg, #F7931A, #FF6B6B);
+  background: linear-gradient(to right, #F7931A, #FFDB60);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
+  animation: ${textGlow} 3s infinite ease-in-out;
+  
+  @media (max-width: 992px) {
+    font-size: 40px;
+  }
   
   @media (max-width: 768px) {
-    font-size: 36px;
+    font-size: 32px;
   }
   
   @media (max-width: 480px) {
     font-size: 28px;
+    margin-bottom: 15px;
   }
 `;
 
 const HeroSubtitle = styled.p`
   font-size: 18px;
-  line-height: 1.6;
-  margin-bottom: 30px;
   color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 30px;
+  line-height: 1.6;
   
   @media (max-width: 768px) {
     font-size: 16px;
+    margin-bottom: 25px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 14px;
+    margin-bottom: 20px;
   }
 `;
 
@@ -240,78 +300,87 @@ const HeroImage = styled.div`
 
 const SignupBox = styled.div`
   display: flex;
+  gap: 10px;
   margin-bottom: 20px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  padding: 6px;
-  position: relative;
-  overflow: hidden;
-  animation: ${glow} 4s ease-in-out infinite;
+  max-width: 500px;
   
-  &::before {
-    content: '';
-    position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    bottom: -2px;
-    border-radius: 10px;
-    background: linear-gradient(45deg, #F7931A, #FF9E2A, #F7931A);
-    background-size: 400% 400%;
-    z-index: -1;
-    animation: ${gradientFlow} 15s ease infinite;
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 15px;
   }
 `;
 
 const StyledInput = styled.input`
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  border-radius: 6px;
-  padding: 12px 15px;
+  flex: 1;
+  padding: 14px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(247, 147, 26, 0.3);
+  background: rgba(255, 255, 255, 0.05);
   color: #fff;
-  width: 100%;
-  margin-right: 15px;
+  font-size: 16px;
+  outline: none;
+  transition: all 0.3s ease;
+  
+  &:focus {
+    border-color: rgba(247, 147, 26, 0.6);
+    box-shadow: 0 0 15px rgba(247, 147, 26, 0.3);
+  }
+  
   &::placeholder {
     color: rgba(255, 255, 255, 0.5);
   }
-  &:focus {
-    outline: none;
-    background: rgba(255, 255, 255, 0.15);
-  }
-`;
-
-const Button = styled.button`
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 16px;
-  cursor: pointer;
-  transition: all 0.3s;
   
   @media (max-width: 768px) {
-    padding: 10px 20px;
     font-size: 14px;
+    padding: 12px 16px;
   }
 `;
 
-const PrimaryButton = styled(Button)`
-  background: var(--primary);
-  color: white;
+const PrimaryButton = styled.button`
+  background: linear-gradient(90deg, #F7931A, #FFDB60);
+  color: #000;
+  font-weight: 600;
+  padding: 14px 24px;
+  border-radius: 8px;
   border: none;
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
+  white-space: nowrap;
   
   &:hover {
-    background: var(--primary-dark);
-    box-shadow: 0 0 15px rgba(247, 147, 26, 0.5);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(247, 147, 26, 0.4);
+  }
+  
+  @media (max-width: 768px) {
+    font-size: 14px;
+    padding: 12px 20px;
+    width: 100%;
   }
 `;
 
-const SecondaryButton = styled(Button)`
+const SecondaryButton = styled.button`
   background: transparent;
-  color: var(--primary);
-  border: 1px solid var(--primary);
+  color: #F7931A;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(247, 147, 26, 0.4);
+  cursor: pointer;
+  font-size: 16px;
+  transition: all 0.3s ease;
   
   &:hover {
     background: rgba(247, 147, 26, 0.1);
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(247, 147, 26, 0.2);
+  }
+  
+  @media (max-width: 768px) {
+    font-size: 14px;
+    padding: 10px 16px;
   }
 `;
 
@@ -410,6 +479,11 @@ const StepCard = styled.div`
   
   @media (max-width: 768px) {
     margin-top: ${props => props.$firstStep ? '20px' : '0'};
+    padding: 20px;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 15px;
   }
 `;
 
@@ -451,90 +525,22 @@ const StepDescription = styled.p`
   margin-bottom: 20px;
 `;
 
-const ProductsSection = styled.div`
-  margin: 60px 0;
-`;
-
-const ProductsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-  margin-top: 40px;
-`;
-
-const ProductCard = styled.div`
-  background: #13131D;
-  border-radius: 12px;
-  padding: 30px;
-  transition: transform 0.3s, box-shadow 0.3s;
-  position: relative;
-  overflow: hidden;
-  
-  &:hover {
-    transform: translateY(-5px);
-    animation: ${glow} 2s ease-in-out infinite;
-  }
-  
-  &::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #F7931A, #FF9E2A, #F7931A);
-    background-size: 200% 200%;
-    opacity: 0;
-    transition: opacity 0.3s;
-    animation: ${gradientFlow} 3s ease infinite;
-  }
-  
-  &:hover::before {
-    opacity: 1;
-  }
-`;
-
-const ProductIcon = styled.img`
-  width: 60px;
-  height: 60px;
-  margin-bottom: 20px;
-`;
-
-const ProductTitle = styled.h3`
-  color: #fff;
-  font-size: 18px;
-  margin-bottom: 15px;
-`;
-
-const ProductDescription = styled.p`
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-  margin-bottom: 20px;
-`;
-
-const DetailsLink = styled(Link)`
-  color: #F7931A;
-  font-weight: 500;
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  
-  &:hover {
-    text-decoration: underline;
-  }
-  
-  &::after {
-    content: '→';
-    margin-left: 5px;
-  }
-`;
-
 const StatsSection = styled.div`
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
   margin: 60px 0;
   text-align: center;
+  
+  @media (max-width: 992px) {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 30px;
+  }
+  
+  @media (max-width: 480px) {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
 `;
 
 const StatItem = styled.div`
@@ -546,131 +552,6 @@ const StatValue = styled.div`
   font-size: 32px;
   font-weight: 700;
   margin-bottom: 10px;
-`;
-
-const StatLabel = styled.div`
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
-`;
-
-const MobileAppSection = styled.div`
-  background: #13131D;
-  border-radius: 16px;
-  padding: 60px 0;
-  margin: 60px 0;
-  text-align: center;
-`;
-
-const AppContainer = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 0 20px;
-`;
-
-const AppLeft = styled.div`
-  text-align: left;
-`;
-
-const AppRight = styled.div`
-  text-align: center;
-`;
-
-const AppButtons = styled.div`
-  display: flex;
-  gap: 15px;
-  margin-top: 30px;
-`;
-
-const AppButton = styled.a`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: #1E1E2D;
-  border-radius: 8px;
-  padding: 12px 20px;
-  color: #fff;
-  text-decoration: none;
-  
-  &:hover {
-    background: #2A2A3C;
-  }
-`;
-
-const AppIcon = styled.div`
-  margin-right: 10px;
-  font-size: 24px;
-`;
-
-const QRCode = styled.img`
-  width: 120px;
-  height: 120px;
-  margin-bottom: 15px;
-`;
-
-const FAQSection = styled.div`
-  margin: 60px 0;
-`;
-
-const FAQItem = styled.div`
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  margin-bottom: 15px;
-`;
-
-const FAQQuestion = styled.div`
-  color: #fff;
-  font-size: 18px;
-  font-weight: 500;
-  padding: 20px 0;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  
-  &::after {
-    content: ${props => props.$isOpen ? '"-"' : '"+"'};
-    font-size: 22px;
-    color: #F7931A;
-  }
-`;
-
-const FAQAnswer = styled.div`
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 16px;
-  padding: 0 0 20px;
-  display: ${props => props.$isOpen ? 'block' : 'none'};
-`;
-
-const CTASection = styled.section`
-  padding: 80px 0;
-  background: linear-gradient(135deg, #0B0B0F 0%, #1A1A25 100%);
-  text-align: center;
-  
-  @media (max-width: 768px) {
-    padding: 60px 0;
-  }
-  
-  @media (max-width: 480px) {
-    padding: 40px 0;
-  }
-`;
-
-const CTAContainer = styled.div`
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 0 20px;
-  
-  @media (max-width: 768px) {
-    max-width: 100%;
-  }
-`;
-
-const CTATitle = styled.h2`
-  font-size: 36px;
-  font-weight: 700;
-  margin-bottom: 20px;
   
   @media (max-width: 768px) {
     font-size: 28px;
@@ -681,16 +562,548 @@ const CTATitle = styled.h2`
   }
 `;
 
+const StatLabel = styled.div`
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+`;
+
+const MobileAppSection = styled.section`
+  padding: 80px 0;
+  position: relative;
+  background: linear-gradient(180deg, rgba(19, 19, 27, 0.7) 0%, rgba(33, 33, 41, 0.7) 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(247, 147, 26, 0.1);
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(247, 147, 26, 0.5), transparent);
+    z-index: 1;
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 30% 20%, rgba(247, 147, 26, 0.2) 0%, transparent 40%),
+      radial-gradient(circle at 70% 80%, rgba(255, 219, 96, 0.15) 0%, transparent 40%);
+    background-size: 200% 200%;
+    z-index: -1;
+    pointer-events: none;
+  }
+`;
+
+const MobileAppTitle = styled.h2`
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  text-align: left;
+  background: linear-gradient(to right, #F7931A, #FFDB60);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ${textGlow} 3s infinite ease-in-out, ${shine} 6s linear infinite;
+  background-size: 200% auto;
+  
+  @media (max-width: 768px) {
+    font-size: 28px;
+    text-align: center;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 24px;
+  }
+`;
+
+const AppContainer = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  align-items: center;
+  
+  @media (max-width: 992px) {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+`;
+
+const AppLeft = styled.div`
+  text-align: left;
+  
+  @media (max-width: 768px) {
+    text-align: center;
+  }
+`;
+
+const AppRight = styled.div`
+  text-align: center;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 200px;
+    height: 200px;
+    background: radial-gradient(circle at center, rgba(247, 147, 26, 0.2) 0%, transparent 70%);
+    border-radius: 50%;
+    filter: blur(15px);
+    animation: ${pulseGlow} 4s infinite ease-in-out;
+  }
+  
+  .device-text {
+    margin-top: 15px;
+    color: #F7931A;
+    font-weight: 500;
+    text-shadow: 0 0 10px rgba(247, 147, 26, 0.4);
+  }
+`;
+
+const AppDescription = styled.p`
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 18px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  text-align: left;
+  max-width: 500px;
+  
+  @media (max-width: 768px) {
+    text-align: center;
+    margin: 0 auto 20px;
+    font-size: 16px;
+  }
+`;
+
+const AppButtons = styled.div`
+  display: flex;
+  gap: 15px;
+  margin-top: 30px;
+  
+  @media (max-width: 768px) {
+    justify-content: center;
+  }
+  
+  @media (max-width: 480px) {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+`;
+
+const AppButton = styled.a`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(30, 30, 45, 0.7);
+  border: 1px solid rgba(247, 147, 26, 0.3);
+  border-radius: 12px;
+  padding: 15px 25px;
+  color: #fff;
+  text-decoration: none;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(247, 147, 26, 0.1);
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    transform: skewX(-25deg);
+    transition: all 0.5s ease;
+  }
+  
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(247, 147, 26, 0.2);
+    border-color: rgba(247, 147, 26, 0.5);
+    
+    &::before {
+      left: 100%;
+    }
+  }
+`;
+
+const AppIcon = styled.div`
+  font-size: 24px;
+  margin-right: 12px;
+  filter: drop-shadow(0 0 5px rgba(247, 147, 26, 0.5));
+  animation: ${float} 3s ease-in-out infinite;
+`;
+
+const AppTextContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  
+  .app-label {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+  
+  .app-store {
+    font-weight: 600;
+    color: #F7931A;
+    text-shadow: 0 0 5px rgba(247, 147, 26, 0.3);
+  }
+`;
+
+const DeviceImage = styled.div`
+  width: 180px;
+  height: 180px;
+  margin: 0 auto;
+  position: relative;
+  
+  &::before {
+    content: '📱';
+    font-size: 120px;
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    filter: drop-shadow(0 0 20px rgba(247, 147, 26, 0.5));
+    animation: ${float} 4s ease-in-out infinite;
+  }
+`;
+
+const FAQSection = styled.div`
+  margin: 80px 0;
+  padding: 40px 0;
+  position: relative;
+  border-radius: 20px;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 30% 20%, rgba(247, 147, 26, 0.15) 0%, transparent 50%);
+    z-index: -1;
+    pointer-events: none;
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 70% 80%, rgba(247, 147, 26, 0.1) 0%, transparent 50%);
+    z-index: -1;
+    pointer-events: none;
+  }
+`;
+
+const FAQContainer = styled.div`
+  backdrop-filter: blur(10px);
+  background: linear-gradient(180deg, rgba(19, 19, 27, 0.7) 0%, rgba(33, 33, 41, 0.7) 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  padding: 20px;
+  border: 1px solid rgba(247, 147, 26, 0.1);
+  position: relative;
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(247, 147, 26, 0.5), transparent);
+    z-index: 1;
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 10% 20%, rgba(247, 147, 26, 0.2) 0%, transparent 30%),
+      radial-gradient(circle at 80% 60%, rgba(247, 147, 26, 0.15) 0%, transparent 30%);
+    background-size: 200% 200%;
+    z-index: -1;
+    pointer-events: none;
+  }
+`;
+
+const FAQHeader = styled.h2`
+  text-align: center;
+  font-size: 32px;
+  font-weight: 700;
+  margin-bottom: 30px;
+  background: linear-gradient(to right, #F7931A, #FFDB60);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: ${textGlow} 3s infinite ease-in-out, ${shine} 6s linear infinite;
+  background-size: 200% auto;
+`;
+
+const FAQItem = styled.div`
+  margin: 0;
+  padding: 5px 20px;
+  border-radius: 15px;
+  margin-bottom: 15px;
+  transition: all 0.3s ease;
+  background: ${props => props.$isOpen ? 'rgba(247, 147, 26, 0.1)' : 'transparent'};
+  border: 1px solid ${props => props.$isOpen ? 'rgba(247, 147, 26, 0.3)' : 'rgba(255, 255, 255, 0.05)'};
+  
+  &:hover {
+    border-color: rgba(247, 147, 26, 0.3);
+    background: rgba(247, 147, 26, 0.05);
+    box-shadow: ${props => props.$isOpen ? '0 0 20px rgba(247, 147, 26, 0.3)' : '0 0 15px rgba(247, 147, 26, 0.15)'};
+  }
+  
+  ${props => props.$isOpen && css`
+    animation: ${borderGlow} 3s infinite ease-in-out;
+  `}
+`;
+
+const FAQQuestion = styled.div`
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  padding: 20px 0;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+  
+  ${props => props.$isOpen && css`
+    background: linear-gradient(to right, #F7931A, #FFDB60);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  `}
+  
+  &:hover {
+    color: #F7931A;
+    text-shadow: 0 0 10px rgba(247, 147, 26, 0.6);
+  }
+  
+  &::after {
+    content: ${props => props.$isOpen ? '"-"' : '"+"'};
+    font-size: 22px;
+    color: #F7931A;
+    text-shadow: 0 0 10px rgba(247, 147, 26, 0.4);
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    transition: all 0.3s ease;
+    
+    ${props => props.$isOpen && css`
+      background: linear-gradient(to right, #F7931A, #FFDB60);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      animation: ${float} 2s infinite ease-in-out;
+    `}
+  }
+`;
+
+const FAQAnswer = styled.div`
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 16px;
+  line-height: 1.6;
+  padding: ${props => props.$isOpen ? '0 0 20px' : '0'};
+  max-height: ${props => props.$isOpen ? '1000px' : '0'};
+  opacity: ${props => props.$isOpen ? '1' : '0'};
+  overflow: hidden;
+  transition: all 0.5s ease;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(circle at 50% 100%, rgba(247, 147, 26, 0.1) 0%, transparent 70%);
+    z-index: -1;
+    pointer-events: none;
+    opacity: ${props => props.$isOpen ? '1' : '0'};
+    transition: opacity 0.5s ease;
+  }
+  
+  p {
+    margin-bottom: 10px;
+  }
+  
+  a {
+    color: #F7931A;
+    text-decoration: none;
+    font-weight: 600;
+    
+    &:hover {
+      text-shadow: 0 0 8px rgba(247, 147, 26, 0.6);
+    }
+  }
+`;
+
+const CTASection = styled.section`
+  padding: 80px 0;
+  background: linear-gradient(180deg, rgba(19, 19, 27, 0.7) 0%, rgba(33, 33, 41, 0.7) 100%);
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  margin: 80px 0;
+  border: 1px solid rgba(247, 147, 26, 0.1);
+  
+  @media (max-width: 768px) {
+    padding: 60px 0;
+    margin: 60px 0;
+  }
+  
+  @media (max-width: 480px) {
+    padding: 40px 0;
+    margin: 40px 0;
+  }
+  
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(247, 147, 26, 0.5), transparent);
+    z-index: 1;
+  }
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: 
+      radial-gradient(circle at 10% 20%, rgba(247, 147, 26, 0.2) 0%, transparent 30%),
+      radial-gradient(circle at 80% 60%, rgba(247, 147, 26, 0.15) 0%, transparent 30%);
+    background-size: 200% 200%;
+    z-index: -1;
+    pointer-events: none;
+  }
+`;
+
+const CTAContainer = styled.div`
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 0 20px;
+  position: relative;
+  z-index: 1;
+  
+  @media (max-width: 768px) {
+    max-width: 100%;
+  }
+`;
+
+const CTATitle = styled.h2`
+  font-size: 36px;
+  font-weight: 700;
+  margin-bottom: 20px;
+  background: linear-gradient(to right, #F7931A, #FFDB60);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  
+  @media (max-width: 768px) {
+    font-size: 30px;
+  }
+  
+  @media (max-width: 480px) {
+    font-size: 24px;
+    margin-bottom: 15px;
+  }
+`;
+
 const CTAButtons = styled.div`
   display: flex;
   justify-content: center;
   gap: 20px;
-  margin-top: 30px;
+  margin-top: 40px;
   
   @media (max-width: 480px) {
     flex-direction: column;
     align-items: center;
     gap: 15px;
+  }
+`;
+
+const CTAPrimaryButton = styled.button`
+  background: linear-gradient(90deg, #F7931A, #FFDB60);
+  color: #13131D;
+  border: none;
+  border-radius: 30px;
+  padding: 15px 35px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 0 15px rgba(247, 147, 26, 0.4);
+  position: relative;
+  overflow: hidden;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.2),
+      transparent
+    );
+    transition: all 0.5s ease;
+  }
+  
+  &:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(247, 147, 26, 0.5);
+    
+    &::before {
+      left: 100%;
+    }
+  }
+  
+  &:active {
+    transform: translateY(-2px);
   }
 `;
 
@@ -737,43 +1150,97 @@ const MarqueeText = styled.span`
 // Add glowing orb effect
 const GlowingOrb = styled.div`
   position: absolute;
-  width: 400px;
-  height: 400px;
+  width: 300px;
+  height: 300px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(247, 147, 26, 0.1) 0%, rgba(0, 0, 0, 0) 70%);
-  top: -150px;
-  right: -150px;
-  z-index: 0;
+  top: 10%;
+  left: 5%;
+  background: radial-gradient(circle, rgba(247, 147, 26, 0.3) 0%, rgba(247, 147, 26, 0.1) 30%, transparent 70%);
   filter: blur(40px);
-  animation: ${pulseGlow} 15s ease-in-out infinite;
+  opacity: 0.6;
+  z-index: 0;
+  animation: ${pulseGlow} 8s infinite ease-in-out;
+  
+  @media (max-width: 768px) {
+    width: 200px;
+    height: 200px;
+    top: 5%;
+    left: -10%;
+  }
+  
+  @media (max-width: 480px) {
+    width: 150px;
+    height: 150px;
+  }
 `;
 
 const GlowingOrb2 = styled.div`
   position: absolute;
-  width: 350px;
-  height: 350px;
+  width: 250px;
+  height: 250px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(247, 147, 26, 0.08) 0%, rgba(0, 0, 0, 0) 70%);
-  bottom: -100px;
-  right: 30%;
+  top: 20%;
+  right: 10%;
+  background: radial-gradient(circle, rgba(247, 147, 26, 0.2) 0%, rgba(247, 147, 26, 0.05) 30%, transparent 70%);
+  filter: blur(30px);
+  opacity: 0.5;
   z-index: 0;
-  filter: blur(50px);
-  animation: ${pulseGlow} 12s ease-in-out infinite;
-  animation-delay: 2s;
+  animation: ${pulseGlow} 10s infinite ease-in-out reverse;
+  
+  @media (max-width: 768px) {
+    width: 180px;
+    height: 180px;
+    right: -5%;
+  }
+  
+  @media (max-width: 480px) {
+    width: 120px;
+    height: 120px;
+  }
 `;
 
-// Additional glowing element at the bottom
 const GlowingBottom = styled.div`
   position: absolute;
-  bottom: -50px;
+  width: 100%;
+  height: 200px;
+  bottom: 0;
   left: 0;
   right: 0;
-  height: 120px;
-  background: radial-gradient(ellipse at center, rgba(247, 147, 26, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
-  filter: blur(30px);
+  background: radial-gradient(ellipse at center, rgba(247, 147, 26, 0.2) 0%, transparent 70%);
+  filter: blur(40px);
+  opacity: 0.3;
   z-index: 0;
-  animation: ${pulseGlow} 10s ease-in-out infinite;
-  animation-delay: 1s;
+  
+  @media (max-width: 768px) {
+    height: 120px;
+  }
+  
+  @media (max-width: 480px) {
+    height: 80px;
+  }
+`;
+
+// Add the Button styled component definition
+const Button = styled.button`
+  background: linear-gradient(90deg, #F7931A, #FFDB60);
+  color: #000;
+  font-weight: 600;
+  padding: 12px 20px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(247, 147, 26, 0.4);
+  }
+  
+  @media (max-width: 768px) {
+    padding: 10px 16px;
+    font-size: 13px;
+  }
 `;
 
 function HomeOne() {
@@ -839,6 +1306,7 @@ function HomeOne() {
               <SecondaryButton $secondary onClick={handleSignUpForRewards}>Sign Up for Rewards →</SecondaryButton>
             </HeroLeft>
             
+            {/* Add Marquee Banner */}
             <HeroRight>
               <FloatingCoins>
                 <CoinIcon src={btcIcon} alt="Bitcoin" style={{ left: '10%', top: '20%', animation: 'float 6s ease-in-out infinite' }} />
@@ -856,24 +1324,24 @@ function HomeOne() {
               {[...Array(2)].map((_, index) => (
                 <React.Fragment key={index}>
                   <MarqueeItem>
-                    <MarqueeIcon color="#F7931A">RACE</MarqueeIcon>
-                    <MarqueeText>Race for Your Share of a 100,000 USDC Prize Pool!</MarqueeText>
+                    <MarqueeIcon color="green">Fast</MarqueeIcon>
+                    <MarqueeText>Longs & Shorts on 1 click</MarqueeText>
                   </MarqueeItem>
                   <MarqueeItem>
-                    <MarqueeIcon color="#FF4949">ALERT</MarqueeIcon>
-                    <MarqueeText>Security Alert: Beware of WhatsApp Phishing Groups</MarqueeText>
+                    <MarqueeIcon color="green">One Solution</MarqueeIcon>
+                    <MarqueeText>One platform One solution on 1 Click</MarqueeText>
                   </MarqueeItem>
                   <MarqueeItem>
-                    <MarqueeIcon color="#3772FF">NEWS</MarqueeIcon>
-                    <MarqueeText>Ripple Exchange to Support Cosmos (ATOM) Staking</MarqueeText>
+                    <MarqueeIcon color="green">No Fees</MarqueeIcon>
+                    <MarqueeText>NO Fee NO interest on Perpetuals</MarqueeText>
                   </MarqueeItem>
                   <MarqueeItem>
-                    <MarqueeIcon color="#0ECB81">NEW</MarqueeIcon>
-                    <MarqueeText>Introducing Zero-Fee Trading for BTC and ETH Pairs</MarqueeText>
+                    <MarqueeIcon color="green">Get updated</MarqueeIcon>
+                    <MarqueeText>Get updated with the latest pairs and memes</MarqueeText>
                   </MarqueeItem>
                   <MarqueeItem>
-                    <MarqueeIcon color="#F7931A">BONUS</MarqueeIcon>
-                    <MarqueeText>Get $10 USDT When You Complete KYC and Make Your First Deposit</MarqueeText>
+                    <MarqueeIcon color="green">40x Leverage</MarqueeIcon>
+                    <MarqueeText>Upto 40x Leverage on Perpetuals</MarqueeText>
                   </MarqueeItem>
                 </React.Fragment>
               ))}
@@ -908,7 +1376,7 @@ function HomeOne() {
                 <StepDescription>
                   Register for an account with your email and set a secure password to begin your crypto journey.
                 </StepDescription>
-                <Button>Sign Up Now</Button>
+                <Button onClick={() => navigate('/register')}>Sign Up Now</Button>
               </StepCard>
               
               <StepCard>
@@ -918,7 +1386,7 @@ function HomeOne() {
                 <StepDescription>
                   Fund your account with USD or directly deposit cryptocurrency to start trading.
                 </StepDescription>
-                <Button>Deposit Now</Button>
+                <Button onClick={() => navigate('/deposit')}>Deposit Now</Button>
               </StepCard>
               
               <StepCard>
@@ -928,53 +1396,11 @@ function HomeOne() {
                 <StepDescription>
                   Buy, sell, and trade cryptocurrency with ease on our secure and intuitive platform.
                 </StepDescription>
-                <Button>Start Now</Button>
+                <Button onClick={() => navigate('/trading')}>Start Now</Button>
               </StepCard>
             </StepsContainer>
           </Container>
         </GettingStartedSection>
-        
-        <ProductsSection>
-          <SectionTitle>Discover More Products</SectionTitle>
-          
-          <ProductsGrid>
-            <ProductCard>
-              <ProductIcon src={tetIcon} />
-              <ProductTitle>Ripple Card</ProductTitle>
-              <ProductDescription>
-                Spend USD & crypto with cashback and exclusive perks through our global card.
-              </ProductDescription>
-              <DetailsLink to="/card">Details</DetailsLink>
-            </ProductCard>
-            
-            <ProductCard>
-              <ProductIcon src={btcIcon} />
-              <ProductTitle>Ripple Earn</ProductTitle>
-              <ProductDescription>
-                Grow and maximize your assets with flexible staking and yield offerings.
-              </ProductDescription>
-              <DetailsLink to="/earn">Details</DetailsLink>
-            </ProductCard>
-            
-            <ProductCard>
-              <ProductIcon src={ethIcon} />
-              <ProductTitle>Copy Trading</ProductTitle>
-              <ProductDescription>
-                Automatically replicate the strategies of expert traders on our platform.
-              </ProductDescription>
-              <DetailsLink to="/copy-trading">Details</DetailsLink>
-            </ProductCard>
-            
-            <ProductCard>
-              <ProductIcon src={bnbIcon} />
-              <ProductTitle>Trading Bot</ProductTitle>
-              <ProductDescription>
-                Automate your trading with custom strategies and smart algorithms.
-              </ProductDescription>
-              <DetailsLink to="/bot">Details</DetailsLink>
-            </ProductCard>
-          </ProductsGrid>
-        </ProductsSection>
         
         <StatsSection>
           <StatItem>
@@ -1001,66 +1427,62 @@ function HomeOne() {
         <MobileAppSection>
           <AppContainer>
             <AppLeft>
-              <SectionTitle>Trade Anytime, Anywhere.</SectionTitle>
-              <SectionText>
+              <MobileAppTitle>Trade Anytime, Anywhere.</MobileAppTitle>
+              <AppDescription>
                 Our intuitive mobile app keeps you connected to the cryptocurrency market
                 wherever you are, day or night.
-              </SectionText>
+              </AppDescription>
               
               <AppButtons>
                 <AppButton href="#" target="_blank">
                   <AppIcon>🍎</AppIcon>
-                  <div>
-                    <div style={{ fontSize: '12px' }}>Download on the</div>
-                    <div style={{ fontWeight: '600' }}>App Store</div>
-                  </div>
+                  <AppTextContainer>
+                    <span className="app-label">Coming Soon on</span>
+                    <span className="app-store">App Store</span>
+                  </AppTextContainer>
                 </AppButton>
                 
                 <AppButton href="#" target="_blank">
                   <AppIcon>🤖</AppIcon>
-                  <div>
-                    <div style={{ fontSize: '12px' }}>Get it on</div>
-                    <div style={{ fontWeight: '600' }}>Google Play</div>
-                  </div>
+                  <AppTextContainer>
+                    <span className="app-label">Coming Soon on</span>
+                    <span className="app-store">Google Play</span>
+                  </AppTextContainer>
                 </AppButton>
               </AppButtons>
             </AppLeft>
             
             <AppRight>
-              <QRCode src={qrCode} alt="QR Code" />
-              <div style={{ color: '#fff', fontSize: '14px' }}>
-                Scan & Download
-              </div>
-              <div style={{ color: 'rgba(255, 255, 255, 0.7)', fontSize: '12px', marginTop: '5px' }}>
-                iOS & Android
-              </div>
+              <DeviceImage />
+              <div className="device-text">iOS & Android</div>
             </AppRight>
           </AppContainer>
         </MobileAppSection>
         
         <FAQSection>
-          <SectionTitle>FAQs</SectionTitle>
-          
-          {faqItems.map((item, index) => (
-            <FAQItem key={index}>
-              <FAQQuestion 
-                $isOpen={openFAQ === index + 1}
-                onClick={() => setOpenFAQ(openFAQ === index + 1 ? 0 : index + 1)}
-              >
-                {item.question}
-              </FAQQuestion>
-              <FAQAnswer $isOpen={openFAQ === index + 1}>
-                {item.answer}
-              </FAQAnswer>
-            </FAQItem>
-          ))}
+          <FAQHeader>Frequently Asked Questions</FAQHeader>
+          <FAQContainer>
+            {faqItems.map((item, index) => (
+              <FAQItem key={index} $isOpen={openFAQ === index + 1}>
+                <FAQQuestion 
+                  $isOpen={openFAQ === index + 1}
+                  onClick={() => setOpenFAQ(openFAQ === index + 1 ? 0 : index + 1)}
+                >
+                  {item.question}
+                </FAQQuestion>
+                <FAQAnswer $isOpen={openFAQ === index + 1}>
+                  {item.answer}
+                </FAQAnswer>
+              </FAQItem>
+            ))}
+          </FAQContainer>
         </FAQSection>
         
         <CTASection>
           <CTAContainer>
             <CTATitle>Embark on Your Crypto Journey Today!</CTATitle>
             <CTAButtons>
-              <PrimaryButton onClick={() => navigate('/register')}>Sign Up Now</PrimaryButton>
+              <CTAPrimaryButton onClick={() => navigate('/register')}>Sign Up Now</CTAPrimaryButton>
             </CTAButtons>
           </CTAContainer>
         </CTASection>
