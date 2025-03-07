@@ -4,14 +4,15 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const emailService = require('./server/utils/mockEmailService');
+const path = require('path');
 
 // Initialize the app
 const app = express();
-const port = 3001; // Hardcoded port to avoid conflicts
+const port = process.env.PORT || 3001;
 
 // CORS options
 const corsOptions = {
-  origin: ['http://localhost:3000', 'https://rippleexchange.org'],
+  origin: ['http://localhost:3000', 'https://rippleexchange.org', 'http://rippleexchange.org'],
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -19,6 +20,9 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
+
+// Serve emails directory for viewing saved emails in production
+app.use('/emails', express.static(path.join(__dirname, 'emails')));
 
 // Welcome route for testing
 app.get('/', (req, res) => {

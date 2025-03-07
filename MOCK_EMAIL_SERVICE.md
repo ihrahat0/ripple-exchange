@@ -25,6 +25,13 @@ The mock email service is a fallback solution for when SMTP email services are u
 2. Each email is saved as an HTML file with a filename format: `[timestamp]-[recipient]-[subject].html`
 3. To view an email, open the HTML file in any web browser
 
+#### Local Development
+- Access saved emails directly by opening the HTML files in your browser
+
+#### Production (rippleexchange.org)
+- Access saved emails through the URL: `https://rippleexchange.org/emails/`
+- The emails directory is served by Nginx with autoindex enabled, allowing you to browse all saved emails
+
 ### Testing Email Functionality
 
 You can test the email functionality using the provided test script:
@@ -60,6 +67,34 @@ The mock email service is implemented in `server/utils/mockEmailService.js` and 
 - `sendPasswordChangeConfirmation()` - Sends a password change confirmation
 - `send2FAStatusChangeEmail()` - Sends a 2FA status change notification
 
+## Production Deployment
+
+To deploy this service on your production server (rippleexchange.org):
+
+1. Build the frontend:
+   ```bash
+   npm run build
+   ```
+
+2. Setup your server:
+   - Copy the provided `nginx.conf` to your server
+   - Use the `deploy.sh` script to automate the deployment process
+
+3. Nginx Configuration:
+   - The provided configuration serves the frontend at `https://rippleexchange.org`
+   - API endpoints are proxied to the Node.js server at `/api`
+   - Saved emails are accessible at `https://rippleexchange.org/emails/`
+
+4. Directory Structure:
+   ```
+   /var/www/rippleexchange.org/
+   ├── frontend/        # Frontend static files
+   ├── emails/          # Saved email HTML files
+   ├── server/          # Server code
+   ├── server.js        # Main server file
+   └── .env             # Environment configuration
+   ```
+
 ## Switching Back to Real Email Service
 
 To switch back to the real email service:
@@ -86,6 +121,9 @@ To switch back to the real email service:
 If you encounter issues with the mock email service:
 
 1. Ensure the `emails` directory exists at the root of the project
-2. Check that the application has write permissions to the directory
+2. Check that the application has write permissions to the directory (chmod 777 in production)
 3. Verify that the server is running and accessible
-4. Check the server logs for any error messages 
+4. Check the server logs for any error messages
+5. For production issues:
+   - Check Nginx error logs: `/var/log/nginx/rippleexchange.error.log`
+   - Check PM2 logs: `pm2 logs ripple-server` 

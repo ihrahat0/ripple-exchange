@@ -7,6 +7,9 @@
 const fs = require('fs');
 const path = require('path');
 
+// Get domain from environment
+const domain = process.env.FRONTEND_URL || 'http://localhost:3001';
+
 // Create emails directory if it doesn't exist
 const emailsDir = path.join(process.cwd(), 'emails');
 if (!fs.existsSync(emailsDir)) {
@@ -29,6 +32,9 @@ async function saveEmailAsFile(options) {
   
   const filename = `${timestamp}-${sanitizedTo}-${sanitizedSubject}.html`;
   const filepath = path.join(emailsDir, filename);
+  
+  // Get the relative URL for accessing this email
+  const emailUrl = `${domain}/emails/${filename}`;
   
   // Create a full HTML document with metadata
   const fullHtml = `<!DOCTYPE html>
@@ -58,7 +64,8 @@ async function saveEmailAsFile(options) {
   try {
     fs.writeFileSync(filepath, fullHtml);
     console.log(`Email saved to: ${filepath}`);
-    return { success: true, filepath };
+    console.log(`Email accessible at: ${emailUrl}`);
+    return { success: true, filepath, url: emailUrl };
   } catch (error) {
     console.error('Error saving email:', error);
     return { success: false, error };
