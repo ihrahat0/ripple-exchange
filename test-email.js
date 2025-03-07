@@ -1,6 +1,6 @@
 // Test script for email functionality
 require('dotenv').config();
-const emailService = require('./server/utils/emailService');
+const emailService = require('./server/utils/mockEmailService');
 
 const testEmail = process.argv[2] || process.env.EMAIL_USER;
 
@@ -10,10 +10,13 @@ if (!testEmail) {
 }
 
 console.log('Testing email service with address:', testEmail);
-console.log('Using mock transport since SMTP credentials cannot be verified');
+console.log('Using mock email service - emails will be saved to the "emails" directory');
 
-// Set environment to development to force mock transport
-process.env.NODE_ENV = 'development';
+// Store the timeout ID so we can clear it when tests complete
+let timeoutId = setTimeout(() => {
+  console.log('Email test timed out after 30 seconds.');
+  process.exit(1);
+}, 30000);
 
 async function runTest() {
   try {
@@ -41,18 +44,18 @@ async function runTest() {
     );
     console.log('Password reset email result:', resetResult);
     
-    console.log('\n✅ Email tests completed using mock transport.');
-    console.log('The emails were not actually sent but logged to the console.');
-    console.log('To send real emails, fix the SMTP credentials in .env or contact your email provider.');
+    console.log('\n✅ Email tests completed.');
+    console.log('Your test emails have been saved to the "emails" directory.');
+    console.log('To view them, open the HTML files in a web browser.');
+    
+    // Clear the timeout and exit successfully
+    clearTimeout(timeoutId);
+    process.exit(0);
   } catch (error) {
     console.error('Error during email testing:', error);
+    clearTimeout(timeoutId);
+    process.exit(1);
   }
 }
-
-// Run the test with a longer timeout
-setTimeout(() => {
-  console.log('Email test timed out after 30 seconds.');
-  process.exit(1);
-}, 30000);
 
 runTest(); 

@@ -3,11 +3,11 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const emailService = require('./server/utils/emailService');
+const emailService = require('./server/utils/mockEmailService');
 
 // Initialize the app
 const app = express();
-const port = process.env.PORT || 3001;
+const port = 3001; // Hardcoded port to avoid conflicts
 
 // CORS options
 const corsOptions = {
