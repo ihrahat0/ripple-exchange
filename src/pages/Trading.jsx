@@ -957,11 +957,13 @@ const calculatePnL = (position, currentMarketPrice) => {
     if (type === 'buy') {
       const priceDiff = currentMarketPrice - entryPrice;
       const percentageChange = (priceDiff / entryPrice) * 100;
-      return Number((margin * (percentageChange / 100) * leverage).toLocaleString());
+      // Fix for large numbers: don't use toLocaleString() inside Number()
+      return Number((margin * (percentageChange / 100) * leverage));
     } else {
       const priceDiff = entryPrice - currentMarketPrice;
       const percentageChange = (priceDiff / entryPrice) * 100;
-      return Number((margin * (percentageChange / 100) * leverage).toLocaleString());
+      // Fix for large numbers: don't use toLocaleString() inside Number()
+      return Number((margin * (percentageChange / 100) * leverage));
     }
   } catch (error) {
     console.error('Error calculating PnL:', error);

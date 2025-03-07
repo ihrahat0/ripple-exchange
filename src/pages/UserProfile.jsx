@@ -18,7 +18,8 @@ import {
     where, 
     getDocs, 
     updateDoc, 
-    serverTimestamp 
+    serverTimestamp,
+    setDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
@@ -584,14 +585,68 @@ function UserProfile(props) {
 
     // Check if user is authenticated
     useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged((user) => {
-            if (user) {
-                setUserData({
-                    displayName: user.displayName || '',
-                    email: user.email || '',
-                    phoneNumber: user.phoneNumber || '',
-                    photoURL: user.photoURL || img,
-                });
+        const fetchUserData = async () => {
+            setLoading(true);
+            setError(''); // Clear any previous errors
+            try {
+                const user = auth.currentUser;
+                
+                if (!user) {
+                    console.log("No authenticated user found");
+                    navigate('/login');
+                    return;
+                }
+                
+                console.log("Current user:", user.uid);
+                
+                try {
+                    // Get Firestore user document
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    
+                    if (userDoc.exists()) {
+                        console.log("User document exists in Firestore");
+                        const userData = userDoc.data();
+                        
+                        // Check if this is a Google account (has provider data)
+                        const isGoogleAccount = userData.authProvider === 'google';
+                        
+                        // Use default image for non-Google accounts
+                        const photoURL = isGoogleAccount ? user.photoURL : img;
+                        
+                        setUserData({
+                            displayName: user.displayName || '',
+                            email: user.email,
+                            phoneNumber: user.phoneNumber || '',
+                            photoURL: photoURL
+                        });
+                    } else {
+                        console.log("User document doesn't exist, creating default data");
+                        // No user document, use auth data with default image
+                        setUserData({
+                            displayName: user.displayName || '',
+                            email: user.email,
+                            phoneNumber: user.phoneNumber || '',
+                            photoURL: img
+                        });
+                        
+                        // Create a default user document if it doesn't exist
+                        try {
+                            await setDoc(doc(db, 'users', user.uid), {
+                                email: user.email,
+                                displayName: user.displayName || '',
+                                createdAt: serverTimestamp(),
+                                emailVerified: true
+                            });
+                            console.log("Created new user document");
+                        } catch (docCreateError) {
+                            console.error("Error creating user document:", docCreateError);
+                        }
+                    }
+                } catch (firestoreError) {
+                    console.error("Error accessing Firestore:", firestoreError);
+                    setError('Error retrieving user profile data');
+                    return;
+                }
                 
                 // Check if user is authenticated with Google
                 const isGoogleAuth = user.providerData.some(
@@ -599,16 +654,39 @@ function UserProfile(props) {
                 );
                 setIsGoogleUser(isGoogleAuth);
                 
-                // Check if 2FA is enabled
-                checkTwoFactorStatus(user.uid);
-            } else {
-                // Redirect to login if not authenticated
-                navigate('/login');
+                try {
+                    // Fetch user balances
+                    await fetchBalances();
+                } catch (balanceError) {
+                    console.error("Error fetching balances:", balanceError);
+                    // Continue even if balances fail
+                }
+                
+                try {
+                    // Fetch prices
+                    await fetchPrices();
+                } catch (priceError) {
+                    console.error("Error fetching prices:", priceError);
+                    // Continue even if prices fail
+                }
+                
+                try {
+                    // Check 2FA status
+                    await checkTwoFactorStatus(user.uid);
+                } catch (twoFAError) {
+                    console.error("Error checking 2FA status:", twoFAError);
+                    // Continue even if 2FA check fails
+                }
+                
+            } catch (error) {
+                console.error('Error in fetchUserData:', error);
+                setError('Failed to load user data: ' + (error.message || 'Unknown error'));
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
+        };
+        
+        fetchUserData();
     }, [navigate]);
 
     // Fetch all users for admin
@@ -634,10 +712,12 @@ function UserProfile(props) {
     // Initialize or update user balances
     const initializeUserBalances = async (userId) => {
         try {
+            console.log("Initializing balances for user:", userId);
             const userRef = doc(db, 'users', userId);
             const userDoc = await getDoc(userRef);
             
             if (userDoc.exists()) {
+                console.log("User document exists, updating balances");
                 const currentBalances = userDoc.data().balances || {};
                 const updatedBalances = {};
                 
@@ -647,15 +727,50 @@ function UserProfile(props) {
                 });
                 
                 // Update the user document with complete balance set
-                await updateDoc(userRef, {
-                    balances: updatedBalances
-                });
+                try {
+                    await updateDoc(userRef, {
+                        balances: updatedBalances,
+                        updatedAt: serverTimestamp()
+                    });
+                    console.log("Updated user balances in Firestore");
+                } catch (updateError) {
+                    console.error("Error updating balances in Firestore:", updateError);
+                    // Return the balances anyway even if we couldn't update Firestore
+                }
                 
                 return updatedBalances;
+            } else {
+                console.log("User document doesn't exist, creating default balances");
+                // If user doc doesn't exist, create default balances
+                const defaultBalances = {};
+                Object.keys(DEFAULT_COINS).forEach(coin => {
+                    defaultBalances[coin] = 0;
+                });
+                
+                // Try to create a user document with default balances
+                try {
+                    await setDoc(userRef, {
+                        email: auth.currentUser.email,
+                        displayName: auth.currentUser.displayName || '',
+                        balances: defaultBalances,
+                        createdAt: serverTimestamp(),
+                        emailVerified: true
+                    });
+                    console.log("Created new user document with default balances");
+                } catch (setError) {
+                    console.error("Error creating user document with balances:", setError);
+                }
+                
+                return defaultBalances;
             }
         } catch (error) {
             console.error('Error initializing balances:', error);
-            throw error;
+            // Return empty balances object as fallback
+            const fallbackBalances = {};
+            Object.keys(DEFAULT_COINS).forEach(coin => {
+                fallbackBalances[coin] = 0;
+            });
+            return fallbackBalances;
         }
     };
 
@@ -736,12 +851,28 @@ function UserProfile(props) {
         try {
             const user = auth.currentUser;
             if (user) {
-                await updateProfile(user, {
-                    displayName: userData.displayName,
-                    photoURL: userData.photoURL,
-                });
-                setSuccess('Profile updated successfully!');
-                setTimeout(() => setSuccess(''), 3000);
+                // Only update displayName, never update photoURL
+                // This ensures the profile picture remains unchanged
+                const updateData = {
+                    displayName: userData.displayName || user.displayName
+                };
+                
+                // Only call updateProfile if we have data to update
+                if (updateData.displayName) {
+                    await updateProfile(user, updateData);
+                    
+                    // Also update the user document in Firestore, but preserve the photoURL
+                    const userDocRef = doc(db, 'users', user.uid);
+                    await updateDoc(userDocRef, {
+                        displayName: updateData.displayName,
+                        updatedAt: serverTimestamp()
+                    });
+                    
+                    setSuccess('Profile updated successfully!');
+                    setTimeout(() => setSuccess(''), 3000);
+                } else {
+                    setError('No changes to update.');
+                }
             }
         } catch (err) {
             setError(err.message);
@@ -759,18 +890,10 @@ function UserProfile(props) {
         }
     };
 
+    // Remove image change functionality by making this a no-op function
     const handleImageChange = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                setUserData(prev => ({
-                    ...prev,
-                    photoURL: reader.result
-                }));
-            };
-            reader.readAsDataURL(file);
-        }
+        // Do nothing - we don't want to allow image changes
+        // This function is kept to avoid breaking any existing code
     };
 
     const handleUpdateBalance = async () => {
@@ -1236,15 +1359,9 @@ function UserProfile(props) {
                             <TabList>
                                 <div className="user-info center">
                                     <div className="avt">
-                                        <input
-                                            type="file"
-                                            className="custom-file-input"
-                                            id="imgInp"
-                                            onChange={handleImageChange}
-                                            accept="image/*"
-                                        />
                                         <img id="blah" src={userData.photoURL || img} alt="Profile" />
                                     </div>
+                                    
                                     <h6 className="name">{userData.displayName || 'Update your name'}</h6>
                                     <p>{userData.email}</p>
                                 </div>

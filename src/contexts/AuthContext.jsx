@@ -84,6 +84,7 @@ export function AuthProvider({ children }) {
 
   async function loginWithVerification(email, password) {
     try {
+      // Normal login flow with provided password
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       

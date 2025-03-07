@@ -26,6 +26,16 @@ function Login(props) {
     const [error, setError] = useState('');
     const [verificationPrompt, setVerificationPrompt] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [showForgotPassword, setShowForgotPassword] = useState(false);
+    const [forgotPasswordEmail, setForgotPasswordEmail] = useState('');
+    const [forgotPasswordMessage, setForgotPasswordMessage] = useState('');
+    const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+    
+    // New states for the OTP verification step
+    const [passwordResetStep, setPasswordResetStep] = useState(1); // 1: email, 2: OTP verification
+    const [resetOTP, setResetOTP] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmNewPassword, setConfirmNewPassword] = useState('');
 
     const handleEmailLogin = async (e) => {
         e.preventDefault();
@@ -76,6 +86,51 @@ function Login(props) {
     const handleVerification = () => {
         // Redirect to a page where they can request a new verification code
         navigate('/register', { state: { email, showVerification: true } });
+    };
+
+    const handleForgotPassword = () => {
+        setShowForgotPassword(true);
+    };
+
+    const handleSendResetLink = async (e) => {
+        e.preventDefault();
+        setForgotPasswordLoading(true);
+        setForgotPasswordMessage('');
+
+        try {
+            // Import Firebase auth functions
+            const { sendPasswordResetEmail } = await import('firebase/auth');
+            
+            // Use Firebase's built-in password reset functionality
+            await sendPasswordResetEmail(auth, forgotPasswordEmail);
+            
+            // Show success message
+            setForgotPasswordMessage('Password reset email sent! Please check your email to complete the reset process.');
+            
+            // No need to move to step 2 since we're using Firebase's native flow
+            setTimeout(() => {
+                handleCloseForgotPassword();
+            }, 5000);
+        } catch (err) {
+            console.error('Password reset error:', err);
+            
+            // Handle specific Firebase errors
+            if (err.code === 'auth/user-not-found') {
+                setForgotPasswordMessage('Error: No account found with this email address.');
+            } else if (err.code === 'auth/invalid-email') {
+                setForgotPasswordMessage('Error: Invalid email format.');
+            } else {
+                setForgotPasswordMessage('Error: Could not send reset email. Please try again later.');
+            }
+        } finally {
+            setForgotPasswordLoading(false);
+        }
+    };
+
+    const handleCloseForgotPassword = () => {
+        setShowForgotPassword(false);
+        setForgotPasswordEmail('');
+        setForgotPasswordMessage('');
     };
 
     return (
@@ -157,7 +212,16 @@ function Login(props) {
                                     <input type="checkbox" className="form-check-input" />
                                     <label className="form-check-label">Remember Me</label>
                                 </div>
-                                <p>Forgot Password?</p>
+                                <p 
+                                    onClick={handleForgotPassword} 
+                                    style={{ 
+                                        cursor: 'pointer', 
+                                        color: '#4A6BF3', 
+                                        textDecoration: 'underline' 
+                                    }}
+                                >
+                                    Forgot Password?
+                                </p>
                                 </div>
 
                                 {error && <div className="alert alert-danger">{error}</div>}
@@ -287,6 +351,127 @@ function Login(props) {
             </section>
 
             <Sale01 />
+
+            {/* Updated Forgot Password Modal to match the screenshot */}
+            {showForgotPassword && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+                    zIndex: 1000,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center'
+                }}>
+                    <div style={{
+                        backgroundColor: '#0f172a',
+                        padding: '30px',
+                        borderRadius: '12px',
+                        width: '90%',
+                        maxWidth: '500px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                        border: '1px solid #1f2937'
+                    }}>
+                        <h3 style={{ 
+                            color: '#fff', 
+                            marginBottom: '25px', 
+                            textAlign: 'center',
+                            fontSize: '24px'
+                        }}>Reset Your Password</h3>
+
+                        <form onSubmit={handleSendResetLink}>
+                            <div style={{ marginBottom: '25px' }}>
+                                <label 
+                                    htmlFor="forgotPasswordEmail" 
+                                    style={{ 
+                                        color: '#cccccc', 
+                                        display: 'block', 
+                                        marginBottom: '10px',
+                                        fontSize: '16px'
+                                    }}
+                                >
+                                    Email Address
+                                </label>
+                                <input
+                                    type="email"
+                                    id="forgotPasswordEmail"
+                                    value={forgotPasswordEmail}
+                                    onChange={(e) => setForgotPasswordEmail(e.target.value)}
+                                    required
+                                    style={{
+                                        width: '100%',
+                                        padding: '12px 15px',
+                                        backgroundColor: 'transparent',
+                                        border: '1px solid #374151',
+                                        borderRadius: '8px',
+                                        color: '#fff',
+                                        fontSize: '16px',
+                                        outline: 'none'
+                                    }}
+                                    placeholder="Enter your email address"
+                                />
+                            </div>
+
+                            {forgotPasswordMessage && (
+                                <div style={{
+                                    padding: '12px',
+                                    marginBottom: '20px',
+                                    borderRadius: '6px',
+                                    backgroundColor: forgotPasswordMessage.includes('Error') ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                    color: forgotPasswordMessage.includes('Error') ? '#ef4444' : '#10b981',
+                                    textAlign: 'center',
+                                    fontSize: '14px'
+                                }}>
+                                    {forgotPasswordMessage}
+                                </div>
+                            )}
+
+                            <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between',
+                                marginTop: '20px' 
+                            }}>
+                                <button
+                                    type="button"
+                                    onClick={handleCloseForgotPassword}
+                                    style={{
+                                        padding: '12px 20px',
+                                        backgroundColor: '#1f2937',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        color: '#fff',
+                                        cursor: 'pointer',
+                                        fontSize: '16px',
+                                        width: '45%'
+                                    }}
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={forgotPasswordLoading}
+                                    style={{
+                                        padding: '12px 20px',
+                                        backgroundColor: '#4f46e5',
+                                        border: 'none',
+                                        borderRadius: '8px',
+                                        color: '#fff',
+                                        cursor: forgotPasswordLoading ? 'default' : 'pointer',
+                                        fontSize: '16px',
+                                        opacity: forgotPasswordLoading ? 0.7 : 1,
+                                        width: '45%'
+                                    }}
+                                >
+                                    {forgotPasswordLoading ? 'Sending...' : 'Send Reset Link'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

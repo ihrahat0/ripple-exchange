@@ -10,6 +10,7 @@ import BalanceManagement from './BalanceManagement';
 import Settings from './Settings';
 import WithdrawalManagement from './WithdrawalManagement';
 import UserDeposits from './UserDeposits';
+import AllDeposits from './AllDeposits';
 import { getDoc, doc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -319,6 +320,7 @@ const AdminPanel = () => {
     if (path.includes('pair-management') || path.includes('coins')) return 'Coin Management';
     if (path.includes('balance-management') || path.includes('balances')) return 'Balance Management';
     if (path.includes('withdrawal-management')) return 'Withdrawal Management';
+    if (path.includes('deposits')) return 'User Deposits';
     if (path.includes('settings')) return 'Settings';
     return 'Admin Panel';
   };
@@ -392,6 +394,11 @@ const AdminPanel = () => {
             </NavLink>
           </NavItem>
           <NavItem>
+            <NavLink to="/admin/deposits" active={location.pathname.includes('/admin/deposits') ? 'true' : undefined}>
+              <i className="bi bi-box-arrow-in-down"></i> Deposits
+            </NavLink>
+          </NavItem>
+          <NavItem>
             <NavLink to="/admin/settings" active={location.pathname.includes('/admin/settings') ? 'true' : undefined}>
               <i className="bi bi-gear"></i> Settings
             </NavLink>
@@ -449,6 +456,7 @@ const AdminPanel = () => {
         <Routes>
           <Route path="/" element={<Dashboard stats={stats} />} />
           <Route path="/users/*" element={<UserManagement />} />
+          <Route path="/deposits" element={<AllDeposits />} />
           <Route path="/deposits/:userId" element={<UserDeposits />} />
           <Route path="/balances/:userId" element={<BalanceManagement />} />
           <Route path="/tokens/*" element={<TokenManagement />} />
