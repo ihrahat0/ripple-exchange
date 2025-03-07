@@ -5,7 +5,7 @@ const nodemailer = require('nodemailer');
 // Create a test transporter
 const createTransporter = () => {
   console.log('Creating test transporter with:');
-  console.log('- Email host:', process.env.EMAIL_HOST || 'mail.rippleexchange.org');
+  console.log('- Email host:', process.env.EMAIL_HOST || 'smtp.hostinger.com');
   console.log('- Email port:', process.env.EMAIL_PORT || 465);
   console.log('- Email user:', process.env.EMAIL_USER || 'noreply@rippleexchange.org');
   
