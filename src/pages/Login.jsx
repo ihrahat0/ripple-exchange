@@ -276,6 +276,10 @@ function Login(props) {
                                 <p>Not a member?</p>
                                 <Link to="/register">Register</Link>
                                 </div>
+                                <div className="bottom" style={{ marginTop: '10px' }}>
+                                <p>Forgot your password?</p>
+                                <Link to="/forgot-password">Reset Password</Link>
+                                </div>
                             </form>
                         </div>
                     </TabPanel>

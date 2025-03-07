@@ -1,153 +1,104 @@
 import axios from 'axios';
 
-// API base URL - change to your deployed server URL in production
-const API_URL = process.env.NODE_ENV === 'production' 
-  ? 'https://api.rippleexchange.org/api' 
-  : 'http://localhost:3001/api';
-
-// Check if we're in a development environment and attempting to use nodemailer directly
-const isDev = process.env.NODE_ENV !== 'production';
+// Use a reliable API URL
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3001/api' 
+  : 'https://rippleexchange.org/api';
 
 /**
- * Generate a random 6-digit verification code
- * @returns {string} 6-digit code
+ * Generate a verification code
+ * @returns {string} 6-digit verification code
  */
 export const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
 /**
- * Send a verification code email
- * @param {string} email - Recipient email address
+ * Send registration verification email via API
+ * @param {string} email - User's email
  * @param {string} code - Verification code
- * @returns {Promise} - Resolves with the response data
- */
-export const sendVerificationEmail = async (email, code) => {
-  try {
-    // Use direct nodemailer only in true server environments
-    if (typeof window === 'undefined' && isDev) {
-      // Server-side only code for direct nodemailer use
-      console.log('[Server] Sending verification email directly via nodemailer');
-      // This would be implemented on the server side
-      return { success: true, message: 'Direct email not supported in browser' };
-    }
-
-    // Client-side or production - use API
-    console.log(`Sending verification email via API to ${email}`);
-    const response = await axios.post(`${API_URL}/send-verification-code`, {
-      email,
-      code
-    });
-    console.log('Email sent:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error sending verification email:', error);
-    throw error;
-  }
-};
-
-/**
- * Checks if the email server is available
- * @returns {Promise<boolean>} True if server is available, false otherwise
- */
-export const isEmailServerAvailable = async () => {
-  try {
-    const response = await axios.get(`${API_URL}`, { timeout: 3000 });
-    return response.status === 200;
-  } catch (error) {
-    console.warn('Email server not available:', error.message);
-    return false;
-  }
-};
-
-/**
- * Log the verification code to console in development mode
- * @param {string} email - The email address
- * @param {string} code - The verification code
- * @param {string} type - The type of verification (e.g., 'registration', '2fa')
- */
-export const logVerificationCode = (email, code, type = 'verification') => {
-  // Only log that we're attempting verification, not the actual code
-  if (process.env.NODE_ENV !== 'production') {
-    console.log(`Attempting to send ${type} email to ${email}`);
-  }
-};
-
-/**
- * Send a registration verification email with a special template
- * @param {string} email - Recipient email address
- * @param {string} code - Verification code
- * @returns {Promise} - Resolves with the response data
+ * @returns {Promise<Object>} Status of the email send operation
  */
 export const sendRegistrationVerificationEmail = async (email, code) => {
   try {
-    // Log attempt without showing the code
-    console.log(`Attempting to send verification to ${email}`);
+    console.log(`Sending verification email to ${email} with code ${code}`);
+    console.log(`Using API URL: ${API_URL}/send-verification-code`);
     
-    // Check if server is available first
-    const serverAvailable = await isEmailServerAvailable();
-    if (!serverAvailable) {
-      console.warn('Email server unavailable, skipping API call');
-      return { 
-        success: true, 
-        code: code,
-        message: 'Email service unavailable, but registration can continue' 
-      };
-    }
-    
-    // Try to send email via API
-    const response = await axios.post(`${API_URL}/send-registration-verification`, {
-      email,
-      code
-    }, { timeout: 5000 });
-    
-    console.log('Registration verification email sent successfully');
+    const response = await axios.post(`${API_URL}/send-verification-code`, { email, code });
+    console.log('Email API response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error in email service:', error);
-    // Return success with code to allow registration to continue
+    console.error('Failed to send registration verification email:', error);
     return { 
-      success: true, 
-      code: code,
-      message: 'Continuing with verification despite email error' 
+      success: false, 
+      error: error.response?.data?.error || error.message 
     };
   }
 };
 
 /**
- * Send a password change confirmation email
- * @param {string} email - Recipient email address
- * @returns {Promise} - Resolves with the response data
+ * Send password reset email via API
+ * @param {string} email - User's email address
+ * @param {string} code - Reset verification code
+ * @returns {Promise<Object>} Status of the email send operation
  */
-export const sendPasswordChangeConfirmation = async (email) => {
+export const sendPasswordResetEmail = async (email, code) => {
   try {
-    const response = await axios.post(`${API_URL}/send-password-change-confirmation`, {
-      email
-    });
-    console.log('Password change confirmation email sent:', response.data);
+    console.log(`Sending password reset email to ${email} with code ${code}`);
+    console.log(`Using API URL: ${API_URL}/send-password-reset`);
+    
+    const response = await axios.post(`${API_URL}/send-password-reset`, { email, code });
+    console.log('Password reset email API response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error sending password change confirmation email:', error);
-    throw error;
+    console.error('Failed to send password reset email:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
   }
 };
 
 /**
- * Send a 2FA setup confirmation email
- * @param {string} email - Recipient email address
+ * Send password change confirmation email via API
+ * @param {string} email - User's email address
+ * @returns {Promise<Object>} Status of the email send operation
+ */
+export const sendPasswordChangeConfirmation = async (email) => {
+  try {
+    console.log(`Sending password change confirmation to ${email}`);
+    
+    const response = await axios.post(`${API_URL}/send-password-change-confirmation`, { email });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send password change confirmation:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
+  }
+};
+
+/**
+ * Send 2FA status change email via API
+ * @param {string} email - User's email address
  * @param {boolean} enabled - Whether 2FA was enabled or disabled
- * @returns {Promise} - Resolves with the response data
+ * @returns {Promise<Object>} Status of the email send operation
  */
 export const send2FAStatusChangeEmail = async (email, enabled) => {
   try {
-    const response = await axios.post(`${API_URL}/send-2fa-status-change`, {
-      email,
-      enabled
-    });
-    console.log('2FA status change email sent:', response.data);
+    const response = await axios.post(`${API_URL}/send-2fa-status-change`, { email, enabled });
     return response.data;
   } catch (error) {
-    console.error('Error sending 2FA status change email:', error);
-    throw error;
+    console.error('Failed to send 2FA status change email:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
   }
-}; 
+};
+
+/**
+ * For compatibility with older code
+ */
+export const sendVerificationEmail = sendRegistrationVerificationEmail; 
