@@ -10,11 +10,28 @@ if (!testEmail) {
 }
 
 console.log('Testing email service with address:', testEmail);
+console.log('Using configuration from .env:');
+
+// Check if using SendGrid
+if (process.env.SENDGRID_API_KEY) {
+  console.log('SendGrid API is enabled.');
+  // Check if API key looks valid (just a basic check)
+  if (process.env.SENDGRID_API_KEY === 'your-sendgrid-api-key-here') {
+    console.warn('⚠️ Warning: You are using the placeholder SendGrid API key. Please replace it with a real key.');
+  }
+} else {
+  console.log('Using SMTP configuration:');
+  console.log(`- EMAIL_HOST: ${process.env.EMAIL_HOST}`);
+  console.log(`- EMAIL_PORT: ${process.env.EMAIL_PORT}`);
+  console.log(`- EMAIL_SECURE: ${process.env.EMAIL_SECURE}`);
+  console.log(`- EMAIL_USER: ${process.env.EMAIL_USER}`);
+}
 
 async function runTest() {
   try {
     // Test connection
     console.log('\n1. Testing email server connection...');
+    console.log('Waiting for connection (this may take a moment)...');
     const connectionResult = await emailService.testEmailService();
     console.log('Connection test result:', connectionResult);
     
@@ -42,4 +59,9 @@ async function runTest() {
   }
 }
 
-runTest(); 
+// Set longer timeout for the test
+console.log('Setting timeout to 30 seconds for email test...');
+runTest().catch(err => {
+  console.error('Unhandled error in test:', err);
+  process.exit(1);
+}); 
