@@ -1,0 +1,91 @@
+import axios from 'axios';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+
+/**
+ * Generate a verification code
+ * @returns {string} 6-digit verification code
+ */
+export const generateVerificationCode = () => {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+};
+
+/**
+ * Send registration verification email via API
+ * @param {string} email - User's email
+ * @param {string} code - Verification code
+ * @returns {Promise<Object>} Status of the email send operation
+ */
+export const sendRegistrationVerificationEmail = async (email, code) => {
+  try {
+    const response = await axios.post(`${API_URL}/send-verification-code`, { email, code });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send registration verification email:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
+  }
+};
+
+/**
+ * Send password reset email via API
+ * @param {string} email - User's email address
+ * @param {string} code - Reset verification code
+ * @returns {Promise<Object>} Status of the email send operation
+ */
+export const sendPasswordResetEmail = async (email, code) => {
+  try {
+    const response = await axios.post(`${API_URL}/send-password-reset`, { email, code });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send password reset email:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
+  }
+};
+
+/**
+ * Send password change confirmation email via API
+ * @param {string} email - User's email address
+ * @returns {Promise<Object>} Status of the email send operation
+ */
+export const sendPasswordChangeConfirmation = async (email) => {
+  try {
+    const response = await axios.post(`${API_URL}/send-password-change-confirmation`, { email });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send password change confirmation:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
+  }
+};
+
+/**
+ * Send 2FA status change email via API
+ * @param {string} email - User's email address
+ * @param {boolean} enabled - Whether 2FA was enabled or disabled
+ * @returns {Promise<Object>} Status of the email send operation
+ */
+export const send2FAStatusChangeEmail = async (email, enabled) => {
+  try {
+    const response = await axios.post(`${API_URL}/send-2fa-status-change`, { email, enabled });
+    return response.data;
+  } catch (error) {
+    console.error('Failed to send 2FA status change email:', error);
+    return { 
+      success: false, 
+      error: error.response?.data?.error || error.message 
+    };
+  }
+};
+
+/**
+ * For compatibility with older code
+ */
+export const sendVerificationEmail = sendRegistrationVerificationEmail; 
