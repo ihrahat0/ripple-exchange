@@ -2,6 +2,7 @@ const axios = require('axios');
 const nodemailer = require('nodemailer');
 const sgMail = require('@sendgrid/mail');
 const dotenv = require('dotenv');
+const nodemailerMock = require('nodemailer-mock');
 
 dotenv.config();
 
@@ -14,46 +15,76 @@ if (process.env.SENDGRID_API_KEY) {
 // Create a reusable transporter object
 let transporter = null;
 
-// Function to create a logger-only transport (mock email)
+/**
+ * Create a logger-only transport that logs emails to the console
+ * @returns {object} Mock transport
+ */
 const createLoggerTransport = () => {
   console.log('Creating logger-only email transport (emails will be logged but not sent)');
   
-  return nodemailer.createTransport({
+  return {
     name: 'log-transport',
     version: '1.0.0',
     send: (mail, callback) => {
-      const input = mail.message.createReadStream();
+      const message = mail.message.createReadStream();
       const chunks = [];
-      
-      input.on('data', (chunk) => {
+
+      message.on('data', (chunk) => {
         chunks.push(chunk);
       });
-      
-      input.on('end', () => {
-        const fullEmail = Buffer.concat(chunks).toString('utf8');
+
+      message.on('end', () => {
         console.log('========================');
         console.log('MOCK EMAIL (Not Sent)');
         console.log('========================');
-        console.log(fullEmail);
+        console.log(Buffer.concat(chunks).toString('utf8'));
         console.log('========================');
-        callback(null, { response: 'Mock email logged' });
+        callback(null, { messageId: undefined });
       });
+    },
+    // Basic verification for testing
+    verify: (callback) => {
+      callback(null, true);
     }
-  });
+  };
 };
 
-// Initialize transporter with proper error handling - updated
+/**
+ * Create a mock transport that stores emails for testing
+ * Uses nodemailer-mock
+ * @returns {object} Mock transport
+ */
+const createMockTransport = () => {
+  console.log('Creating mock email transport with nodemailer-mock');
+  
+  // Get a reference to the mock transport
+  const mockTransport = nodemailerMock.createTransport({
+    host: 'smtp.example.com',
+    port: 587,
+    secure: false
+  });
+  
+  // Log all sent emails for debugging
+  mockTransport.on('sendMail', (email) => {
+    console.log('========================');
+    console.log('MOCK EMAIL SENT WITH NODEMAILER-MOCK');
+    console.log('========================');
+    console.log('FROM: ' + email.from);
+    console.log('TO: ' + email.to);
+    console.log('SUBJECT: ' + email.subject);
+    console.log('------------------------');
+    console.log('HTML: ' + email.html.substring(0, 100) + '...');
+    console.log('========================');
+  });
+  
+  return mockTransport;
+};
+
+// Initialize transporter with proper error handling
 const initializeTransporter = () => {
   if (transporter) return;
   
   console.log('Initializing email transporter...');
-  
-  // Check if SendGrid API key is available
-  if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-    console.log('Using SendGrid for email delivery');
-    // No need to initialize transporter for SendGrid
-    return;
-  }
   
   try {
     // Configuration for the email service
@@ -64,6 +95,16 @@ const initializeTransporter = () => {
     const pass = process.env.EMAIL_PASS || 'your-app-password'; 
     
     console.log(`Email Config - Host: ${host}, Port: ${port}, Secure: ${secure}`);
+    console.log(`Using email user: ${user}, Password length: ${pass.length}`);
+    
+    // Environment check
+    const isDev = process.env.NODE_ENV !== 'production';
+    
+    if (isDev) {
+      console.log('Running in development mode. Using mock email transport.');
+      transporter = createMockTransport();
+      return;
+    }
     
     // Check if we have valid credentials
     if (!user || user === 'yourgmail@gmail.com' || !pass || pass === 'your-app-password') {
@@ -72,7 +113,7 @@ const initializeTransporter = () => {
       return;
     }
     
-    // Configure email transporter
+    // Configure email transporter with enhanced security options and detailed logging
     transporter = nodemailer.createTransport({
       host,
       port,
@@ -82,14 +123,17 @@ const initializeTransporter = () => {
         pass,
       },
       tls: {
-        rejectUnauthorized: false // Helps with some configurations
+        rejectUnauthorized: false, // Helps with some configurations
+        minVersion: "TLSv1.2"     // Enforce minimum TLS version
       },
-      debug: true, // Show debug info
-      logger: true  // Log information about the mail
+      debug: true,    // Show debug info
+      logger: true,   // Log information about the mail
+      maxConnections: 1, // Limit concurrent connections
+      maxMessages: 10,   // Limit messages per connection
+      pool: false        // Don't use connection pool (more reliable for testing)
     });
     
     console.log('Email transporter initialized with host:', host);
-    console.log('Using email account:', user);
   } catch (error) {
     console.error('Failed to initialize email transporter:', error);
     console.log('Falling back to mock email transport');
@@ -98,79 +142,74 @@ const initializeTransporter = () => {
 };
 
 /**
- * Check if the email server is available
+ * Check if email server is available
+ * @returns {Promise<boolean>} Whether the server is available
  */
 const isEmailServerAvailable = async () => {
   try {
-    const response = await axios.get(`${process.env.REACT_APP_API_URL || 'http://localhost:5000/api'}/check-email-server`);
-    return response.data && response.data.available;
+    initializeTransporter();
+    if (!transporter) return false;
+    
+    // For mock transporter, always return true
+    if (transporter.name === 'log-transport' || transporter.name === 'Mock') {
+      return true;
+    }
+    
+    await transporter.verify();
+    return true;
   } catch (error) {
-    console.warn('Could not connect to email server:', error.message);
+    console.error('Email server not available:', error);
     return false;
   }
 };
 
 /**
- * Test the email service connection
- * @returns {Promise<Object>} Status of the connection test
+ * Test the email service
+ * @returns {Promise<Object>} Status of the test
  */
 const testEmailService = async () => {
-  // If SendGrid is available, test that
-  if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-    try {
-      console.log('Testing SendGrid API connection...');
-      // SendGrid doesn't have a direct verify method, so we'll check if the API key is valid
-      return { success: true, message: 'SendGrid API key is set' };
-    } catch (error) {
-      console.error('SendGrid API test failed:', error);
-      // Rather than failing, we'll fall back to SMTP or mock
-    }
-  }
-  
-  // Otherwise test SMTP
-  initializeTransporter();
-  
-  // Check if we're using the mock transport
-  if (transporter && transporter.name === 'log-transport') {
-    console.log('Using mock email transport - emails will be logged but not sent');
-    return { success: true, message: 'Using mock email transport', isMock: true };
-  }
+  console.log('Setting connection timeout to 15 seconds...');
   
   try {
-    // Set timeout for verification
-    console.log('Setting connection timeout to 15 seconds...');
-    const timeout = 15000; // 15 seconds
-    
-    // Verify connection configuration with timeout
     console.log('Verifying SMTP connection...');
-    const verifyPromise = transporter.verify();
+    initializeTransporter();
     
-    // Create a timeout promise
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => reject(new Error('Connection timed out after 15 seconds')), timeout);
-    });
+    if (!transporter) {
+      return { success: false, message: 'Email transporter not initialized' };
+    }
     
-    // Race the verify promise against the timeout
-    await Promise.race([verifyPromise, timeoutPromise]);
+    // For mock transporters, return success
+    if (transporter.name === 'log-transport') {
+      return { success: true, message: 'Fallback to mock email transport', isMock: true };
+    }
     
+    if (transporter.name === 'Mock') {
+      return { success: true, message: 'Using nodemailer-mock transport', isMock: true };
+    }
+    
+    // Otherwise verify the connection
+    await transporter.verify();
     console.log('Email server connection successful');
     return { success: true, message: 'Email server connection successful' };
   } catch (error) {
     console.error('Email server connection failed:', error);
     console.log('Falling back to mock email transport');
-    transporter = createLoggerTransport();
+    
+    // Recreate transporter with the mock transport
+    transporter = createMockTransport();
+    
     return { 
       success: true, 
       message: 'Fallback to mock email transport', 
       isMock: true,
-      originalError: error.message 
+      originalError: error.message
     };
   }
 };
 
 /**
- * Generate a verification code
- * @returns {string} 6-digit verification code
+ * Generate a random 6-digit verification code
+ * @returns {string} 6-digit code
  */
 const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
@@ -201,25 +240,6 @@ const sendRegistrationVerificationEmail = async (email, code) => {
     </div>
   `;
   
-  // If SendGrid is available with a valid API key, use it
-  if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-    try {
-      const msg = {
-        to: email,
-        from: process.env.EMAIL_FROM || 'noreply@rippleexchange.org',
-        subject: 'Verify Your Ripple Exchange Account',
-        html: htmlContent,
-      };
-      
-      await sgMail.send(msg);
-      console.log('Registration verification email sent via SendGrid');
-      return { success: true, message: 'Email sent via SendGrid' };
-    } catch (error) {
-      console.error('Failed to send registration verification email via SendGrid:', error);
-      // Fall through to SMTP/mock
-    }
-  }
-  
   // Initialize SMTP or mock transporter
   initializeTransporter();
   
@@ -234,6 +254,11 @@ const sendRegistrationVerificationEmail = async (email, code) => {
     if (transporter.name === 'log-transport') {
       console.log('Registration verification email logged (mock transport)');
       return { success: true, message: 'Email logged (not actually sent)', isMock: true };
+    }
+    
+    if (transporter.name === 'Mock') {
+      console.log('Registration verification email sent via mock transport');
+      return { success: true, message: 'Email sent via mock transport', isMock: true };
     }
     
     console.log('Registration verification email sent:', info.messageId);
@@ -269,25 +294,6 @@ const sendPasswordResetEmail = async (email, code) => {
     </div>
   `;
   
-  // If SendGrid is available with a valid API key, use it
-  if (process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY !== 'your-sendgrid-api-key-here') {
-    try {
-      const msg = {
-        to: email,
-        from: process.env.EMAIL_FROM || 'noreply@rippleexchange.org',
-        subject: 'Reset Your Ripple Exchange Password',
-        html: htmlContent,
-      };
-      
-      await sgMail.send(msg);
-      console.log('Password reset email sent via SendGrid');
-      return { success: true, message: 'Email sent via SendGrid' };
-    } catch (error) {
-      console.error('Failed to send password reset email via SendGrid:', error);
-      // Fall through to SMTP/mock
-    }
-  }
-  
   // Initialize SMTP or mock transporter
   initializeTransporter();
   
@@ -302,6 +308,11 @@ const sendPasswordResetEmail = async (email, code) => {
     if (transporter.name === 'log-transport') {
       console.log('Password reset email logged (mock transport)');
       return { success: true, message: 'Email logged (not actually sent)', isMock: true };
+    }
+    
+    if (transporter.name === 'Mock') {
+      console.log('Password reset email sent via mock transport');
+      return { success: true, message: 'Email sent via mock transport', isMock: true };
     }
     
     console.log('Password reset email sent:', info.messageId);
