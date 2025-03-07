@@ -1,6 +1,9 @@
 import axios from 'axios';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001/api';
+// Use a reliable API URL
+const API_URL = window.location.hostname === 'localhost' 
+  ? 'http://localhost:3001/api' 
+  : 'https://rippleexchange.org/api';
 
 /**
  * Generate a verification code
@@ -18,7 +21,11 @@ export const generateVerificationCode = () => {
  */
 export const sendRegistrationVerificationEmail = async (email, code) => {
   try {
+    console.log(`Sending verification email to ${email} with code ${code}`);
+    console.log(`Using API URL: ${API_URL}/send-verification-code`);
+    
     const response = await axios.post(`${API_URL}/send-verification-code`, { email, code });
+    console.log('Email API response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Failed to send registration verification email:', error);
@@ -37,7 +44,11 @@ export const sendRegistrationVerificationEmail = async (email, code) => {
  */
 export const sendPasswordResetEmail = async (email, code) => {
   try {
+    console.log(`Sending password reset email to ${email} with code ${code}`);
+    console.log(`Using API URL: ${API_URL}/send-password-reset`);
+    
     const response = await axios.post(`${API_URL}/send-password-reset`, { email, code });
+    console.log('Password reset email API response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Failed to send password reset email:', error);
@@ -55,6 +66,8 @@ export const sendPasswordResetEmail = async (email, code) => {
  */
 export const sendPasswordChangeConfirmation = async (email) => {
   try {
+    console.log(`Sending password change confirmation to ${email}`);
+    
     const response = await axios.post(`${API_URL}/send-password-change-confirmation`, { email });
     return response.data;
   } catch (error) {

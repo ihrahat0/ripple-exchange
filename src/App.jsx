@@ -5,6 +5,9 @@ import Trading from './components/Trading';
 import Deposit from './pages/Deposit';
 import Market from './pages/Market';
 import Header from './components/header/Header';
+import ForgotPassword from './pages/ForgotPassword';
+import Login from './pages/Login';
+import Register from './pages/Register';
 
 function App() {
   return (
@@ -45,6 +48,9 @@ function App() {
                 </PrivateRoute>
               } 
             />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
           </Routes>
         </div>
       </Router>

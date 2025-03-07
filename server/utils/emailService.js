@@ -14,22 +14,32 @@ const initializeTransporter = () => {
   console.log('Initializing email transporter...');
   
   try {
-    // Configure email transporter using SMTP settings
+    // Configuration for the email service - using Gmail as it's more reliable
+    // NOTE: In production, you should use a service like SendGrid, Mailgun, etc.
+    const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+    const port = process.env.EMAIL_PORT || 587;
+    const secure = process.env.EMAIL_SECURE === 'true' || false; // false for TLS
+    const user = process.env.EMAIL_USER || 'yourgmail@gmail.com';
+    const pass = process.env.EMAIL_PASS || 'your-app-password'; 
+    
+    console.log(`Email Config - Host: ${host}, Port: ${port}, Secure: ${secure}`);
+    
+    // Configure email transporter
     transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || 'mail.rippleexchange.org',
-      port: process.env.EMAIL_PORT || 465,
-      secure: process.env.EMAIL_SECURE === 'true' || true, // true for 465, false for other ports
+      host,
+      port,
+      secure,
       auth: {
-        user: process.env.EMAIL_USER || 'noreply@rippleexchange.org',
-        pass: process.env.EMAIL_PASS || 'I2NEZ$nRXok',
+        user,
+        pass,
       },
       tls: {
-        rejectUnauthorized: false // Helps with some VPS configurations
+        rejectUnauthorized: false // Helps with some configurations
       }
     });
     
-    console.log('Email transporter initialized with host:', process.env.EMAIL_HOST || 'mail.rippleexchange.org');
-    console.log('Using email account:', process.env.EMAIL_USER || 'noreply@rippleexchange.org');
+    console.log('Email transporter initialized with host:', host);
+    console.log('Using email account:', user);
   } catch (error) {
     console.error('Failed to initialize email transporter:', error);
     throw error;
@@ -46,6 +56,24 @@ const isEmailServerAvailable = async () => {
   } catch (error) {
     console.warn('Could not connect to email server:', error.message);
     return false;
+  }
+};
+
+/**
+ * Test the email service connection
+ * @returns {Promise<Object>} Status of the connection test
+ */
+const testEmailService = async () => {
+  initializeTransporter();
+  
+  try {
+    // Verify connection configuration
+    await transporter.verify();
+    console.log('Email server connection successful');
+    return { success: true, message: 'Email server connection successful' };
+  } catch (error) {
+    console.error('Email server connection failed:', error);
+    return { success: false, error: error.message };
   }
 };
 
@@ -262,23 +290,6 @@ const send2FAStatusChangeEmail = async (email, enabled) => {
     return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error('Failed to send 2FA status change email:', error);
-    return { success: false, error: error.message };
-  }
-};
-
-/**
- * Test the email service connection
- * @returns {Promise<Object>} Status of the connection test
- */
-const testEmailService = async () => {
-  initializeTransporter();
-  
-  try {
-    await transporter.verify();
-    console.log('Email service connection verified successfully');
-    return { success: true };
-  } catch (error) {
-    console.error('Email service connection failed:', error);
     return { success: false, error: error.message };
   }
 };

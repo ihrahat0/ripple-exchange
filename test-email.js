@@ -1,103 +1,45 @@
 // Test script for email functionality
 require('dotenv').config();
-const nodemailer = require('nodemailer');
+const emailService = require('./server/utils/emailService');
 
-// Create a test transporter
-const createTransporter = () => {
-  console.log('Creating test transporter with:');
-  console.log('- Email host:', process.env.EMAIL_HOST || 'smtp.hostinger.com');
-  console.log('- Email port:', process.env.EMAIL_PORT || 465);
-  console.log('- Email user:', process.env.EMAIL_USER || 'noreply@rippleexchange.org');
-  
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'mail.rippleexchange.org',
-    port: process.env.EMAIL_PORT || 465,
-    secure: process.env.EMAIL_SECURE === 'true' || true, // true for 465, false for other ports
-    auth: {
-      user: process.env.EMAIL_USER || 'noreply@rippleexchange.org',
-      pass: process.env.EMAIL_PASS || 'I2NEZ$nRXok',
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
-};
+const testEmail = process.argv[2] || process.env.EMAIL_USER;
 
-// Generate a verification code
-const generateCode = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
+if (!testEmail) {
+  console.error('Please provide an email address as an argument or set EMAIL_USER in .env');
+  process.exit(1);
+}
 
-// Test sending a verification email
-const testVerificationEmail = async (email) => {
-  const transporter = createTransporter();
-  const code = generateCode();
-  
-  console.log(`Sending verification email to ${email} with code ${code}`);
-  
+console.log('Testing email service with address:', testEmail);
+
+async function runTest() {
   try {
-    // Verify connection
-    await transporter.verify();
-    console.log('Transporter verified successfully');
+    // Test connection
+    console.log('\n1. Testing email server connection...');
+    const connectionResult = await emailService.testEmailService();
+    console.log('Connection test result:', connectionResult);
     
-    // Send email
-    const info = await transporter.sendMail({
-      from: process.env.EMAIL_FROM || '"Ripple Exchange" <noreply@rippleexchange.org>',
-      to: email,
-      subject: 'TEST - Verify Your Ripple Exchange Account',
-      html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 5px;">
-          <h2 style="color: #F7931A; text-align: center;">TEST - Ripple Exchange Email</h2>
-          <p>This is a test email to verify email functionality is working correctly.</p>
-          <div style="background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 24px; font-weight: bold; letter-spacing: 5px; margin: 20px 0; border-radius: 5px;">
-            ${code}
-          </div>
-          <p>If this test email worked, your email system is configured correctly.</p>
-        </div>
-      `
-    });
+    if (!connectionResult.success) {
+      console.error('Connection test failed, cannot proceed with sending test emails');
+      process.exit(1);
+    }
     
-    console.log('Test email sent successfully!');
-    console.log('Message ID:', info.messageId);
-    console.log('Preview URL:', nodemailer.getTestMessageUrl(info));
+    // Test verification email
+    console.log('\n2. Sending test verification email...');
+    const verificationCode = '123456';
+    const verificationResult = await emailService.sendRegistrationVerificationEmail(testEmail, verificationCode);
+    console.log('Verification email result:', verificationResult);
     
-    return true;
+    // Test password reset email
+    console.log('\n3. Sending test password reset email...');
+    const resetCode = '654321';
+    const resetResult = await emailService.sendPasswordResetEmail(testEmail, resetCode);
+    console.log('Password reset email result:', resetResult);
+    
+    console.log('\n✅ Email tests completed. Check your inbox!');
   } catch (error) {
-    console.error('Failed to send test email:', error);
-    return false;
-  }
-};
-
-// Run the test
-const runTest = async () => {
-  // Check required environment variables
-  const requiredVars = ['EMAIL_HOST', 'EMAIL_PORT', 'EMAIL_USER', 'EMAIL_PASS'];
-  const missing = requiredVars.filter(varName => !process.env[varName]);
-  
-  if (missing.length > 0) {
-    console.log('Warning: Some recommended environment variables are missing:', missing.join(', '));
-    console.log('Using default values from server.js instead.');
-  }
-  
-  // Use provided email or default to the configured email
-  const testEmail = process.argv[2] || process.env.EMAIL_USER || 'noreply@rippleexchange.org';
-  
-  console.log('======== EMAIL TEST ========');
-  console.log('Testing email functionality with:');
-  console.log(`- Test recipient: ${testEmail}`);
-  
-  const result = await testVerificationEmail(testEmail);
-  
-  if (result) {
-    console.log('✅ Email test PASSED!');
-  } else {
-    console.log('❌ Email test FAILED!');
+    console.error('Test failed with error:', error);
     process.exit(1);
   }
-};
+}
 
-// Execute the test
-runTest().catch(err => {
-  console.error('Test failed with error:', err);
-  process.exit(1);
-}); 
+runTest(); 
