@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
@@ -28,14 +30,50 @@ app.get('/api', (req, res) => {
   res.json({ success: true, message: 'Email API is available' });
 });
 
-// Test route for email service
+// For the email service, use our emailService module instead of creating a separate transporter
+const emailService = require('./src/utils/emailService');
+
+// Replace the existing transporter definition with:
+// Comment out the old transporter definition
+// const transporter = nodemailer.createTransport({
+//   host: 'mail.rippleexchange.org',
+//   port: 465,
+//   secure: true, // true for 465, false for other ports
+//   auth: {
+//     user: 'noreply@rippleexchange.org',
+//     pass: 'I2NEZ$nRXok'
+//   }
+// });
+
+// Update the /api/test-email endpoint to use our emailService
 app.get('/api/test-email', async (req, res) => {
   try {
-    const result = await transporter.verify();
-    res.json({ success: true, message: 'Email server connection successful', result });
+    // Test the email service connection
+    const connectionResult = await emailService.testEmailService();
+    
+    if (connectionResult.success) {
+      // Send a test email to the sender (for security, we only send to the configured email)
+      const testEmail = process.env.EMAIL_USER || 'noreply@rippleexchange.org';
+      const emailResult = await emailService.sendRegistrationVerificationEmail(
+        testEmail,
+        '123456' // Test verification code
+      );
+      
+      return res.json({
+        success: true,
+        connection: connectionResult,
+        emailSend: emailResult
+      });
+    }
+    
+    return res.json({
+      success: false,
+      error: 'Could not connect to email service',
+      details: connectionResult
+    });
   } catch (error) {
-    console.error('Email server connection failed:', error);
-    res.status(500).json({ success: false, message: 'Email server connection failed', error: error.message });
+    console.error('Email test failed:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
@@ -65,7 +103,7 @@ app.post('/api/send-test-email', async (req, res) => {
           <div style="text-align: center; margin: 30px 0;">
             <div style="font-size: 24px; font-weight: bold; letter-spacing: 5px; padding: 15px; background-color: #f7f7f7; border-radius: 5px; display: inline-block;">${testCode}</div>
           </div>
-          <p style="color: #666; line-height: 1.5;">If you did not request this test, please ignore this email.</p>
+          <p style="color: #666; line-height: 1.6; font-size: 16px;">If you did not request this test, please ignore this email.</p>
           <div style="margin-top: 40px; padding-top: 20px; border-top: 1px solid #e1e1e1; color: #999; font-size: 12px; text-align: center;">
             <p>© ${new Date().getFullYear()} Ripple Exchange. All rights reserved.</p>
             <p>This is an automated message, please do not reply.</p>
@@ -84,18 +122,7 @@ app.post('/api/send-test-email', async (req, res) => {
   }
 });
 
-// Create transporter for sending emails
-const transporter = nodemailer.createTransport({
-  host: 'mail.rippleexchange.org',
-  port: 465,
-  secure: true, // true for 465, false for other ports
-  auth: {
-    user: 'noreply@rippleexchange.org',
-    pass: 'I2NEZ$nRXok'
-  }
-});
-
-// Route to send verification code
+// Update the send-verification-code route to use our emailService
 app.post('/api/send-verification-code', async (req, res) => {
   try {
     const { email, code } = req.body;
@@ -104,48 +131,12 @@ app.post('/api/send-verification-code', async (req, res) => {
       return res.status(400).json({ error: 'Email and code are required' });
     }
     
-    const mailOptions = {
-      from: '"Ripple Exchange" <noreply@rippleexchange.org>',
-      to: email,
-      subject: 'Ripple Exchange: Your Verification Code',
-      html: `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px; background-color: #0c1021; color: #fff;">
-          <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #2a2a3c;">
-            <img src="https://rippleexchange.org/static/media/logo.fb82fbabcd2b7e76a491.png" alt="Ripple Exchange Logo" style="max-width: 200px; height: auto;">
-          </div>
-          <div style="background-color: #1a1b2a; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #2a2a3c;">
-            <h2 style="color: #fff; text-align: center; margin-bottom: 25px; font-weight: 600;">Security Verification</h2>
-            <p style="color: #cccccc; line-height: 1.6; font-size: 16px;">Hello,</p>
-            <p style="color: #cccccc; line-height: 1.6; font-size: 16px;">Your security verification code for Ripple Exchange is:</p>
-            <div style="text-align: center; margin: 30px 0;">
-              <div style="font-size: 32px; font-weight: bold; letter-spacing: 8px; padding: 20px; background: linear-gradient(135deg, #4A6BF3, #2a3c82); border-radius: 8px; display: inline-block; color: #fff; box-shadow: 0 4px 10px rgba(74, 107, 243, 0.3);">${code}</div>
-            </div>
-            <p style="color: #cccccc; line-height: 1.6; font-size: 16px;">This code will expire in 10 minutes.</p>
-            <p style="color: #cccccc; line-height: 1.6; font-size: 16px; margin-top: 25px; background-color: rgba(74, 107, 243, 0.1); padding: 15px; border-left: 4px solid #4A6BF3; border-radius: 4px;">
-              <strong style="color: #fff;">Security Tip:</strong> Never share this code with anyone. Ripple Exchange representatives will never ask for this code.
-            </p>
-            <p style="color: #cccccc; line-height: 1.6; font-size: 16px;">If you did not request this code, please contact our security team immediately.</p>
-          </div>
-          <div style="margin-top: 30px; padding-top: 20px; color: #888; font-size: 13px; text-align: center; line-height: 1.5;">
-            <p>&copy; ${new Date().getFullYear()} Ripple Exchange. All rights reserved.</p>
-            <p>This is a system-generated email. Please do not reply.</p>
-            <div style="margin-top: 15px; display: flex; justify-content: center; gap: 20px;">
-              <a href="https://rippleexchange.org/terms" style="color: #4A6BF3; text-decoration: none;">Terms of Service</a>
-              <a href="https://rippleexchange.org/privacy" style="color: #4A6BF3; text-decoration: none;">Privacy Policy</a>
-              <a href="https://rippleexchange.org/help" style="color: #4A6BF3; text-decoration: none;">Help Center</a>
-            </div>
-          </div>
-        </div>
-      `
-    };
+    const result = await emailService.sendRegistrationVerificationEmail(email, code);
     
-    const info = await transporter.sendMail(mailOptions);
-    console.log(`Verification email sent to ${email}`);
-    
-    res.status(200).json({ message: 'Verification code sent successfully', messageId: info.messageId });
+    res.status(200).json(result);
   } catch (error) {
     console.error('Error sending verification code:', error);
-    res.status(500).json({ error: 'Failed to send verification code' });
+    res.status(500).json({ error: 'Failed to send verification code', details: error.message });
   }
 });
 
@@ -348,6 +339,35 @@ app.post('/api/send-registration-verification', async (req, res) => {
   } catch (error) {
     console.error('Error processing registration verification request:', error);
     res.status(500).json({ error: 'Failed to process registration verification request' });
+  }
+});
+
+// Add a sendPasswordResetEmail route
+app.post('/api/send-password-reset', async (req, res) => {
+  try {
+    const { email, code } = req.body;
+    
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and code are required' });
+    }
+    
+    const result = await emailService.sendPasswordResetEmail(email, code);
+    
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error sending password reset email:', error);
+    res.status(500).json({ error: 'Failed to send password reset email', details: error.message });
+  }
+});
+
+// Add a route to check if the email server is available
+app.get('/api/check-email-server', async (req, res) => {
+  try {
+    const connectionResult = await emailService.testEmailService();
+    res.json({ available: connectionResult.success });
+  } catch (error) {
+    console.error('Error checking email server:', error);
+    res.status(500).json({ available: false, error: error.message });
   }
 });
 
