@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, where, orderBy, getDocs, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useAuth } from '../contexts/AuthContext';
 import styled from 'styled-components';
@@ -62,6 +62,10 @@ const StatusBadge = styled.span`
         return 'rgba(14, 203, 129, 0.1)';
       case 'pending':
         return 'rgba(247, 147, 26, 0.1)';
+      case 'approved':
+        return 'rgba(3, 169, 244, 0.1)';
+      case 'rejected':
+        return 'rgba(255, 59, 48, 0.1)';
       case 'failed':
         return 'rgba(255, 59, 48, 0.1)';
       default:
@@ -74,12 +78,20 @@ const StatusBadge = styled.span`
         return '#0ECB81';
       case 'pending':
         return '#F7931A';
+      case 'approved':
+        return '#03A9F4';
+      case 'rejected':
+        return '#F6465D';
       case 'failed':
         return '#F6465D';
       default:
         return 'var(--text)';
     }
   }};
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
 `;
 
 const TransactionIcon = styled.div`
@@ -170,7 +182,7 @@ const DetailsCell = styled.td`
   font-size: 14px;
 `;
 
-const TransactionHistory = ({ limit = 5, type = null }) => {
+const TransactionHistory = ({ limit: limitCount = 5, type = null }) => {
   const { currentUser } = useAuth();
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -179,42 +191,54 @@ const TransactionHistory = ({ limit = 5, type = null }) => {
   useEffect(() => {
     if (!currentUser) return;
 
-    const fetchTransactions = async () => {
-      try {
-        setLoading(true);
-        
-        // Create query based on parameters
-        let transactionsQuery = query(
-          collection(db, 'transactions'),
-          where('userId', '==', currentUser.uid),
-          orderBy('timestamp', 'desc')
-        );
-        
-        // Add type filter if specified
-        if (type) {
-          transactionsQuery = query(
-            collection(db, 'transactions'),
-            where('userId', '==', currentUser.uid),
-            where('type', '==', type),
-            orderBy('timestamp', 'desc')
-          );
-        }
-        
-        const querySnapshot = await getDocs(transactionsQuery);
+    setLoading(true);
+    
+    // Create query based on parameters
+    let transactionsQuery = query(
+      collection(db, 'transactions'),
+      where('userId', '==', currentUser.uid),
+      orderBy('timestamp', 'desc'),
+      limit(limitCount)
+    );
+    
+    // Add type filter if specified
+    if (type) {
+      transactionsQuery = query(
+        collection(db, 'transactions'),
+        where('userId', '==', currentUser.uid),
+        where('type', '==', type),
+        orderBy('timestamp', 'desc'),
+        limit(limitCount)
+      );
+    }
+
+    // Set up real-time listener
+    const unsubscribe = onSnapshot(
+      transactionsQuery,
+      (querySnapshot) => {
         const transactionList = querySnapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .slice(0, limit); // Apply limit
-        
+          .map(doc => ({ 
+            id: doc.id, 
+            ...doc.data(),
+            // Convert timestamps to dates for easier handling
+            timestamp: doc.data().timestamp?.toDate() || new Date(),
+            approvedAt: doc.data().approvedAt?.toDate() || null,
+            rejectedAt: doc.data().rejectedAt?.toDate() || null,
+            completedAt: doc.data().completedAt?.toDate() || null
+          }));
+          
         setTransactions(transactionList);
         setLoading(false);
-      } catch (error) {
+      },
+      (error) => {
         console.error('Error fetching transactions:', error);
         setLoading(false);
       }
-    };
-
-    fetchTransactions();
-  }, [currentUser, limit, type]);
+    );
+    
+    // Clean up listener on component unmount
+    return () => unsubscribe();
+  }, [currentUser, limitCount, type]);
 
   const toggleDetails = (transactionId) => {
     if (expandedTransaction === transactionId) {
@@ -302,7 +326,15 @@ const TransactionHistory = ({ limit = 5, type = null }) => {
                   </TableCell>
                   <TableCell>
                     <StatusBadge $status={transaction.status}>
-                      {transaction.status}
+                      <i className={
+                        transaction.status === 'pending' ? 'bi bi-hourglass-split' :
+                        transaction.status === 'approved' ? 'bi bi-check-circle' :
+                        transaction.status === 'completed' ? 'bi bi-check-all' :
+                        transaction.status === 'rejected' ? 'bi bi-x-circle' :
+                        transaction.status === 'failed' ? 'bi bi-exclamation-circle' :
+                        'bi bi-question-circle'
+                      }></i>
+                      {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
                     </StatusBadge>
                   </TableCell>
                 </TableRow>
@@ -324,6 +356,48 @@ const TransactionHistory = ({ limit = 5, type = null }) => {
                           <div className="detail-row">
                             <span className="detail-label">Destination Address:</span>
                             <span className="detail-value">{transaction.destinationAddress}</span>
+                          </div>
+                        )}
+                        {transaction.status && (
+                          <div className="detail-row">
+                            <span className="detail-label">Status:</span>
+                            <span className="detail-value">
+                              <StatusBadge $status={transaction.status}>
+                                <i className={
+                                  transaction.status === 'pending' ? 'bi bi-hourglass-split' :
+                                  transaction.status === 'approved' ? 'bi bi-check-circle' :
+                                  transaction.status === 'completed' ? 'bi bi-check-all' :
+                                  transaction.status === 'rejected' ? 'bi bi-x-circle' :
+                                  transaction.status === 'failed' ? 'bi bi-exclamation-circle' :
+                                  'bi bi-question-circle'
+                                }></i>
+                                {transaction.status.charAt(0).toUpperCase() + transaction.status.slice(1)}
+                              </StatusBadge>
+                            </span>
+                          </div>
+                        )}
+                        {transaction.approvedAt && (
+                          <div className="detail-row">
+                            <span className="detail-label">Approved At:</span>
+                            <span className="detail-value">{formatDate(transaction.approvedAt)}</span>
+                          </div>
+                        )}
+                        {transaction.rejectedAt && (
+                          <div className="detail-row">
+                            <span className="detail-label">Rejected At:</span>
+                            <span className="detail-value">{formatDate(transaction.rejectedAt)}</span>
+                          </div>
+                        )}
+                        {transaction.completedAt && (
+                          <div className="detail-row">
+                            <span className="detail-label">Completed At:</span>
+                            <span className="detail-value">{formatDate(transaction.completedAt)}</span>
+                          </div>
+                        )}
+                        {transaction.processingNotes && (
+                          <div className="detail-row">
+                            <span className="detail-label">Processing Notes:</span>
+                            <span className="detail-value">{transaction.processingNotes}</span>
                           </div>
                         )}
                         {transaction.txHash && (

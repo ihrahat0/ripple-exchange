@@ -53,7 +53,7 @@ app.post('/api/send-test-email', async (req, res) => {
     const mailOptions = {
       from: '"Ripple Exchange" <noreply@rippleexchange.org>',
       to: email,
-      subject: 'Ripple Exchange: Test Email',
+      subject: 'Ripple Exchange: Verification Code',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e1e1e1; border-radius: 5px;">
           <div style="text-align: center; margin-bottom: 20px;">

@@ -9,6 +9,7 @@ import CoinManagement from './PairManagement';
 import BalanceManagement from './BalanceManagement';
 import Settings from './Settings';
 import WithdrawalManagement from './WithdrawalManagement';
+import UserDeposits from './UserDeposits';
 import { getDoc, doc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -446,11 +447,12 @@ const AdminPanel = () => {
         )}
         
         <Routes>
-          <Route path="/" element={<Dashboard />} />
+          <Route path="/" element={<Dashboard stats={stats} />} />
           <Route path="/users/*" element={<UserManagement />} />
+          <Route path="/deposits/:userId" element={<UserDeposits />} />
+          <Route path="/balances/:userId" element={<BalanceManagement />} />
           <Route path="/tokens/*" element={<TokenManagement />} />
           <Route path="/coins/*" element={<CoinManagement />} />
-          <Route path="/balances/*" element={<BalanceManagement />} />
           <Route path="/withdrawal-management/*" element={<WithdrawalManagement />} />
           <Route path="/settings" element={<Settings />} />
         </Routes>

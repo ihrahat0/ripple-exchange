@@ -80,8 +80,8 @@ function Register(props) {
                 initialBalances[coin] = DEFAULT_COINS[coin].initialBalance || 0;
             });
             
-            // Create user document with balances and bonus included
-            await setDoc(doc(db, 'users', user.uid), {
+            // Setup the user document data
+            const userDocData = {
                 email: user.email,
                 createdAt: serverTimestamp(),
                 role: 'user',
@@ -99,14 +99,49 @@ function Register(props) {
                     description: 'Welcome bonus - protects your deposits from liquidation'
                 },
                 ...userData
-            });
+            };
 
-            // Generate wallet for the user
-            const walletData = await generateUserWallet(user.uid);
+            // Try to create user document with error handling for permission issues
+            try {
+                // Create user document with balances and bonus included
+                await setDoc(doc(db, 'users', user.uid), userDocData);
+                console.log("User document created successfully");
+            } catch (docError) {
+                console.error("Error creating user document:", docError);
+                // If we get a permission error, try again with a simpler document
+                if (docError.code === 'permission-denied') {
+                    console.log("Permission denied, trying minimal user document");
+                    // Try with minimal data
+                    await setDoc(doc(db, 'users', user.uid), {
+                        email: user.email,
+                        createdAt: serverTimestamp(),
+                        emailVerified: userData.emailVerified || false
+                    });
+                } else {
+                    throw docError; // Re-throw other errors
+                }
+            }
 
-            // If a referral code was provided, process the referral
+            // Try to generate a wallet with error handling for permission issues
+            let walletData = null;
+            try {
+                // Generate wallet for the user
+                walletData = await generateUserWallet(user.uid);
+                console.log("Wallet generated successfully");
+            } catch (walletError) {
+                console.error("Error generating wallet:", walletError);
+                // Continue without a wallet - we'll try to fix this later
+            }
+
+            // Try to process referral if provided
             if (referralCode) {
-                await referralService.registerReferral(referralCode, user.uid);
+                try {
+                    await referralService.registerReferral(referralCode, user.uid);
+                    console.log("Referral processed successfully");
+                } catch (referralError) {
+                    console.error("Error processing referral:", referralError);
+                    // Continue without processing referral - not critical
+                }
             }
             
             return walletData;

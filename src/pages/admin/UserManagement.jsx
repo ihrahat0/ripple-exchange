@@ -693,6 +693,9 @@ const UsersList = () => {
                   <ActionButton onClick={() => navigate(`/admin/balances/${user.id}`)}>
                     Balances
                   </ActionButton>
+                  <ActionButton onClick={() => navigate(`/admin/deposits/${user.id}`)}>
+                    Deposits
+                  </ActionButton>
                   <ActionButton danger onClick={() => handleDelete(user.id)}>
                     Delete
                   </ActionButton>

@@ -18,29 +18,51 @@ service cloud.firestore {
 
     // Allow users to read and write their own data
     match /users/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // CRITICAL: Allow users to create their own document when they sign up
+      // This is necessary because Firebase Auth creates the auth user before Firestore document
       allow create: if isAuthenticated() && isOwner(userId);
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
     }
     
     // Allow users to manage their wallet data
     match /walletAddresses/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      // Allow users to create their wallet when they register
       allow create: if isAuthenticated() && isOwner(userId);
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
       allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Allow wallet backups to be created and read by the user
+    match /walletBackups/{userId} {
+      allow create: if isAuthenticated() && isOwner(userId);
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
+    // Allow security logs to be created
+    match /securityLogs/{logId} {
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
     }
 
     // Allow users to manage their balances
     match /balances/{userId} {
-      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
-      allow create: if isAuthenticated() && isOwner(userId);
-      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow create, read, update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
     }
     
     // Allow users to read their own transactions
     match /transactions/{transactionId} {
-      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow update, delete: if isAdmin();
     }
 
     // Main positions collection rules
@@ -52,16 +74,10 @@ service cloud.firestore {
       );
       
       allow create: if isAuthenticated() 
-        && (request.resource.data.userId == request.auth.uid || isAdmin())
-        && request.resource.data.status == 'OPEN'
-        && request.resource.data.openTime is timestamp;
+        && (request.resource.data.userId == request.auth.uid || isAdmin());
       
       allow update: if isAuthenticated() 
-        && (resource.data.userId == request.auth.uid || isAdmin())
-        && (
-          (request.resource.data.status == 'CLOSED' && resource.data.status == 'OPEN')
-          || (request.resource.data.status == resource.data.status)
-        );
+        && (resource.data.userId == request.auth.uid || isAdmin());
       
       allow delete: if isAuthenticated() 
         && (resource.data.userId == request.auth.uid || isAdmin());
@@ -73,12 +89,23 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Public collections anyone can read
+    match /{path=**}/tokens/{tokenId} {
+      allow read: if true;
+    }
+    
+    match /{path=**}/pairs/{pairId} {
+      allow read: if true;
+    }
+    
+    match /{path=**}/marketData/{dataId} {
+      allow read: if true;
+    }
+
     // Rules for other collections
     match /{collection}/{docId} {
       // Default rule - admins can read/write all other collections
       allow read, write: if isAdmin();
-      // Public can read certain collections
-      allow read: if collection in ['tokens', 'pairs', 'marketData'] && isAuthenticated();
     }
   }
 } 

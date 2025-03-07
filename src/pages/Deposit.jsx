@@ -873,6 +873,18 @@ const Deposit = () => {
     }
   };
 
+  // Add a warning message explaining supported chains
+  const renderChainWarning = () => {
+    return (
+      <InfoBox>
+        <span className="bi bi-info-circle"></span>
+        <InfoText>
+          <strong>Important:</strong> For security and reliability, we only support deposits on BSC (BNB Smart Chain), ETH (Ethereum), Base, Arbitrum, Polygon, and Solana networks. Please ensure you're sending from these chains only.
+        </InfoText>
+      </InfoBox>
+    );
+  };
+
   if (loading) {
     return (
       <Container>
@@ -1002,6 +1014,7 @@ const Deposit = () => {
         <CardContent>
           {activeTab === 'deposit' ? (
             <>
+              {renderChainWarning()}
               <Description>
                 Select the coin you want to deposit and the blockchain network. Only send{' '}
                 {selectedCoin && <><CoinLogo src={COIN_LOGOS[selectedCoin]} alt={selectedCoin} />{selectedCoin}</>}{' '}
@@ -1034,7 +1047,7 @@ const Deposit = () => {
                   <option value="">Select a network</option>
                   {availableChains.map(chain => (
                     <option key={chain.id} value={chain.id}>
-                      {chain.name} {chain.isSPL ? '(SPL)' : ''}
+                      {chain.name} {chain.isSPL ? '(SOL)' : ''}
                     </option>
                   ))}
                 </Select>

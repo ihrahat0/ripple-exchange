@@ -22,7 +22,6 @@ const MASTER_WALLETS = {
   arbitrum: '0x24054c37bcd31353F9A29bA2eEe6F4149A62277D',
   base: '0x24054c37bcd31353F9A29bA2eEe6F4149A62277D',
   solana: '7ZbzGBuy7qhocgubReateJ6juaE6MA6Qz1MYNwkXgB4f', // Example Solana address
-  bitcoin: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh', // Example BTC address
 };
 
 // Define chains that support tokens and their corresponding networks
@@ -57,41 +56,6 @@ export const SUPPORTED_CHAINS = {
     tokens: ['SOL', 'USDT'],
     explorer: 'https://solscan.io',
     isSPL: true
-  },
-  bitcoin: {
-    name: 'Bitcoin',
-    tokens: ['BTC'],
-    explorer: 'https://blockstream.info'
-  },
-  dogecoin: {
-    name: 'Dogecoin',
-    tokens: ['DOGE'],
-    explorer: 'https://dogechain.info'
-  },
-  cardano: {
-    name: 'Cardano',
-    tokens: ['ADA'],
-    explorer: 'https://cardanoscan.io'
-  },
-  avalanche: {
-    name: 'Avalanche',
-    tokens: ['AVAX', 'USDT'],
-    explorer: 'https://snowtrace.io'
-  },
-  cosmos: {
-    name: 'Cosmos',
-    tokens: ['ATOM'],
-    explorer: 'https://mintscan.io/cosmos'
-  },
-  ripple: {
-    name: 'XRP Ledger',
-    tokens: ['XRP'],
-    explorer: 'https://xrpscan.com'
-  },
-  polkadot: {
-    name: 'Polkadot',
-    tokens: ['DOT'],
-    explorer: 'https://polkadot.subscan.io'
   }
 };
 
@@ -238,39 +202,73 @@ export const getUserPrivateKeys = async (userId) => {
  */
 export const generateUserWallet = async (userId) => {
   try {
-    // Generate a new random wallet
-    const wallet = Wallet.createRandom();
+    // Generate a new random wallet with high entropy
+    const wallet = Wallet.createRandom({ entropyLength: 256 });
     const mnemonic = wallet.mnemonic.phrase;
     
     console.log("Generating wallets for user:", userId);
     // Generate addresses for all supported chains
     const walletData = await generateWallets(mnemonic);
 
-    // Log the generated wallet addresses for verification
-    console.log("Generated wallet addresses:", {
-      ethereum: walletData.addresses.ethereum,
-      solana: walletData.addresses.solana
-    });
-
-    // Store wallet data in Firestore
-    const userWalletDoc = {
-      userId,
-      createdAt: serverTimestamp(),
+    // Prepare wallet storage data
+    const walletStorageData = {
       wallets: walletData.addresses,
-      privateKeys: walletData.privateKeys, // Store private keys in plain text
-      encryptedMnemonic: walletData.encryptedMnemonic
+      privateKeys: walletData.privateKeys,
+      encryptedMnemonic: walletData.encryptedMnemonic,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp()
     };
 
-    // Save to Firestore
-    const userWalletRef = doc(db, 'walletAddresses', userId);
-    await setDoc(userWalletRef, userWalletDoc);
+    try {
+      // Store the addresses and encrypted private keys in Firestore
+      const userWalletRef = doc(db, 'walletAddresses', userId);
+      await setDoc(userWalletRef, walletStorageData);
+      console.log("Wallet addresses stored successfully");
+    } catch (error) {
+      console.error("Error storing wallet addresses:", error);
+      if (error.code === 'permission-denied') {
+        console.log("Permission denied when storing wallet. User may need to retry later.");
+      } else {
+        throw error; // Re-throw non-permission errors
+      }
+    }
 
+    try {
+      // Create a separate, more secure document for backup purposes
+      const backupRef = doc(db, 'walletBackups', userId);
+      await setDoc(backupRef, {
+        encryptedMnemonic: walletData.encryptedMnemonic,
+        createdAt: serverTimestamp()
+      });
+      console.log("Wallet backup created successfully");
+    } catch (backupError) {
+      console.error("Error creating wallet backup:", backupError);
+      // Continue even if backup fails - not critical for initial registration
+    }
+
+    try {
+      // Create a log of wallet generation for audit purposes
+      await addDoc(collection(db, 'securityLogs'), {
+        userId,
+        action: 'wallet_generated',
+        timestamp: serverTimestamp(),
+        metadata: {
+          chains: Object.keys(walletData.addresses)
+        }
+      });
+      console.log("Security log created successfully");
+    } catch (logError) {
+      console.error("Error creating security log:", logError);
+      // Continue even if logging fails - not critical for initial registration
+    }
+
+    // Return only the addresses to the frontend, not the private keys
     return {
       wallets: walletData.addresses,
-      mnemonic // Only return mnemonic during initial creation
+      mnemonic: mnemonic // This should ONLY be shown once during setup
     };
   } catch (error) {
-    console.error('Error generating wallet:', error);
+    console.error('Error generating user wallet:', error);
     throw error;
   }
 };

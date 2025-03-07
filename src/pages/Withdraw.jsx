@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, collection, addDoc, serverTimestamp, query, where, orderBy, getDocs, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
@@ -343,6 +343,57 @@ const HistoryContainer = styled.div`
   margin-top: 20px;
 `;
 
+const StatusSummary = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+`;
+
+const StatusCard = styled.div`
+  flex: 1;
+  min-width: 100px;
+  background: var(--bg2);
+  border-radius: 8px;
+  padding: 12px 15px;
+  text-align: center;
+  border: 1px solid ${props => 
+    props.$status === 'pending' ? 'rgba(247, 147, 26, 0.3)' : 
+    props.$status === 'approved' ? 'rgba(3, 169, 244, 0.3)' : 
+    props.$status === 'rejected' ? 'rgba(255, 59, 48, 0.3)' : 
+    props.$status === 'completed' ? 'rgba(14, 203, 129, 0.3)' : 
+    'var(--line)'};
+  
+  .status-icon {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 8px;
+    color: ${props => 
+      props.$status === 'pending' ? '#F7931A' : 
+      props.$status === 'approved' ? '#03A9F4' : 
+      props.$status === 'rejected' ? '#F6465D' : 
+      props.$status === 'completed' ? '#0ECB81' : 
+      'var(--text)'};
+    
+    i {
+      font-size: 20px;
+    }
+  }
+  
+  .status-count {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    color: var(--text);
+  }
+  
+  .status-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: capitalize;
+  }
+`;
+
 function Withdraw() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
@@ -356,6 +407,14 @@ function Withdraw() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState('withdraw');
+  const [recentWithdrawal, setRecentWithdrawal] = useState(null);
+  const [refreshHistory, setRefreshHistory] = useState(0);
+  const [withdrawalStats, setWithdrawalStats] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    completed: 0
+  });
 
   // Get coin chains based on selected coin
   const getChainForCoin = (coin) => {
@@ -461,11 +520,27 @@ function Withdraw() {
       console.log("Withdrawal request created with ID:", docRef.id);
       
       setSuccess(`Withdrawal request for ${amount} ${selectedCoin} has been submitted and is pending approval. Request ID: ${docRef.id}`);
+      
+      // Store recent withdrawal for notification purposes
+      setRecentWithdrawal({
+        id: docRef.id,
+        token: selectedCoin,
+        amount: parseFloat(amount),
+        status: 'pending'
+      });
+      
+      // Reset form fields
       setAmount('');
       setWithdrawalAddress('');
       
       // Refresh balances to show current state
       fetchUserBalances();
+      
+      // Trigger transaction history refresh
+      setRefreshHistory(prev => prev + 1);
+      
+      // Switch to history tab to show the pending withdrawal
+      setActiveTab('history');
     } catch (error) {
       console.error('Error processing withdrawal:', error);
       setError(`Failed to process your withdrawal: ${error.message}`);
@@ -473,6 +548,46 @@ function Withdraw() {
       setWithdrawing(false);
     }
   };
+
+  // Fetch user's withdrawal stats
+  useEffect(() => {
+    if (!currentUser) return;
+    
+    const fetchWithdrawalStats = async () => {
+      try {
+        const stats = {
+          pending: 0,
+          approved: 0,
+          rejected: 0,
+          completed: 0
+        };
+        
+        // Get withdrawal transactions for this user
+        const withdrawalsQuery = query(
+          collection(db, 'transactions'),
+          where('userId', '==', currentUser.uid),
+          where('type', '==', 'withdrawal'),
+          orderBy('timestamp', 'desc')
+        );
+        
+        const querySnapshot = await getDocs(withdrawalsQuery);
+        
+        // Count by status
+        querySnapshot.docs.forEach(doc => {
+          const status = doc.data().status;
+          if (stats[status] !== undefined) {
+            stats[status]++;
+          }
+        });
+        
+        setWithdrawalStats(stats);
+      } catch (error) {
+        console.error('Error fetching withdrawal stats:', error);
+      }
+    };
+    
+    fetchWithdrawalStats();
+  }, [currentUser, refreshHistory]);
 
   if (loading) {
     return (
@@ -491,14 +606,59 @@ function Withdraw() {
     <Container>
       <div style={{ maxWidth: '600px', width: '100%' }}>
         <WithdrawCard
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
+          initial={{ scale: 0.95, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ duration: 0.3 }}
         >
           <CardHeader>
-            <WalletIcon>💸</WalletIcon>
+            <WalletIcon>💰</WalletIcon>
             <HeaderText>Withdraw Crypto</HeaderText>
           </CardHeader>
+          
+          {/* Add withdrawal status summary */}
+          {(withdrawalStats.pending > 0 || withdrawalStats.approved > 0) && (
+            <StatusSummary>
+              {withdrawalStats.pending > 0 && (
+                <StatusCard $status="pending">
+                  <div className="status-icon">
+                    <i className="bi bi-hourglass-split"></i>
+                  </div>
+                  <div className="status-count">{withdrawalStats.pending}</div>
+                  <div className="status-label">Pending</div>
+                </StatusCard>
+              )}
+              
+              {withdrawalStats.approved > 0 && (
+                <StatusCard $status="approved">
+                  <div className="status-icon">
+                    <i className="bi bi-check-circle"></i>
+                  </div>
+                  <div className="status-count">{withdrawalStats.approved}</div>
+                  <div className="status-label">Approved</div>
+                </StatusCard>
+              )}
+              
+              {withdrawalStats.rejected > 0 && (
+                <StatusCard $status="rejected">
+                  <div className="status-icon">
+                    <i className="bi bi-x-circle"></i>
+                  </div>
+                  <div className="status-count">{withdrawalStats.rejected}</div>
+                  <div className="status-label">Rejected</div>
+                </StatusCard>
+              )}
+              
+              {withdrawalStats.completed > 0 && (
+                <StatusCard $status="completed">
+                  <div className="status-icon">
+                    <i className="bi bi-check-all"></i>
+                  </div>
+                  <div className="status-count">{withdrawalStats.completed}</div>
+                  <div className="status-label">Completed</div>
+                </StatusCard>
+              )}
+            </StatusSummary>
+          )}
           
           <TabsContainer>
             <TabButton 
@@ -512,6 +672,21 @@ function Withdraw() {
               onClick={() => setActiveTab('history')}
             >
               History
+              {withdrawalStats.pending + withdrawalStats.approved > 0 && (
+                <span style={{ 
+                  marginLeft: '5px', 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center',
+                  background: 'rgba(247, 147, 26, 0.2)',
+                  borderRadius: '50%',
+                  width: '18px',
+                  height: '18px',
+                  fontSize: '11px'
+                }}>
+                  {withdrawalStats.pending + withdrawalStats.approved}
+                </span>
+              )}
             </TabButton>
           </TabsContainer>
           
@@ -525,6 +700,39 @@ function Withdraw() {
                 
                 {error && <ErrorMessage>{error}</ErrorMessage>}
                 {success && <SuccessMessage>{success}</SuccessMessage>}
+                
+                {recentWithdrawal && (
+                  <div style={{
+                    background: 'rgba(247, 147, 26, 0.1)',
+                    borderRadius: '8px',
+                    padding: '15px',
+                    marginBottom: '20px',
+                    border: '1px solid rgba(247, 147, 26, 0.3)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '10px' }}>
+                      <i className="bi bi-info-circle" style={{ color: '#F7931A', marginRight: '10px', fontSize: '20px' }}></i>
+                      <strong style={{ color: '#F7931A' }}>Pending Withdrawal</strong>
+                    </div>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
+                      Your withdrawal request for <strong>{recentWithdrawal.amount} {recentWithdrawal.token}</strong> is being processed.
+                    </p>
+                    <button 
+                      onClick={() => setActiveTab('history')} 
+                      style={{
+                        background: 'rgba(247, 147, 26, 0.2)',
+                        border: 'none',
+                        borderRadius: '4px',
+                        padding: '8px 12px',
+                        color: '#F7931A',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <i className="bi bi-clock-history" style={{ marginRight: '5px' }}></i>
+                      View Withdrawal Status
+                    </button>
+                  </div>
+                )}
                 
                 <FormGroup>
                   <Label>Select Coin</Label>
@@ -587,7 +795,11 @@ function Withdraw() {
                 </WithdrawButton>
               </>
             ) : (
-              <TransactionHistory type="withdrawal" limit={10} />
+              <TransactionHistory 
+                type="withdrawal" 
+                limit={10} 
+                key={refreshHistory}
+              />
             )}
           </CardContent>
         </WithdrawCard>

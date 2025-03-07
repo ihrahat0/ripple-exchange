@@ -9,7 +9,7 @@ import defaultAvatar from '../../assets/user.png';
 import logo from '../../assets/images/logo/logo.png';
 import 'react-tabs/style/react-tabs.css';
 import { useAuth } from '../../contexts/AuthContext';
-import { getDoc, doc, collection, query, where, getDocs } from 'firebase/firestore';
+import { getDoc, doc, collection, query, where, getDocs, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import styled, { keyframes } from 'styled-components';
 import Notifications from '../Notifications';
 import { notificationService } from '../../services/notificationService';
@@ -397,9 +397,9 @@ const UserAvatar = styled.div`
   height: 40px;
   border-radius: 50%;
   overflow: hidden;
-  cursor: pointer;
   margin-left: 16px;
-  transition: all 0.3s;
+  cursor: pointer;
+  transition: all 0.3s ease;
   border: 2px solid #F7931A;
   display: flex;
   align-items: center;
@@ -407,9 +407,14 @@ const UserAvatar = styled.div`
   background-color: #1a1a1f;
   
   &:hover {
+    transform: scale(1.05);
     box-shadow: 0 0 10px rgba(247, 147, 26, 0.5);
-    transform: scale(1.1);
-    animation: ${glowPulse} 1.5s ease-in-out infinite;
+  }
+
+  @media (max-width: 768px) {
+    margin-left: 8px;
+    width: 36px;
+    height: 36px;
   }
 `;
 
@@ -449,25 +454,44 @@ const AdminLink = styled(Link)`
   }
 `;
 
-const NotificationBadge = styled.span`
+const NotificationBadge = styled.div`
   position: absolute;
-  top: -5px;
-  right: -5px;
-  background-color: #f7931a;
+  top: 10px;
+  right: 5px;
+  background-color: ${props => props.$status === 'pending' ? '#F7931A' : 
+                              props.$status === 'approved' ? '#03A9F4' : 
+                              props.$status === 'rejected' ? '#F6465D' : 
+                              '#0ECB81'};
   color: white;
-  font-size: 10px;
-  font-weight: bold;
-  height: 16px;
-  width: 16px;
   border-radius: 50%;
+  width: 8px;
+  height: 8px;
+  font-size: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  animation: ${glowPulse} 2s ease-in-out infinite;
+  animation: pulse 2s infinite;
+  
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(247, 147, 26, 0.4);
+    }
+    70% {
+      box-shadow: 0 0 0 5px rgba(247, 147, 26, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(247, 147, 26, 0);
+    }
+  }
+`;
+
+const NavLinkWrapper = styled.div`
+  position: relative;
+  height: 100%;
 `;
 
 const Header = () => {
-    const { currentUser, isEmailVerified } = useAuth();
+    const { currentUser, isEmailVerified, logout } = useAuth();
     const [user, setUser] = useState(null);
     const [isAdmin, setIsAdmin] = useState(false);
     const navigate = useNavigate();
@@ -479,6 +503,10 @@ const Header = () => {
     const [notificationCount, setNotificationCount] = useState(0);
     const [userData, setUserData] = useState(null);
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+    const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [pendingWithdrawals, setPendingWithdrawals] = useState([]);
+    const [recentWithdrawalUpdates, setRecentWithdrawalUpdates] = useState([]);
     const searchInputRef = useRef(null);
     const searchResultsRef = useRef(null);
 
@@ -552,6 +580,81 @@ const Header = () => {
 
         return () => clearInterval(intervalId);
     }, [currentUser]);
+
+    // Listen for withdrawal status changes
+    useEffect(() => {
+        if (!currentUser) return;
+        
+        // Listen for pending withdrawals
+        const pendingWithdrawalsQuery = query(
+            collection(db, 'transactions'),
+            where('userId', '==', currentUser.uid),
+            where('type', '==', 'withdrawal'),
+            where('status', '==', 'pending'),
+            orderBy('timestamp', 'desc'),
+            limit(5)
+        );
+        
+        const pendingUnsubscribe = onSnapshot(pendingWithdrawalsQuery, (snapshot) => {
+            const withdrawals = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data(),
+                timestamp: doc.data().timestamp?.toDate() || new Date()
+            }));
+            setPendingWithdrawals(withdrawals);
+        });
+        
+        // Listen for recent withdrawal status updates (approved, rejected, completed)
+        const recentUpdatesQuery = query(
+            collection(db, 'transactions'),
+            where('userId', '==', currentUser.uid),
+            where('type', '==', 'withdrawal'),
+            orderBy('timestamp', 'desc'),
+            limit(10)
+        );
+        
+        const updatesUnsubscribe = onSnapshot(recentUpdatesQuery, (snapshot) => {
+            const last24Hours = new Date();
+            last24Hours.setHours(last24Hours.getHours() - 24);
+            
+            const recentUpdates = snapshot.docs
+                .map(doc => ({
+                    id: doc.id,
+                    ...doc.data(),
+                    timestamp: doc.data().timestamp?.toDate() || new Date(),
+                    approvedAt: doc.data().approvedAt?.toDate() || null,
+                    rejectedAt: doc.data().rejectedAt?.toDate() || null,
+                    completedAt: doc.data().completedAt?.toDate() || null
+                }))
+                .filter(withdrawal => {
+                    // Include withdrawals with status changes in the last 24 hours
+                    const statusChangeTime = withdrawal.approvedAt || withdrawal.rejectedAt || withdrawal.completedAt;
+                    return statusChangeTime && statusChangeTime > last24Hours;
+                });
+                
+            setRecentWithdrawalUpdates(recentUpdates);
+        });
+        
+        return () => {
+            pendingUnsubscribe();
+            updatesUnsubscribe();
+        };
+    }, [currentUser]);
+    
+    const getWithdrawalNotificationStatus = () => {
+        if (pendingWithdrawals.length > 0) return 'pending';
+        if (recentWithdrawalUpdates.length > 0) {
+            // Return the status of the most recent update
+            if (recentWithdrawalUpdates[0].completedAt) return 'completed';
+            if (recentWithdrawalUpdates[0].approvedAt) return 'approved';
+            if (recentWithdrawalUpdates[0].rejectedAt) return 'rejected';
+        }
+        return null;
+    };
+    
+    const hasWithdrawalNotifications = () => {
+        return pendingWithdrawals.length > 0 || recentWithdrawalUpdates.length > 0;
+    };
 
     const handleSearch = async (term) => {
         setSearchTerm(term);
@@ -656,9 +759,14 @@ const Header = () => {
     };
 
     const handleProfileClick = (e) => {
+        console.log('Profile icon clicked, email verified:', isEmailVerified);
         if (!isEmailVerified) {
             e.preventDefault();
             alert('Please verify your email before accessing your profile.');
+        } else {
+            // Navigate to user profile page when email is verified
+            console.log('Navigating to user profile...');
+            navigate('/user-profile');
         }
     };
 
@@ -743,7 +851,14 @@ const Header = () => {
                 <Navigation $isOpen={mobileMenuOpen}>
                     <NavLink onClick={() => handleNavLinkClick('/market')}>Market</NavLink>
                     <NavLink onClick={() => handleNavLinkClick('/deposit')}>Deposit</NavLink>
-                    <NavLink onClick={() => handleNavLinkClick('/withdraw')}>Withdraw</NavLink>
+                    <NavLinkWrapper>
+                        <NavLink onClick={() => handleNavLinkClick('/withdraw')}>
+                            Withdraw
+                            {hasWithdrawalNotifications() && (
+                                <NotificationBadge $status={getWithdrawalNotificationStatus()} />
+                            )}
+                        </NavLink>
+                    </NavLinkWrapper>
                 </Navigation>
 
                 <UserControls>
@@ -807,7 +922,7 @@ const Header = () => {
                                     onClose={() => setShowNotifications(false)}
                                 />
                             )}
-                            <UserAvatar onClick={handleProfileClick}>
+                            <UserAvatar onClick={handleProfileClick} role="button" aria-label="User Profile">
                                 <AvatarImage 
                                     src={ensureValidImageUrl(userData?.photoURL || userData?.profilePic)}
                                     alt={userData?.displayName?.charAt(0) || user.email?.charAt(0) || 'U'}

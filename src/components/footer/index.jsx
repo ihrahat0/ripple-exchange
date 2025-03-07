@@ -391,8 +391,12 @@ function Footer(props) {
 
     const [listSocial] = useState([
         {
-            icon: 'icon-twitter',
+            icon: 'bi bi-twitter-x',
             path: 'https://x.com/ripple_exch'
+        },
+        {
+            icon: 'bi bi-telegram',
+            path: 'https://t.me/Ripple_exch'
         },
     ]);
 
@@ -481,7 +485,9 @@ function Footer(props) {
                             {
                                 listSocial.map((data,idx) => (
                                     <li key={idx}>
-                                        <Link to={data.path}><span className={data.icon}></span></Link>
+                                        <a href={data.path} target="_blank" rel="noopener noreferrer">
+                                            <i className={data.icon}></i>
+                                        </a>
                                     </li>
                                 ))
                             }
