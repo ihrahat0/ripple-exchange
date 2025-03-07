@@ -118,6 +118,20 @@ const AddressLink = styled.a`
   }
 `;
 
+const CopyButton = styled.button`
+  background: transparent;
+  border: none;
+  color: var(--primary);
+  cursor: pointer;
+  padding: 4px;
+  margin-left: 4px;
+  border-radius: 4px;
+  
+  &:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+`;
+
 const UserLink = styled.a`
   color: var(--primary);
   text-decoration: none;
@@ -244,6 +258,7 @@ const AllDeposits = () => {
   const itemsPerPage = 10;
   const [userMap, setUserMap] = useState({});
   const [walletMap, setWalletMap] = useState({});
+  const [copiedText, setCopiedText] = useState(null);
 
   useEffect(() => {
     fetchDeposits();
@@ -349,6 +364,17 @@ const AllDeposits = () => {
     
     setUserMap(newUserMap);
     setWalletMap(newWalletMap);
+  };
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text)
+      .then(() => {
+        setCopiedText(text);
+        setTimeout(() => setCopiedText(null), 2000);
+      })
+      .catch(err => {
+        console.error('Failed to copy to clipboard:', err);
+      });
   };
 
   const formatDate = (date) => {
@@ -484,6 +510,7 @@ const AllDeposits = () => {
                 <tr>
                   <th>User</th>
                   <th>Network</th>
+                  <th>From Address</th>
                   <th>Wallet Address</th>
                   <th>Amount</th>
                   <th>Currency</th>
@@ -505,8 +532,23 @@ const AllDeposits = () => {
                         {deposit.network?.charAt(0).toUpperCase() + deposit.network?.slice(1) || 'Unknown'}
                       </NetworkBadge>
                     </td>
-                    <td style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {deposit.fromAddress || 'N/A'}
+                      {deposit.fromAddress && (
+                        <CopyButton onClick={() => copyToClipboard(deposit.fromAddress)}>
+                          {copiedText === deposit.fromAddress ? 
+                            <i className="bi bi-check-circle"></i> : 
+                            <i className="bi bi-clipboard"></i>}
+                        </CopyButton>
+                      )}
+                    </td>
+                    <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {getWalletAddress(deposit.userId, deposit.network)}
+                      <CopyButton onClick={() => copyToClipboard(getWalletAddress(deposit.userId, deposit.network))}>
+                        {copiedText === getWalletAddress(deposit.userId, deposit.network) ? 
+                          <i className="bi bi-check-circle"></i> : 
+                          <i className="bi bi-clipboard"></i>}
+                      </CopyButton>
                     </td>
                     <td>{deposit.amount}</td>
                     <td>{deposit.currency || 'Unknown'}</td>
@@ -522,13 +564,20 @@ const AllDeposits = () => {
                     </td>
                     <td>
                       {deposit.transactionHash ? (
-                        <AddressLink 
-                          href={getExplorerUrl(deposit.transactionHash, deposit.network)} 
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {`${deposit.transactionHash.substring(0, 8)}...${deposit.transactionHash.substring(deposit.transactionHash.length - 6)}`}
-                        </AddressLink>
+                        <>
+                          <AddressLink 
+                            href={getExplorerUrl(deposit.transactionHash, deposit.network)} 
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {`${deposit.transactionHash.substring(0, 8)}...${deposit.transactionHash.substring(deposit.transactionHash.length - 6)}`}
+                          </AddressLink>
+                          <CopyButton onClick={() => copyToClipboard(deposit.transactionHash)}>
+                            {copiedText === deposit.transactionHash ? 
+                              <i className="bi bi-check-circle"></i> : 
+                              <i className="bi bi-clipboard"></i>}
+                          </CopyButton>
+                        </>
                       ) : (
                         'N/A'
                       )}

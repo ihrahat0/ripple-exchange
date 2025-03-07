@@ -566,6 +566,7 @@ const UsersList = () => {
   const [loading, setLoading] = useState(true);
   const [lastVisible, setLastVisible] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedUsers, setSelectedUsers] = useState([]);
   const navigate = useNavigate();
   const pageSize = 10;
 
@@ -599,6 +600,7 @@ const UsersList = () => {
       }));
       
       setUsers(userData);
+      setSelectedUsers([]);
       setLastVisible(snapshot.docs[snapshot.docs.length - 1]);
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -625,9 +627,52 @@ const UsersList = () => {
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedUsers.length === 0) {
+      alert('Please select at least one user to delete');
+      return;
+    }
+    
+    if (window.confirm(`Are you sure you want to delete ${selectedUsers.length} users? This action cannot be undone.`)) {
+      try {
+        setLoading(true);
+        const deletePromises = selectedUsers.map(userId => deleteDoc(doc(db, 'users', userId)));
+        await Promise.all(deletePromises);
+        
+        // Update local state
+        setUsers(users.filter(user => !selectedUsers.includes(user.id)));
+        setSelectedUsers([]);
+        alert(`Successfully deleted ${selectedUsers.length} users`);
+      } catch (error) {
+        console.error('Error deleting users:', error);
+        alert('Failed to delete some users');
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
   const handleNextPage = () => {
     if (lastVisible) {
       fetchUsers(lastVisible);
+    }
+  };
+
+  const handleSelectUser = (userId) => {
+    setSelectedUsers(prev => {
+      if (prev.includes(userId)) {
+        return prev.filter(id => id !== userId);
+      } else {
+        return [...prev, userId];
+      }
+    });
+  };
+
+  const handleSelectAllUsers = () => {
+    if (selectedUsers.length === users.length) {
+      setSelectedUsers([]);
+    } else {
+      setSelectedUsers(users.map(user => user.id));
     }
   };
 
@@ -638,14 +683,21 @@ const UsersList = () => {
   return (
     <div>
       <FilterBar>
-        <form onSubmit={handleSearch}>
-          <SearchInput 
-            type="text" 
-            placeholder="Search by email" 
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-          />
-        </form>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <form onSubmit={handleSearch}>
+            <SearchInput 
+              type="text" 
+              placeholder="Search by email" 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+            />
+          </form>
+          {selectedUsers.length > 0 && (
+            <ActionButton danger onClick={handleBulkDelete}>
+              Delete Selected ({selectedUsers.length})
+            </ActionButton>
+          )}
+        </div>
         <ActionButton primary onClick={() => navigate('/admin/users/add')}>
           Add New User
         </ActionButton>
@@ -655,6 +707,13 @@ const UsersList = () => {
         <UserTable>
           <TableHead>
             <tr>
+              <TableHeader style={{ width: '40px' }}>
+                <input 
+                  type="checkbox" 
+                  checked={selectedUsers.length === users.length && users.length > 0}
+                  onChange={handleSelectAllUsers}
+                />
+              </TableHeader>
               <TableHeader>User ID</TableHeader>
               <TableHeader>Email</TableHeader>
               <TableHeader>Name</TableHeader>
@@ -666,6 +725,13 @@ const UsersList = () => {
           <tbody>
             {users.map(user => (
               <TableRow key={user.id}>
+                <TableCell style={{ width: '40px' }}>
+                  <input 
+                    type="checkbox" 
+                    checked={selectedUsers.includes(user.id)}
+                    onChange={() => handleSelectUser(user.id)}
+                  />
+                </TableCell>
                 <TableCell>{user.id.substring(0, 8)}...</TableCell>
                 <TableCell>{user.email}</TableCell>
                 <TableCell>{user.displayName || 'N/A'}</TableCell>
