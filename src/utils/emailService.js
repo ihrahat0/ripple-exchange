@@ -1,6 +1,6 @@
-import nodemailer from 'nodemailer';
-import dotenv from 'dotenv';
-import axios from 'axios';
+const nodemailer = require('nodemailer');
+const dotenv = require('dotenv');
+const axios = require('axios');
 
 dotenv.config();
 
@@ -46,7 +46,7 @@ const initializeTransporter = () => {
  * Check if the email server is available
  * This is used to gracefully handle environments where email might not be available
  */
-export const isEmailServerAvailable = async () => {
+const isEmailServerAvailable = async () => {
   if (isDev) {
     // Always return true in development - we'll handle errors within the email functions
     return true;
@@ -66,7 +66,7 @@ export const isEmailServerAvailable = async () => {
  * Generate a verification code
  * @returns {string} 6-digit verification code
  */
-export const generateVerificationCode = () => {
+const generateVerificationCode = () => {
   return Math.floor(100000 + Math.random() * 900000).toString();
 };
 
@@ -76,7 +76,7 @@ export const generateVerificationCode = () => {
  * @param {string} code - Verification code
  * @returns {Promise<Object>} Status of the email send operation
  */
-export const sendRegistrationVerificationEmail = async (email, code) => {
+const sendRegistrationVerificationEmail = async (email, code) => {
   initializeTransporter();
   
   console.log(`Attempting to send registration verification email to: ${email}`);
@@ -117,7 +117,7 @@ export const sendRegistrationVerificationEmail = async (email, code) => {
  * @param {string} code - Reset verification code
  * @returns {Promise<Object>} Status of the email send operation
  */
-export const sendPasswordResetEmail = async (email, code) => {
+const sendPasswordResetEmail = async (email, code) => {
   initializeTransporter();
   
   console.log(`Attempting to send password reset email to: ${email}`);
@@ -157,7 +157,7 @@ export const sendPasswordResetEmail = async (email, code) => {
  * @param {string} email - User's email address
  * @returns {Promise<Object>} Status of the email send operation
  */
-export const sendPasswordChangeConfirmation = async (email) => {
+const sendPasswordChangeConfirmation = async (email) => {
   try {
     // Implementation goes here
     return { success: true };
@@ -173,7 +173,7 @@ export const sendPasswordChangeConfirmation = async (email) => {
  * @param {boolean} enabled - Whether 2FA was enabled or disabled
  * @returns {Promise<Object>} Status of the email send operation
  */
-export const send2FAStatusChangeEmail = async (email, enabled) => {
+const send2FAStatusChangeEmail = async (email, enabled) => {
   try {
     // Implementation goes here
     return { success: true };
@@ -187,7 +187,7 @@ export const send2FAStatusChangeEmail = async (email, enabled) => {
  * Test the email service connection
  * @returns {Promise<Object>} Status of the connection test
  */
-export const testEmailService = async () => {
+const testEmailService = async () => {
   initializeTransporter();
   
   try {
@@ -200,17 +200,14 @@ export const testEmailService = async () => {
   }
 };
 
-// Make the ES Module compatible with CommonJS for server.js to use
-// This is done because server.js uses require() which is CommonJS
-if (typeof module !== 'undefined') {
-  module.exports = {
-    initializeTransporter,
-    isEmailServerAvailable,
-    generateVerificationCode,
-    sendRegistrationVerificationEmail,
-    sendPasswordResetEmail,
-    sendPasswordChangeConfirmation,
-    send2FAStatusChangeEmail,
-    testEmailService
-  };
-} 
+// Export all functions with CommonJS
+module.exports = {
+  initializeTransporter,
+  isEmailServerAvailable,
+  generateVerificationCode,
+  sendRegistrationVerificationEmail,
+  sendPasswordResetEmail,
+  sendPasswordChangeConfirmation,
+  send2FAStatusChangeEmail,
+  testEmailService
+}; 
