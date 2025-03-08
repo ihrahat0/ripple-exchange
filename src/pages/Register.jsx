@@ -23,6 +23,7 @@ import { generateUserWallet } from '../services/walletService';
 import { referralService } from '../services/referralService';
 import styled from 'styled-components';
 import VerificationScreen from '../components/VerificationScreen';
+import axios from 'axios';
 
 Register.propTypes = {
     
@@ -55,6 +56,7 @@ function Register(props) {
     const [sentVerificationCode, setSentVerificationCode] = useState('');
     const [success, setSuccess] = useState('');
     const [isGoogleUser, setIsGoogleUser] = useState(false);
+    const [verificationSent, setVerificationSent] = useState(false);
 
     // Check for referral code in URL params when component mounts
     React.useEffect(() => {
@@ -442,6 +444,19 @@ function Register(props) {
     const handlePhoneSignup = async (e) => {
         e.preventDefault();
         setError('Phone authentication requires additional Firebase setup.');
+    };
+
+    const handleSendVerificationCode = async () => {
+        try {
+            const response = await axios.post('/api/send-verification-code', { email });
+            if (response.data.success) {
+                // Just show a message to check email
+                setVerificationSent(true);
+                // Code will be entered by user from their email
+            }
+        } catch (error) {
+            // ...
+        }
     };
 
     if (showMnemonic && walletInfo) {

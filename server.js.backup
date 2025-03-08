@@ -5,7 +5,6 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const emailService = require('./server/utils/mockEmailService');
 const path = require('path');
-const emailService = require('./server/utils/emailService');
 
 // Initialize the app
 const app = express();
@@ -69,29 +68,17 @@ app.get('/api/test-email', async (req, res) => {
 // Send verification code
 app.post('/api/send-verification-code', async (req, res) => {
   try {
-    const { email } = req.body;
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    const { email, code } = req.body;
     
-    // Store the code securely (in database or session)
-    // This depends on how you're currently handling verification
-    
-    // Send the verification email
-    const emailResult = await emailService.sendRegistrationVerificationEmail(email, verificationCode);
-    
-    if (emailResult.success) {
-      res.status(200).json({ 
-        success: true, 
-        message: 'Verification code sent to your email'
-      });
-    } else {
-      res.status(500).json({ 
-        success: false, 
-        error: 'Failed to send verification email'
-      });
+    if (!email || !code) {
+      return res.status(400).json({ error: 'Email and code are required' });
     }
+    
+    const result = await emailService.sendRegistrationVerificationEmail(email, code);
+    res.status(200).json(result);
   } catch (error) {
     console.error('Error sending verification code:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    res.status(500).json({ error: 'Failed to send verification code', details: error.message });
   }
 });
 
