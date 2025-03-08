@@ -1,12 +1,81 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../firebase';
-import { collection, doc, getDoc, getDocs, updateDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, updateDoc, query, where } from 'firebase/firestore';
 import styled from 'styled-components';
 
 const Container = styled.div`
   padding: 20px;
   color: var(--text);
+`;
+
+const SearchContainer = styled.div`
+  margin-bottom: 30px;
+  background: var(--bg2);
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+`;
+
+const UserCard = styled.div`
+  background: var(--bg2);
+  padding: 20px;
+  border-radius: 10px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 15px;
+`;
+
+const Avatar = styled.div`
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: var(--primary);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  margin-right: 15px;
+`;
+
+const UserDetails = styled.div`
+  flex: 1;
+`;
+
+const BalanceGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+`;
+
+const BalanceCard = styled.div`
+  background: var(--bg1);
+  padding: 15px;
+  border-radius: 8px;
+  position: relative;
+`;
+
+const EditIcon = styled.button`
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  
+  &:hover {
+    color: var(--primary);
+  }
 `;
 
 const FormGroup = styled.div`
@@ -19,16 +88,6 @@ const Label = styled.label`
   font-weight: 500;
 `;
 
-const Select = styled.select`
-  width: 100%;
-  padding: 10px;
-  border-radius: 4px;
-  border: 1px solid var(--line);
-  background: var(--bg1);
-  color: var(--text);
-  margin-bottom: 16px;
-`;
-
 const Input = styled.input`
   width: 100%;
   padding: 10px;
@@ -36,6 +95,7 @@ const Input = styled.input`
   border: 1px solid var(--line);
   background: var(--bg1);
   color: var(--text);
+  margin-bottom: 8px;
 `;
 
 const Button = styled.button`
@@ -57,242 +117,369 @@ const Button = styled.button`
   }
 `;
 
-const ActionButton = styled(Button)`
-  margin-bottom: 20px;
-`;
-
-const UserCard = styled.div`
-  background: var(--bg2);
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const BalanceTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-  
-  th, td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid var(--line);
-  }
-  
-  th {
-    background: var(--bg1);
-    color: var(--text);
-  }
-`;
-
 const ErrorMessage = styled.div`
-  color: var(--error);
-  background: rgba(246, 70, 93, 0.1);
-  border-radius: 4px;
+  color: #ff3b30;
+  margin: 10px 0;
   padding: 10px;
-  margin-bottom: 20px;
+  background: rgba(255, 59, 48, 0.1);
+  border-radius: 4px;
 `;
 
 const SuccessMessage = styled.div`
-  color: #0ECB81;
-  background: rgba(14, 203, 129, 0.1);
-  border-radius: 4px;
+  color: #4cd964;
+  margin: 10px 0;
   padding: 10px;
-  margin-bottom: 20px;
+  background: rgba(76, 217, 100, 0.1);
+  border-radius: 4px;
 `;
 
-const BalanceManagement = () => {
-  const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [userBalances, setUserBalances] = useState({});
+const NoResultsMessage = styled.div`
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  background: var(--bg2);
+  border-radius: 8px;
+  margin-top: 20px;
+`;
+
+const QuickCoinButtons = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 15px;
+`;
+
+const QuickCoinButton = styled.button`
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 5px 10px;
+  color: var(--text);
+  cursor: pointer;
+  
+  &:hover {
+    background: var(--primary);
+    color: white;
+  }
+`;
+
+// Common coins for quick selection
+const COMMON_COINS = ['BTC', 'ETH', 'USDT', 'USDC', 'BNB', 'SOL', 'XRP', 'ADA', 'DOGE'];
+
+const UserSearch = () => {
+  const { userId } = useParams(); // Get userId from URL parameters if available
+  const [searchEmail, setSearchEmail] = useState('');
+  const [searchResults, setSearchResults] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [editBalance, setEditBalance] = useState({
-    coin: '',
-    amount: ''
-  });
+  const [editingBalance, setEditingBalance] = useState({ userId: '', coin: '', amount: '' });
+  const [userBalances, setUserBalances] = useState({});
+  const navigate = useNavigate();
 
+  // Check for userId in URL params on component mount
   useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  const fetchUsers = async () => {
-    try {
-      const usersCollection = collection(db, 'users');
-      const usersSnapshot = await getDocs(usersCollection);
-      const usersList = usersSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setUsers(usersList);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-      setError('Failed to fetch users');
-    }
-  };
-
-  const fetchUserBalances = async (userId) => {
-    setLoading(true);
-    try {
-      const userDoc = await getDoc(doc(db, 'users', userId));
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        setSelectedUser({
-          id: userId,
-          ...userData
-        });
-        setUserBalances(userData.balances || {});
-      } else {
-        setError('User not found');
+    const loadUserFromId = async () => {
+      if (userId) {
+        setLoading(true);
+        setError('');
+        
+        try {
+          const userDoc = await getDoc(doc(db, 'users', userId));
+          
+          if (userDoc.exists()) {
+            const userData = userDoc.data();
+            setSearchResults({
+              id: userId,
+              ...userData
+            });
+            setSearchEmail(userData.email || '');
+            
+            // Load user balances
+            await fetchUserBalances(userId);
+            
+            setSuccess('User loaded successfully');
+          } else {
+            setError('User not found with that ID');
+          }
+        } catch (err) {
+          console.error('Error loading user from ID:', err);
+          setError('Failed to load user details: ' + err.message);
+        } finally {
+          setLoading(false);
+        }
       }
-    } catch (error) {
-      console.error('Error fetching user balances:', error);
-      setError('Failed to fetch user balances');
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    
+    loadUserFromId();
+  }, [userId]);
 
-  const handleUpdateBalance = async (e) => {
+  const searchUserByEmail = async (e) => {
     e.preventDefault();
-    if (!selectedUser || !editBalance.coin || editBalance.amount === '') {
-      setError('Please select a user, coin, and enter an amount');
+    if (!searchEmail.trim()) {
+      setError('Please enter an email to search');
       return;
     }
 
     setLoading(true);
+    setError('');
+    setSuccess('');
+    setSearchResults(null);
+
     try {
-      const userRef = doc(db, 'users', selectedUser.id);
-      const userDoc = await getDoc(userRef);
-      
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const updatedBalances = { ...userData.balances };
-        updatedBalances[editBalance.coin] = parseFloat(editBalance.amount);
-        
-        await updateDoc(userRef, {
-          balances: updatedBalances
-        });
-        
-        setUserBalances(updatedBalances);
-        setSuccess(`Successfully updated ${editBalance.coin} balance for ${selectedUser.email}`);
-        setEditBalance({ coin: '', amount: '' });
-        setTimeout(() => setSuccess(''), 3000);
+      // Query Firestore for the user with the given email
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', searchEmail.trim()));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        setError('No user found with that email');
+        setLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Error updating balance:', error);
-      setError('Failed to update balance');
+
+      // Get the first matching user
+      const userData = querySnapshot.docs[0].data();
+      const userId = querySnapshot.docs[0].id;
+      
+      // Fetch user balances
+      await fetchUserBalances(userId);
+
+      setSearchResults({
+        id: userId,
+        ...userData
+      });
+      
+      setSuccess('User found successfully');
+    } catch (err) {
+      console.error('Error searching for user:', err);
+      setError('Failed to search for user: ' + err.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchUserBalances = async (userId) => {
+    try {
+      const userDoc = await getDoc(doc(db, 'users', userId));
+      
+      if (userDoc.exists() && userDoc.data().balances) {
+        setUserBalances(userDoc.data().balances);
+      } else {
+        setUserBalances({});
+      }
+    } catch (err) {
+      console.error('Error fetching user balances:', err);
+      setError('Failed to fetch user balances');
+    }
+  };
+
+  const handleEditBalance = (userId, coin) => {
+    const currentAmount = userBalances[coin] || 0;
+    setEditingBalance({
+      userId,
+      coin,
+      amount: currentAmount.toString()
+    });
+  };
+
+  const handleUpdateBalance = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      const { userId, coin, amount } = editingBalance;
+      const numericAmount = parseFloat(amount);
+
+      if (isNaN(numericAmount)) {
+        throw new Error('Amount must be a valid number');
+      }
+
+      // Update the user's balance in Firestore
+      const userRef = doc(db, 'users', userId);
+      const userDoc = await getDoc(userRef);
+
+      if (!userDoc.exists()) {
+        throw new Error('User not found');
+      }
+
+      const userData = userDoc.data();
+      const updatedBalances = { ...userData.balances } || {};
+      updatedBalances[coin] = numericAmount;
+
+      await updateDoc(userRef, { balances: updatedBalances });
+
+      // Update local state
+      setUserBalances(updatedBalances);
+      setEditingBalance({ userId: '', coin: '', amount: '' });
+      setSuccess(`Successfully updated ${coin} balance to ${numericAmount}`);
+    } catch (err) {
+      console.error('Error updating balance:', err);
+      setError('Failed to update balance: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const getUserInitials = (name) => {
+    if (!name) return 'U';
+    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+  };
+
   return (
     <Container>
-      <ActionButton onClick={() => navigate('/admin')}>
-        ← Back to Admin user-profile
-      </ActionButton>
+      <h2>User Search</h2>
       
-      <h2>User Balance Management</h2>
-      
-      {error && <ErrorMessage>{error}</ErrorMessage>}
-      {success && <SuccessMessage>{success}</SuccessMessage>}
-      
-      <FormGroup>
-        <Label>Select User</Label>
-        <Select 
-          value={selectedUser?.id || ''}
-          onChange={(e) => {
-            const userId = e.target.value;
-            if (userId) {
-              fetchUserBalances(userId);
-            } else {
-              setSelectedUser(null);
-              setUserBalances({});
-            }
-          }}
-        >
-          <option value="">-- Select a user --</option>
-          {users.map(user => (
-            <option key={user.id} value={user.id}>
-              {user.email || user.displayName || user.id}
-            </option>
-          ))}
-        </Select>
-      </FormGroup>
-      
-      {selectedUser && (
-        <>
-          <h3>Balances for {selectedUser.email || selectedUser.displayName}</h3>
-          
-          <form onSubmit={handleUpdateBalance}>
-            <FormGroup>
-              <Label>Select Coin</Label>
-              <Select
-                value={editBalance.coin}
-                onChange={(e) => setEditBalance({...editBalance, coin: e.target.value})}
-                required
-              >
-                <option value="">-- Select coin --</option>
-                {Object.keys(userBalances).map(coin => (
-                  <option key={coin} value={coin}>{coin}</option>
+      <SearchContainer>
+        <form onSubmit={searchUserByEmail}>
+          <FormGroup>
+            <Label htmlFor="searchEmail">Search User by Email</Label>
+            <Input
+              id="searchEmail"
+              type="email"
+              value={searchEmail}
+              onChange={(e) => setSearchEmail(e.target.value)}
+              placeholder="Enter user email"
+              required
+            />
+          </FormGroup>
+          <Button type="submit" disabled={loading}>
+            {loading ? 'Searching...' : 'Search User'}
+          </Button>
+        </form>
+        
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+        {success && <SuccessMessage>{success}</SuccessMessage>}
+      </SearchContainer>
+
+      {searchResults ? (
+        <div>
+          <UserCard>
+            <UserInfo>
+              <Avatar>{getUserInitials(searchResults.displayName)}</Avatar>
+              <UserDetails>
+                <h3>{searchResults.displayName || 'No Name'}</h3>
+                <p>Email: {searchResults.email}</p>
+                <p>User ID: {searchResults.id}</p>
+              </UserDetails>
+            </UserInfo>
+            
+            <h3>User Balances</h3>
+            {Object.keys(userBalances).length > 0 ? (
+              <BalanceGrid>
+                {Object.entries(userBalances).map(([coin, balance]) => (
+                  <BalanceCard key={coin}>
+                    <h4>{coin.toUpperCase()}</h4>
+                    <p>{balance}</p>
+                    <EditIcon onClick={() => handleEditBalance(searchResults.id, coin)}>
+                      <i className="bi bi-pencil"></i>
+                    </EditIcon>
+                  </BalanceCard>
                 ))}
-              </Select>
-            </FormGroup>
+              </BalanceGrid>
+            ) : (
+              <p>No balances found for this user.</p>
+            )}
             
-            <FormGroup>
-              <Label>New Balance Amount</Label>
-              <Input
-                type="number"
-                value={editBalance.amount}
-                onChange={(e) => setEditBalance({...editBalance, amount: e.target.value})}
-                placeholder="Enter new balance amount"
-                step="0.00000001"
-                required
-              />
-            </FormGroup>
+            {editingBalance.userId && (
+              <div style={{ marginTop: '30px' }}>
+                <h3>Edit {editingBalance.coin.toUpperCase()} Balance</h3>
+                <form onSubmit={handleUpdateBalance}>
+                  <FormGroup>
+                    <Label htmlFor="balanceAmount">Amount</Label>
+                    <Input
+                      id="balanceAmount"
+                      type="number"
+                      step="any"
+                      value={editingBalance.amount}
+                      onChange={(e) => setEditingBalance({...editingBalance, amount: e.target.value})}
+                      required
+                    />
+                  </FormGroup>
+                  <Button type="submit" disabled={loading}>
+                    {loading ? 'Updating...' : 'Update Balance'}
+                  </Button>
+                  <Button 
+                    type="button" 
+                    style={{ marginLeft: '10px', background: '#666' }} 
+                    onClick={() => setEditingBalance({ userId: '', coin: '', amount: '' })}
+                  >
+                    Cancel
+                  </Button>
+                </form>
+              </div>
+            )}
             
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Updating...' : 'Update Balance'}
-            </Button>
-          </form>
-          
-          <BalanceTable>
-            <thead>
-              <tr>
-                <th>Coin</th>
-                <th>Balance</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.entries(userBalances).map(([coin, balance]) => (
-                <tr key={coin}>
-                  <td>{coin}</td>
-                  <td>{balance}</td>
-                  <td>
-                    <Button
-                      onClick={() => setEditBalance({
-                        coin,
-                        amount: balance.toString()
-                      })}
-                    >
-                      Edit
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </BalanceTable>
-        </>
+            {/* Option to add a new balance */}
+            {!editingBalance.userId && (
+              <div style={{ marginTop: '30px' }}>
+                <h3>Add New Balance</h3>
+                <form onSubmit={(e) => {
+                  e.preventDefault();
+                  const coin = e.target.elements.coin.value.trim().toUpperCase();
+                  const amount = parseFloat(e.target.elements.amount.value);
+                  if (coin && !isNaN(amount)) {
+                    setEditingBalance({
+                      userId: searchResults.id,
+                      coin: coin,
+                      amount: amount.toString()
+                    });
+                  }
+                }}>
+                  <FormGroup>
+                    <Label htmlFor="coin">Coin</Label>
+                    <Input
+                      id="coin"
+                      type="text"
+                      placeholder="e.g. BTC, ETH, USDT"
+                      required
+                    />
+                    <Label>Quick Select:</Label>
+                    <QuickCoinButtons>
+                      {COMMON_COINS.map(coin => (
+                        <QuickCoinButton 
+                          key={coin} 
+                          type="button"
+                          onClick={() => {
+                            document.getElementById('coin').value = coin;
+                          }}
+                        >
+                          {coin}
+                        </QuickCoinButton>
+                      ))}
+                    </QuickCoinButtons>
+                  </FormGroup>
+                  <FormGroup>
+                    <Label htmlFor="amount">Amount</Label>
+                    <Input
+                      id="amount"
+                      type="number"
+                      step="any"
+                      placeholder="Enter amount"
+                      required
+                    />
+                  </FormGroup>
+                  <Button type="submit">
+                    Add Balance
+                  </Button>
+                </form>
+              </div>
+            )}
+          </UserCard>
+        </div>
+      ) : (
+        searchEmail && !loading && error && (
+          <NoResultsMessage>
+            <i className="bi bi-search" style={{ fontSize: '24px', display: 'block', marginBottom: '10px' }}></i>
+            <p>No user found with that email. Please try a different search.</p>
+          </NoResultsMessage>
+        )
       )}
     </Container>
   );
 };
 
-export default BalanceManagement; 
+export default UserSearch; 

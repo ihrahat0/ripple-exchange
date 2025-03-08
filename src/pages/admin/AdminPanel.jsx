@@ -6,7 +6,7 @@ import Dashboard from './Dashboard';
 import UserManagement from './UserManagement';
 import TokenManagement from './TokenManagement';
 import CoinManagement from './PairManagement';
-import BalanceManagement from './BalanceManagement';
+import UserSearch from './BalanceManagement';
 import Settings from './Settings';
 import WithdrawalManagement from './WithdrawalManagement';
 import UserDeposits from './UserDeposits';
@@ -318,7 +318,7 @@ const AdminPanel = () => {
     if (path.includes('user-management') || path.includes('users')) return 'User Management';
     if (path.includes('token-management') || path.includes('tokens')) return 'Token Management';
     if (path.includes('pair-management') || path.includes('coins')) return 'Coin Management';
-    if (path.includes('balance-management') || path.includes('balances')) return 'Balance Management';
+    if (path.includes('balance-management') || path.includes('balances')) return 'User Search';
     if (path.includes('withdrawal-management')) return 'Withdrawal Management';
     if (path.includes('deposits')) return 'User Deposits';
     if (path.includes('settings')) return 'Settings';
@@ -369,7 +369,7 @@ const AdminPanel = () => {
           </NavItem>
           <NavItem>
             <NavLink to="/admin/balances" active={location.pathname.includes('/admin/balances') ? 'true' : undefined}>
-              <i className="bi bi-wallet2"></i> User Balances
+              <i className="bi bi-search"></i> User Search
             </NavLink>
           </NavItem>
           <NavItem>
@@ -458,7 +458,8 @@ const AdminPanel = () => {
           <Route path="/users/*" element={<UserManagement />} />
           <Route path="/deposits" element={<AllDeposits />} />
           <Route path="/deposits/:userId" element={<UserDeposits />} />
-          <Route path="/balances/:userId" element={<BalanceManagement />} />
+          <Route path="/balances" element={<UserSearch />} />
+          <Route path="/balances/:userId" element={<UserSearch />} />
           <Route path="/tokens/*" element={<TokenManagement />} />
           <Route path="/coins/*" element={<CoinManagement />} />
           <Route path="/withdrawal-management/*" element={<WithdrawalManagement />} />

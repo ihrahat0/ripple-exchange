@@ -82,5 +82,11 @@ export const DEFAULT_COINS = {
         symbol: 'ATOM',
         initialBalance: 0,
         decimals: 8
+    },
+    BCH: {
+        name: 'Bitcoin Cash',
+        symbol: 'BCH',
+        initialBalance: 0,
+        decimals: 8
     }
 }; 

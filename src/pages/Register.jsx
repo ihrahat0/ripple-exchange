@@ -175,25 +175,34 @@ function Register(props) {
             // Import email service dynamically
             const { generateVerificationCode, sendRegistrationVerificationEmail } = await import('../utils/emailService');
             
-            // Send the verification code via email with registration template
-            const emailResult = await sendRegistrationVerificationEmail(email, otp);
-            
-            // Store the OTP temporarily for verification
+            // Don't log the OTP but set in state
             setSentVerificationCode(otp);
             
-            // Set success message
-            if (emailResult.message && emailResult.message.includes('unavailable')) {
-                // Never display verification code, even in development mode
-                setSuccess('Account created! Please check your email for verification code.');
-            } else {
-                setSuccess('Account created! Please enter the verification code sent to your email.');
+            // Send the registration verification code via email
+            console.log('Sending verification email...');
+            let emailSent = false;
+
+            try {
+                const emailResult = await sendRegistrationVerificationEmail(email, otp);
+                
+                if (emailResult.success) {
+                    console.log('Verification email sent successfully');
+                    emailSent = true;
+                } else {
+                    console.error('Email service reported an error:', emailResult.error);
+                    // Continue with registration even if email fails
+                }
+            } catch (emailError) {
+                console.error('Error during email sending:', emailError);
+                // Continue with registration even if email fails
             }
             
             // Store additional user data and generate wallet
             const walletData = await storeUserData(user, {
                 displayName: nickname || email.split('@')[0],
                 emailVerified: false,
-                otp: otp // Store OTP in user data
+                otp: otp, // Store OTP in user data
+                emailSent // Track if email was sent successfully
             });
 
             // Show mnemonic to user if available
@@ -206,13 +215,19 @@ function Register(props) {
             const userData = {
                 email,
                 nickname: nickname || email.split('@')[0],
-                otp
+                otp,
+                emailSent // Track if email was sent successfully
             };
             setTempUserData(userData);
             
             // Show OTP verification screen
             setShowOtpVerification(true);
             setRegisteredEmail(email);
+            
+            // Inform the user about the email status after successful registration
+            if (!emailSent) {
+                setError('Registration successful but verification email could not be sent. Please request a new code if needed.');
+            }
             
         } catch (error) {
             console.error('Registration error:', error);
@@ -268,7 +283,23 @@ function Register(props) {
             setSentVerificationCode(otp);
             
             // Send the registration verification code via email
-            await sendRegistrationVerificationEmail(email, otp);
+            console.log('Sending verification email...');
+            let emailSent = false;
+
+            try {
+                const emailResult = await sendRegistrationVerificationEmail(email, otp);
+                
+                if (emailResult.success) {
+                    console.log('Verification email sent successfully');
+                    emailSent = true;
+                } else {
+                    console.error('Email service reported an error:', emailResult.error);
+                    // Continue with registration even if email fails
+                }
+            } catch (emailError) {
+                console.error('Error during email sending:', emailError);
+                // Continue with registration even if email fails
+            }
 
             // Prepare user data
             const userData = {
@@ -277,8 +308,9 @@ function Register(props) {
                 phone: `${countryCode}${phone}`,
                 country,
                 uidCode,
-                otp,
-                authProvider: 'email'
+                otp, // Store OTP in user data for verification
+                authProvider: 'email',
+                emailSent // Track if email was sent successfully
             };
 
             // Store user data in Firestore and wait for it to complete
@@ -358,43 +390,34 @@ function Register(props) {
             setLoading(true);
             setError('');
             
+            // Check if we have the email
             if (!registeredEmail && !tempUserData?.email) {
-                setError('Email not found');
+                setError('No email found for resending verification code');
                 return;
             }
             
-            // Use email from either registeredEmail or tempUserData
-            const emailToUse = registeredEmail || tempUserData?.email;
+            const email = registeredEmail || tempUserData.email;
             
-            // Import email service dynamically
+            // Import services dynamically
             const { generateVerificationCode, sendRegistrationVerificationEmail } = await import('../utils/emailService');
             
-            // Generate a new 6-digit code
+            // Generate a new code
             const newOtp = generateVerificationCode();
             setSentVerificationCode(newOtp);
             
-            // Update temp user data
-            if (tempUserData) {
-                setTempUserData({ ...tempUserData, otp: newOtp });
+            // Only update Firestore if we have a user (otherwise we'll catch in OTP verification)
+            if (auth.currentUser) {
+                const userRef = doc(db, 'users', auth.currentUser.uid);
+                await updateDoc(userRef, { otp: newOtp });
             }
             
-            // Send the registration verification code via email
-            const emailResult = await sendRegistrationVerificationEmail(emailToUse, newOtp);
+            // Send verification email
+            await sendRegistrationVerificationEmail(email, newOtp);
             
-            // Handle response - never display the code
-            if (emailResult.message && emailResult.message.includes('unavailable')) {
-                // Never display verification code, even in development mode
-                setSuccess('New verification code sent to your email.');
-            } else {
-                setSuccess('New verification code sent to your email.');
-            }
-            
-            // Keep success message visible longer for testing
-            setTimeout(() => setSuccess(''), 30000);
-            
-        } catch (error) {
-            console.error('Error sending verification code:', error);
-            setError('Failed to send verification code. Please try again.');
+            setSuccess('New verification code sent. Please check your email.');
+        } catch (err) {
+            console.error('Error resending OTP:', err);
+            setError(err.message);
         } finally {
             setLoading(false);
         }

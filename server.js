@@ -3,7 +3,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const emailService = require('./server/utils/mockEmailService');
 const path = require('path');
 const emailService = require('./server/utils/emailService');
 
@@ -11,9 +10,25 @@ const emailService = require('./server/utils/emailService');
 const app = express();
 const port = process.env.PORT || 3001;
 
-// CORS options
+// CORS options - support multiple origins from env variable
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',') 
+  : ['http://localhost:3000', 'http://localhost:3002', 'https://rippleexchange.org', 'http://rippleexchange.org'];
+
+console.log('CORS allowed origins:', allowedOrigins);
+
 const corsOptions = {
-  origin: ['http://localhost:3000', 'https://rippleexchange.org', 'http://rippleexchange.org'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`Origin ${origin} not allowed by CORS: ${origin}`);
+      callback(null, false);
+    }
+  },
   credentials: true,
   optionsSuccessStatus: 200
 };
@@ -69,29 +84,74 @@ app.get('/api/test-email', async (req, res) => {
 // Send verification code
 app.post('/api/send-verification-code', async (req, res) => {
   try {
-    const { email } = req.body;
-    const verificationCode = Math.floor(100000 + Math.random() * 900000).toString();
+    console.log('Received verification code request:', req.body);
+    const { email, code } = req.body;
     
-    // Store the code securely (in database or session)
-    // This depends on how you're currently handling verification
+    if (!email) {
+      console.error('Email is required but was not provided');
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    // Use the code from the client if provided, otherwise generate one
+    const verificationCode = code || Math.floor(100000 + Math.random() * 900000).toString();
+    
+    console.log(`Processing verification email request for ${email} with code ${verificationCode}`);
+    
+    // Test SMTP connection first
+    const nodemailer = require('nodemailer');
+    const testTransporter = nodemailer.createTransport({
+      host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+      port: parseInt(process.env.EMAIL_PORT || '587'),
+      secure: process.env.EMAIL_SECURE === 'true',
+      auth: {
+        user: process.env.EMAIL_USER || 'verify.rippleexchange@gmail.com',
+        pass: process.env.EMAIL_PASS || 'nlob twdl jmqq atux'
+      }
+    });
+    
+    console.log('Testing SMTP connection...');
+    const connectionTest = await new Promise((resolve) => {
+      testTransporter.verify((error, success) => {
+        if (error) {
+          console.error('SMTP connection test failed:', error);
+          resolve({ success: false, error });
+        } else {
+          console.log('SMTP connection successful');
+          resolve({ success: true });
+        }
+      });
+    });
+    
+    if (!connectionTest.success) {
+      return res.status(500).json({ 
+        success: false, 
+        error: `SMTP connection failed: ${connectionTest.error.message}`
+      });
+    }
     
     // Send the verification email
+    console.log('Sending verification email...');
     const emailResult = await emailService.sendRegistrationVerificationEmail(email, verificationCode);
     
     if (emailResult.success) {
+      console.log(`Successfully sent verification email to ${email} with message ID: ${emailResult.messageId}`);
       res.status(200).json({ 
         success: true, 
         message: 'Verification code sent to your email'
       });
     } else {
+      console.error(`Failed to send verification email: ${emailResult.error}`);
       res.status(500).json({ 
         success: false, 
-        error: 'Failed to send verification email'
+        error: `Failed to send verification email: ${emailResult.error}`
       });
     }
   } catch (error) {
-    console.error('Error sending verification code:', error);
-    res.status(500).json({ success: false, error: 'Internal server error' });
+    console.error('Error in verification code endpoint:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: error.message || 'An unknown error occurred'
+    });
   }
 });
 

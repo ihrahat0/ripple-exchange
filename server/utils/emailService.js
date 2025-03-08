@@ -1,18 +1,43 @@
 const nodemailer = require('nodemailer');
+const smtpTransport = require('nodemailer-smtp-transport');
 const fs = require('fs');
 const path = require('path');
 
 // Create transporter with configuration from environment
 const createTransporter = () => {
-  return nodemailer.createTransport({
+  console.log('Creating email transporter with these settings:', {
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: parseInt(process.env.EMAIL_PORT || '587'),
+    secure: process.env.EMAIL_SECURE === 'true'
+  });
+
+  // Create a more robust transport configuration
+  const transportOptions = smtpTransport({
     host: process.env.EMAIL_HOST || 'smtp.gmail.com',
     port: parseInt(process.env.EMAIL_PORT || '587'),
     secure: process.env.EMAIL_SECURE === 'true',
     auth: {
       user: process.env.EMAIL_USER || 'verify.rippleexchange@gmail.com',
       pass: process.env.EMAIL_PASS || 'nlob twdl jmqq atux'
+    },
+    tls: {
+      rejectUnauthorized: false // To handle some certificate issues in certain environments
+    },
+    debug: true // Enable debug logging
+  });
+
+  const transporter = nodemailer.createTransport(transportOptions);
+  
+  // Verify the connection
+  transporter.verify(function(error, success) {
+    if (error) {
+      console.error('Email transporter error:', error);
+    } else {
+      console.log('Email server is ready to send messages');
     }
   });
+  
+  return transporter;
 };
 
 // Save a copy of emails for debugging (optional for production)
@@ -37,13 +62,14 @@ const saveEmailCopy = (to, subject, html) => {
 // Send verification email for registration
 const sendRegistrationVerificationEmail = async (email, code) => {
   try {
+    console.log(`Creating email transporter for ${email}...`);
     const transporter = createTransporter();
     
     // Email HTML template
     const html = `
       <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 600px; margin: 0 auto; padding: 30px; border-radius: 10px; background-color: #0c1021; color: #fff;">
         <div style="text-align: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #2a2a3c;">
-          <img src="https://rippleexchange.org/static/media/logo.fb82fbabcd2b7e76a491.png" alt="Ripple Exchange Logo" style="max-width: 200px; height: auto;">
+          <h1 style="color: #4A6BF3; margin: 0;">Ripple Exchange</h1>
         </div>
         <div style="background-color: #1a1b2a; padding: 30px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); border: 1px solid #2a2a3c;">
           <h2 style="color: #fff; text-align: center; margin-bottom: 25px; font-weight: 600;">Security Verification</h2>
@@ -66,17 +92,28 @@ const sendRegistrationVerificationEmail = async (email, code) => {
     `;
     
     // Save a copy (for debugging)
+    console.log('Saving email copy to file...');
     saveEmailCopy(email, 'Verification Code', html);
     
     // Send email
-    const info = await transporter.sendMail({
+    console.log(`Attempting to send email to ${email}...`);
+    const mailOptions = {
       from: process.env.EMAIL_FROM || '"Ripple Exchange" <verify.rippleexchange@gmail.com>',
       to: email,
       subject: 'Ripple Exchange: Your Verification Code',
       html: html
+    };
+    
+    console.log('Mail options:', { 
+      from: mailOptions.from, 
+      to: mailOptions.to, 
+      subject: mailOptions.subject 
     });
     
+    const info = await transporter.sendMail(mailOptions);
+    
     console.log(`Verification email sent to ${email} (MessageID: ${info.messageId})`);
+    console.log('Email sending response:', info);
     
     return {
       success: true,

@@ -971,6 +971,40 @@ const calculatePnL = (position, currentMarketPrice) => {
   }
 };
 
+// Generate random quantity based on price range
+const generateRandomQty = (price) => {
+  // For very low-priced tokens (< $0.01), use much larger quantities
+  if (price < 0.01) {
+    // For micro-priced tokens, quantities typically range from 10,000 to 100,000
+    return (Math.random() * 90000 + 10000).toFixed(4);
+  }
+  // For low-priced tokens ($0.01-$1), use large quantities 
+  else if (price < 1) {
+    // For very low-priced assets, quantities typically range from 1,000 to 10,000
+    return (Math.random() * 9000 + 1000).toFixed(4);
+  }
+  // For medium-low priced tokens ($1-$10)
+  else if (price < 10) {
+    // For low-priced assets, quantities typically range from 100 to 1,000
+    return (Math.random() * 900 + 100).toFixed(4);
+  }
+  // For medium-priced assets ($10-$100), use moderate quantities
+  else if (price < 100) {
+    // For medium-priced assets, quantities range from 10 to 100
+    return (Math.random() * 90 + 10).toFixed(4);
+  }
+  // For mid-high priced tokens ($100-$500) 
+  else if (price < 500) {
+    // Medium quantities between 0.1 and 5
+    return (Math.random() * 4.9 + 0.1).toFixed(4);
+  } 
+  // For high-priced assets (>$500)
+  else {
+    // Smaller quantities between 0.05 and 2
+    return (Math.random() * 1.95 + 0.05).toFixed(4);
+  }
+};
+
 // Generate realistic order book data based on current price
 const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   // Ensure we have a valid price to work with
@@ -978,26 +1012,51 @@ const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
     ? Number(currentPrice) // Ensure it's converted to a number 
     : 100;
   
-  // Determine price step based on the current price - using 0.01% as requested
-  const priceStep = Math.max(0.01, validPrice * 0.0001); // 0.01% of price, minimum 0.01
+  console.log('Using valid price for order book:', validPrice);
+  
+  // Adjust price step based on the current price to keep orders close to actual market price
+  let priceStep;
+  
+  if (validPrice < 0.0001) {
+    // For ultra-micro-priced tokens, use 0.2% of price as step
+    priceStep = validPrice * 0.002;
+  } else if (validPrice < 0.001) {
+    // For micro-priced tokens, use 0.3% of price as step
+    priceStep = validPrice * 0.003;
+  } else if (validPrice < 0.01) {
+    // For very low-priced tokens, use 0.4% of price as step
+    priceStep = validPrice * 0.004;
+  } else if (validPrice < 0.1) {
+    // For low-priced tokens, use 0.5% of price as step
+    priceStep = validPrice * 0.005;
+  } else if (validPrice < 1) {
+    // For medium-low priced tokens, use 0.2% step
+    priceStep = validPrice * 0.002;
+  } else {
+    // For higher-priced tokens, use 0.1% step
+    priceStep = validPrice * 0.001;
+  }
   
   const asks = [];
   const bids = [];
   const numOrders = 8; // Reduced number of asks and bids to generate to fit without scrolling
   
-  // Calculate the spread price (very small spread)
-  const spreadAmount = validPrice * 0.0001; // 0.01% spread
+  // Calculate the spread based on the actual price to ensure it's proportional
+  const spreadAmount = Math.max(validPrice * 0.0005, Number.EPSILON); // Min 0.05% spread, ensure it's never 0
+  
+  // Calculate starting prices for asks and bids
   const askStartPrice = validPrice + (spreadAmount / 2);
   const bidStartPrice = validPrice - (spreadAmount / 2);
   
+  console.log('Ask start price:', askStartPrice, 'Bid start price:', bidStartPrice, 'Step:', priceStep);
+  
   // Generate ask prices (sells above current price)
   for (let i = 0; i < numOrders; i++) {
-    const price = Number(askStartPrice + (i * priceStep));
-    // Generate random volume between 0.01 and 0.5 for high value coins
-    const quantity = validPrice > 100 
-      ? Number(Math.random() * 0.49 + 0.01) 
-      : Number(Math.random() * 10 + 1);
-    const total = Number(price * quantity);
+    const price = Number((askStartPrice + (i * priceStep)).toFixed(10));
+    
+    // Generate random volume based on price range
+    const quantity = parseFloat(generateRandomQty(price));
+    const total = Number((price * quantity).toFixed(10));
     
     asks.push({
       price,
@@ -1008,12 +1067,21 @@ const generateOrderBook = (currentPrice, bidAskSpread = 0.002) => {
   
   // Generate bid prices (buys below current price)
   for (let i = 0; i < numOrders; i++) {
-    const price = Number(bidStartPrice - (i * priceStep));
-    // Generate random volume between 0.01 and 0.5 for high value coins
-    const quantity = validPrice > 100 
-      ? Number(Math.random() * 0.49 + 0.01) 
-      : Number(Math.random() * 10 + 1);
-    const total = Number(price * quantity);
+    // Ensure price doesn't go negative for low-priced tokens
+    let price;
+    if (bidStartPrice < priceStep * (i + 1)) {
+      // If subtracting would make price negative, use a percentage of current price
+      price = Number((bidStartPrice * Math.pow(0.99, i + 1)).toFixed(10));
+    } else {
+      price = Number((bidStartPrice - (i * priceStep)).toFixed(10));
+    }
+    
+    // Ensure price is always positive
+    price = Math.max(Number.EPSILON, price);
+    
+    // Generate random volume based on price range
+    const quantity = parseFloat(generateRandomQty(price));
+    const total = Number((price * quantity).toFixed(10));
     
     bids.push({
       price,
@@ -1040,11 +1108,17 @@ const createOrderBookData = (marketPrice, symbol, buyRatio = 0.5) => {
     return { asks: [], bids: [] };
   }
 
+  // Log the actual market price used for debugging
+  console.log('Creating order book with market price:', marketPrice);
+
+  // Ensure we're working with the actual price, not an arbitrary value
+  const validPrice = parseFloat(marketPrice);
+  
   // Use very tight spread for all assets as requested
-  const bidAskSpread = 0.0001; // 0.01% spread
+  const bidAskSpread = validPrice * 0.001; // 0.1% spread
 
   // Generate consistent order book data
-  const orderBook = generateOrderBook(marketPrice, bidAskSpread);
+  const orderBook = generateOrderBook(validPrice, bidAskSpread);
   
   return orderBook;
 };
@@ -1053,56 +1127,41 @@ const createOrderBookData = (marketPrice, symbol, buyRatio = 0.5) => {
 const generateMockOrderBookData = createOrderBookData;
 const generateDummyOrders = createOrderBookData;
 
-const formatSmallNumber = (num) => {
-  // Convert string to number if needed
-  const number = typeof num === 'string' ? parseFloat(num) : num;
-  
-  if (isNaN(number) || number === null) return '0.00';
-  
-  // For extremely small numbers (less than 0.00000001)
-  if (number < 0.00000001 && number > 0) {
-    return '<0.00000001';
+// Format the price displayed in the order book
+const formatOrderPrice = (price) => {
+  if (typeof price !== 'number' && typeof price !== 'string') {
+    return '0.00';
   }
   
-  // For very small numbers (less than 0.0001)
-  if (number < 0.0001 && number > 0) {
-    // Display all significant digits for very small numbers
-    const scientificNotation = number.toExponential();
-    if (scientificNotation.includes('e-')) {
-      // Format with appropriate decimal places based on the exponent
-      const exponent = parseInt(scientificNotation.split('e-')[1], 10);
-      return number.toFixed(exponent + 2).replace(/\.?0+$/, '');
-    }
-    return number.toFixed(8);
+  const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+  
+  if (isNaN(numPrice)) {
+    return '0.00';
   }
   
-  // For small numbers (0.0001 to 0.001)
-  if (number < 0.001) {
-    return number.toFixed(7);
+  // Format based on price ranges
+  if (numPrice < 0.000001) {
+    // Scientific notation for extremely small prices
+    return numPrice.toExponential(6);
+  } else if (numPrice < 0.00001) {
+    return numPrice.toFixed(9);
+  } else if (numPrice < 0.0001) {
+    return numPrice.toFixed(8);
+  } else if (numPrice < 0.001) {
+    return numPrice.toFixed(7);
+  } else if (numPrice < 0.01) {
+    return numPrice.toFixed(6);
+  } else if (numPrice < 0.1) {
+    return numPrice.toFixed(5);
+  } else if (numPrice < 1) {
+    return numPrice.toFixed(4);
+  } else if (numPrice < 10) {
+    return numPrice.toFixed(3);
+  } else if (numPrice < 1000) {
+    return numPrice.toFixed(2);
+  } else {
+    return Math.floor(numPrice).toLocaleString();
   }
-  
-  // For numbers between 0.001 and 0.01
-  if (number < 0.01) {
-    return number.toFixed(6);
-  }
-  
-  // For numbers between 0.01 and 0.1
-  if (number < 0.1) {
-    return number.toFixed(5);
-  }
-  
-  // For numbers between 0.1 and 1
-  if (number < 1) {
-    return number.toFixed(4);
-  }
-  
-  // For numbers between 1 and 100
-  if (number < 100) {
-    return number.toFixed(2);
-  }
-  
-  // For larger numbers, format with commas and no decimal places
-  return number.toLocaleString(undefined, {maximumFractionDigits: 0});
 };
 
 // Helper function to safely cleanup resources
@@ -1220,6 +1279,59 @@ const OrderBookTable = styled.div`
     }
   }
 `;
+
+// Restore the formatSmallNumber function since other parts of the code may be using it
+const formatSmallNumber = (num) => {
+  // Convert string to number if needed
+  const number = typeof num === 'string' ? parseFloat(num) : num;
+  
+  if (isNaN(number) || number === null) return '0.00';
+  
+  // For extremely small numbers (less than 0.00000001)
+  if (number < 0.00000001 && number > 0) {
+    return '<0.00000001';
+  }
+  
+  // For very small numbers (less than 0.0001)
+  if (number < 0.0001 && number > 0) {
+    // Display all significant digits for very small numbers
+    const scientificNotation = number.toExponential();
+    if (scientificNotation.includes('e-')) {
+      // Format with appropriate decimal places based on the exponent
+      const exponent = parseInt(scientificNotation.split('e-')[1], 10);
+      return number.toFixed(exponent + 2).replace(/\.?0+$/, '');
+    }
+    return number.toFixed(8);
+  }
+  
+  // For small numbers (0.0001 to 0.001)
+  if (number < 0.001) {
+    return number.toFixed(7);
+  }
+  
+  // For numbers between 0.001 and 0.01
+  if (number < 0.01) {
+    return number.toFixed(6);
+  }
+  
+  // For numbers between 0.01 and 0.1
+  if (number < 0.1) {
+    return number.toFixed(5);
+  }
+  
+  // For numbers between 0.1 and 1
+  if (number < 1) {
+    return number.toFixed(4);
+  }
+  
+  // For numbers between 1 and 100
+  if (number < 100) {
+    return number.toFixed(2);
+  }
+  
+  // For larger numbers, format with commas and no decimal places
+  return number.toLocaleString(undefined, {maximumFractionDigits: 0});
+};
 
 // Trading component function
 const Trading = () => {
@@ -1641,11 +1753,17 @@ const Trading = () => {
             const response = await axios.get(`https://api.dexscreener.com/latest/dex/pairs/${cryptoData.token.chainId}/${cryptoData.token.address}`);
             if (response.data?.pair?.priceUsd) {
               const price = parseFloat(response.data.pair.priceUsd);
+              console.log('Raw DEX price from API:', price);
               if (!isNaN(price) && price > 0) {
+                // Store the exact price from the API
                 setMarketPrice(price);
                 setLastPrice(price);
                 setCurrentPrice(price);
-                setOrderBook(generateDummyOrders(price));
+                
+                // Generate order book with exactly the same price
+                console.log('Generating order book with exact DEX price:', price);
+                const newOrderBook = generateDummyOrders(price);
+                setOrderBook(newOrderBook);
               } else {
                 console.warn('Invalid price received from DEX API:', response.data.pair.priceUsd);
               }
@@ -1680,12 +1798,17 @@ const Trading = () => {
           
           if (response.data[coinId] && response.data[coinId].usd) {
             const newPrice = parseFloat(response.data[coinId].usd);
+            console.log('Raw price from CoinGecko:', newPrice);
             if (!isNaN(newPrice) && newPrice > 0) {
               console.log(`Received price update for ${coinId}:`, newPrice);
               setMarketPrice(newPrice);
               setLastPrice(newPrice);
               setCurrentPrice(newPrice);
-              setOrderBook(generateDummyOrders(newPrice));
+              
+              // Generate order book with the exact same price
+              console.log('Generating order book with exact price:', newPrice);
+              const newOrderBook = generateDummyOrders(newPrice);
+              setOrderBook(newOrderBook);
               
               // Also set up a WebSocket for real-time updates if available
               setupWebSocketConnection(symbol.toLowerCase());
@@ -1724,11 +1847,16 @@ const Trading = () => {
             if (data.p) {
               const newPrice = parseFloat(data.p);
               if (!isNaN(newPrice) && newPrice > 0) {
-              console.log(`Received WebSocket price update for ${formattedSymbol}:`, newPrice);
+                console.log(`Received WebSocket price update for ${formattedSymbol}:`, newPrice);
+                // Use exactly the same price for all state updates
                 setMarketPrice(newPrice);
                 setLastPrice(newPrice);
                 setCurrentPrice(newPrice);
-                setOrderBook(generateDummyOrders(newPrice));
+                
+                // Generate order book with the exact same price
+                console.log('Generating order book with exact WebSocket price:', newPrice);
+                const newOrderBook = generateDummyOrders(newPrice);
+                setOrderBook(newOrderBook);
               } else {
                 console.warn('Invalid price received from WebSocket:', data.p);
               }
@@ -3451,22 +3579,19 @@ const Trading = () => {
     // Get the current token symbol from cryptoData
     const tokenSymbol = cryptoData?.token?.symbol || 'BNB';
     
-    // Generate random quantity for NaN values - using larger values to be more noticeable
-    const generateRandomQty = () => {
-      return (Math.random() * 2 + 0.5).toFixed(4);
-    };
+    // Note: Using the global generateRandomQty function now
     
     // Ensure orderBook contains valid data
     const safeOrderBook = {
       asks: (orderBook?.asks || []).map(ask => ({
         price: !isNaN(ask.price) ? ask.price : Number(currentPrice * (1 + Math.random() * 0.02)),
-        quantity: !isNaN(ask.quantity) ? ask.quantity : generateRandomQty(),
-        total: !isNaN(ask.total) ? ask.total : Number((currentPrice * (1 + Math.random() * 0.02)) * generateRandomQty())
+        quantity: !isNaN(ask.quantity) ? ask.quantity : generateRandomQty(ask.price),
+        total: !isNaN(ask.total) ? ask.total : Number((currentPrice * (1 + Math.random() * 0.02)) * generateRandomQty(ask.price))
       })),
       bids: (orderBook?.bids || []).map(bid => ({
         price: !isNaN(bid.price) ? bid.price : Number(currentPrice * (1 - Math.random() * 0.02)),
-        quantity: !isNaN(bid.quantity) ? bid.quantity : generateRandomQty(),
-        total: !isNaN(bid.total) ? bid.total : Number((currentPrice * (1 - Math.random() * 0.02)) * generateRandomQty())
+        quantity: !isNaN(bid.quantity) ? bid.quantity : generateRandomQty(bid.price),
+        total: !isNaN(bid.total) ? bid.total : Number((currentPrice * (1 - Math.random() * 0.02)) * generateRandomQty(bid.price))
       })),
       marketPrice: !isNaN(orderBook?.marketPrice) ? orderBook.marketPrice : currentPrice
     };
@@ -3484,7 +3609,15 @@ const Trading = () => {
             {safeOrderBook.asks.map((ask, index) => (
               <div key={`ask-${index}`} className="row">
                 <OrderPrice type="ask">{Number(ask.price).toFixed(2)}</OrderPrice>
-                <div>{Number(ask.quantity).toFixed(4)}</div>
+                <div>
+                  {isNaN(parseFloat(ask.amount)) ? 
+                    (ask.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                     ask.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                     (Math.random() * 20 + 1).toFixed(4)) : 
+                    (typeof ask.amount === 'number' ? 
+                      ask.amount.toFixed(4) : 
+                      parseFloat(ask.amount).toFixed(4))}
+                </div>
                 <div>{Number(ask.total).toFixed(2)}</div>
               </div>
             ))}
@@ -3499,7 +3632,15 @@ const Trading = () => {
             {safeOrderBook.bids.map((bid, index) => (
               <div key={`bid-${index}`} className="row">
                 <OrderPrice type="bid">{Number(bid.price).toFixed(2)}</OrderPrice>
-                <div>{Number(bid.quantity).toFixed(4)}</div>
+                <div>
+                  {isNaN(parseFloat(bid.amount)) ? 
+                    (bid.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                     bid.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                     (Math.random() * 20 + 1).toFixed(4)) : 
+                    (typeof bid.amount === 'number' ? 
+                      bid.amount.toFixed(4) : 
+                      parseFloat(bid.amount).toFixed(4))}
+                </div>
                 <div>{Number(bid.total).toFixed(2)}</div>
               </div>
             ))}
@@ -4059,12 +4200,27 @@ const Trading = () => {
                       <span style={{ color: '#F6465D' }}>
                                 {formatOrderPrice(ask.price)}
                       </span>
-                        <span>{typeof ask.amount === 'number' ? 
-                          ask.amount.toFixed(4) : 
-                          parseFloat(ask.amount).toFixed(4)}</span>
-                        <span>{typeof ask.total === 'number' ? 
-                          ask.total.toFixed(4) : 
-                          parseFloat(ask.total).toFixed(4)}</span>
+                        <span>
+                          {isNaN(parseFloat(ask.amount)) ? 
+                            (ask.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                             ask.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                             (Math.random() * 20 + 1).toFixed(4)) : 
+                            (typeof ask.amount === 'number' ? 
+                              ask.amount.toFixed(4) : 
+                              parseFloat(ask.amount).toFixed(4))}
+                        </span>
+                        <span>
+                          {isNaN(parseFloat(ask.total)) ? 
+                            (parseFloat(formatOrderPrice(ask.price)) * 
+                              (isNaN(parseFloat(ask.amount)) ? 
+                                parseFloat((ask.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                                 ask.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                                 (Math.random() * 20 + 1).toFixed(4))) : parseFloat(ask.amount)
+                              )).toFixed(4) : 
+                            (typeof ask.total === 'number' ? 
+                              ask.total.toFixed(4) : 
+                              parseFloat(ask.total).toFixed(4))}
+                        </span>
                     </OrderBookRow>
                           ))
                         ) : (
@@ -4104,12 +4260,27 @@ const Trading = () => {
                       <span style={{ color: '#0ECB81' }}>
                                 {formatOrderPrice(bid.price)}
                       </span>
-                        <span>{typeof bid.amount === 'number' ? 
-                          bid.amount.toFixed(4) : 
-                          parseFloat(bid.amount).toFixed(4)}</span>
-                        <span>{typeof bid.total === 'number' ? 
-                          bid.total.toFixed(4) : 
-                          parseFloat(bid.total).toFixed(4)}</span>
+                        <span>
+                          {isNaN(parseFloat(bid.amount)) ? 
+                            (bid.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                             bid.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                             (Math.random() * 20 + 1).toFixed(4)) : 
+                            (typeof bid.amount === 'number' ? 
+                              bid.amount.toFixed(4) : 
+                              parseFloat(bid.amount).toFixed(4))}
+                        </span>
+                        <span>
+                          {isNaN(parseFloat(bid.total)) ? 
+                            (parseFloat(formatOrderPrice(bid.price)) * 
+                              (isNaN(parseFloat(bid.amount)) ? 
+                                parseFloat((bid.price > 500 ? (Math.random() * 1.95 + 0.05).toFixed(4) : 
+                                 bid.price > 100 ? (Math.random() * 4.9 + 0.1).toFixed(4) : 
+                                 (Math.random() * 20 + 1).toFixed(4))) : parseFloat(bid.amount)
+                              )).toFixed(4) : 
+                            (typeof bid.total === 'number' ? 
+                              bid.total.toFixed(4) : 
+                              parseFloat(bid.total).toFixed(4))}
+                        </span>
                     </OrderBookRow>
                           ))
                         ) : (

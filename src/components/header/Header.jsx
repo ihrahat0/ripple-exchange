@@ -764,9 +764,9 @@ const Header = () => {
             e.preventDefault();
             alert('Please verify your email before accessing your profile.');
         } else {
-            // Navigate to user profile page when email is verified
-            console.log('Navigating to user profile...');
-            navigate('/user-profile');
+            // Use window.location.href instead of navigate
+            console.log('Navigating to user profile using window.location.href');
+            window.location.href = '/user-profile';
         }
     };
 

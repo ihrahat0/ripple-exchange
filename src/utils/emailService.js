@@ -1,9 +1,11 @@
 import axios from 'axios';
 
-// Use a reliable API URL
+// Use a reliable API URL based on the current environment
 const API_URL = window.location.hostname === 'localhost' 
-  ? 'http://localhost:3001/api' 
+  ? `http://localhost:3001/api` 
   : 'https://rippleexchange.org/api';
+
+console.log('Using API URL base:', API_URL);
 
 /**
  * Generate a verification code
@@ -21,17 +23,57 @@ export const generateVerificationCode = () => {
  */
 export const sendRegistrationVerificationEmail = async (email, code) => {
   try {
-    console.log(`Sending verification email to ${email} with code ${code}`);
+    // Don't log the actual code for security reasons
+    console.log(`Sending verification email to ${email}`);
     console.log(`Using API URL: ${API_URL}/send-verification-code`);
     
-    const response = await axios.post(`${API_URL}/send-verification-code`, { email, code });
+    // Configure axios with timeout and better error handling
+    const axiosConfig = {
+      timeout: 30000, // 30 seconds timeout
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+    
+    const response = await axios.post(`${API_URL}/send-verification-code`, { email, code }, axiosConfig);
     console.log('Email API response:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Failed to send registration verification email:', error);
+    // Create a more detailed error object
+    let errorMessage = 'Failed to send registration verification email';
+    let errorDetails = {};
+    
+    if (error.response) {
+      // The request was made and the server responded with a status code
+      // that falls out of the range of 2xx
+      console.error('Email API error response:', {
+        status: error.response.status,
+        data: error.response.data
+      });
+      errorMessage = error.response.data?.error || errorMessage;
+      errorDetails = {
+        status: error.response.status,
+        data: error.response.data
+      };
+    } else if (error.request) {
+      // The request was made but no response was received
+      console.error('Email API no response:', error.request);
+      errorMessage = 'No response from server. Please check your network connection.';
+      errorDetails = {
+        request: 'Request was sent but no response received'
+      };
+    } else {
+      // Something happened in setting up the request that triggered an Error
+      console.error('Email API request setup error:', error.message);
+      errorMessage = error.message;
+    }
+    
+    console.error('Failed to send registration verification email:', errorMessage);
+    
     return { 
       success: false, 
-      error: error.response?.data?.error || error.message 
+      error: errorMessage,
+      details: errorDetails
     };
   }
 };
