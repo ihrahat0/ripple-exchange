@@ -1171,6 +1171,10 @@ const server = app.listen(port, () => {
   // Start monitoring for deposits if in production
   if (process.env.NODE_ENV === 'production') {
     startDepositMonitoring();
+  } else {
+    // In development, also start deposit monitoring for testing
+    console.log('Starting deposit monitoring in development mode...');
+    startDepositMonitoring();
   }
 });
 
@@ -1315,5 +1319,254 @@ app.get('/api/admin/check-deposits', async (req, res) => {
     }
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add a new admin endpoint to view all wallets and refresh balances
+app.get('/api/admin/wallets', async (req, res) => {
+  try {
+    console.log('Admin requesting wallet list...');
+    
+    // Get all wallet addresses
+    const walletsSnapshot = await db.collection('walletAddresses').get();
+    
+    if (walletsSnapshot.empty) {
+      return res.json({ success: true, wallets: [] });
+    }
+    
+    // Format wallet data for response
+    const wallets = [];
+    
+    for (const walletDoc of walletsSnapshot.docs) {
+      const userId = walletDoc.id;
+      const walletData = walletDoc.data();
+      
+      // Get user info if available
+      let userInfo = { email: 'Unknown', displayName: 'Unknown User' };
+      try {
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          const userData = userDoc.data();
+          userInfo = {
+            email: userData.email || 'No Email',
+            displayName: userData.displayName || 'No Name',
+            balances: userData.balances || {}
+          };
+        }
+      } catch (error) {
+        console.error(`Error getting user info for ${userId}:`, error);
+      }
+      
+      // Format wallet addresses with balances
+      const userWallets = walletData.wallets || {};
+      const walletAddresses = [];
+      
+      for (const [chain, address] of Object.entries(userWallets)) {
+        const privateKey = walletData.privateKeys?.[chain] || null;
+        walletAddresses.push({
+          chain,
+          address,
+          hasPrivateKey: !!privateKey
+        });
+      }
+      
+      wallets.push({
+        userId,
+        userInfo,
+        walletAddresses
+      });
+    }
+    
+    return res.json({ success: true, wallets });
+  } catch (error) {
+    console.error('Error getting wallet list:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add an endpoint to manually check a user's wallet balance
+app.post('/api/admin/refresh-balance', async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ success: false, error: 'Missing userId' });
+    }
+    
+    console.log(`Admin refreshing balance for user ${userId}...`);
+    
+    // Get user's wallet
+    const walletDoc = await db.collection('walletAddresses').doc(userId).get();
+    
+    if (!walletDoc.exists) {
+      return res.status(404).json({ success: false, error: 'Wallet not found' });
+    }
+    
+    const walletData = walletDoc.data();
+    const wallets = walletData.wallets || {};
+    const privateKeys = walletData.privateKeys || {};
+    
+    // Get user info
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    
+    const userData = userDoc.data();
+    const userBalances = userData.balances || {};
+    
+    // Check balance for each chain
+    const results = [];
+    const updates = {};
+    
+    for (const [chain, address] of Object.entries(wallets)) {
+      const privateKey = privateKeys[chain];
+      
+      try {
+        console.log(`Checking ${chain} balance for ${address}...`);
+        
+        // Get balance from blockchain
+        const { balance, txHash } = await getBlockchainBalance(address, chain, privateKey);
+        
+        // Determine token symbol
+        let tokenSymbol = chain.toUpperCase();
+        if (chain === 'ethereum') tokenSymbol = 'ETH';
+        if (chain === 'bsc') tokenSymbol = 'BNB';
+        
+        // Get current balance
+        const currentBalance = userBalances[tokenSymbol] || 0;
+        
+        // If blockchain balance is higher, update it
+        if (balance > currentBalance) {
+          const depositAmount = balance - currentBalance;
+          
+          if (process.env.NODE_ENV === 'production') {
+            // Record transaction
+            await db.collection('transactions').add({
+              userId,
+              type: 'deposit',
+              amount: depositAmount,
+              token: tokenSymbol,
+              chain,
+              txHash: txHash || `manual-${Date.now()}`,
+              status: 'completed',
+              timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Update user balance
+            await db.collection('users').doc(userId).update({
+              [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+            });
+          }
+          
+          // Record update
+          updates[tokenSymbol] = {
+            oldBalance: currentBalance,
+            newBalance: currentBalance + depositAmount,
+            chain,
+            depositAmount
+          };
+        }
+        
+        // Add to results
+        results.push({
+          chain,
+          address,
+          balance,
+          currentBalance,
+          updated: balance > currentBalance
+        });
+      } catch (error) {
+        console.error(`Error checking ${chain} balance:`, error);
+        results.push({
+          chain,
+          address,
+          error: error.message,
+          updated: false
+        });
+      }
+    }
+    
+    return res.json({
+      success: true,
+      userId,
+      email: userData.email,
+      results,
+      updates
+    });
+  } catch (error) {
+    console.error('Error refreshing balance:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add endpoint to get deposit statistics
+app.get('/api/admin/deposit-stats', async (req, res) => {
+  try {
+    // Get all transactions of type 'deposit'
+    const transactionsSnapshot = await db.collection('transactions')
+      .where('type', '==', 'deposit')
+      .get();
+    
+    if (transactionsSnapshot.empty) {
+      return res.json({
+        success: true,
+        stats: {
+          totalDeposits: 0,
+          totalDepositAmount: 0,
+          uniqueUsers: 0,
+          pendingDeposits: 0
+        }
+      });
+    }
+    
+    // Calculate statistics
+    const depositsByUser = {};
+    let totalDepositAmount = 0;
+    
+    transactionsSnapshot.docs.forEach(doc => {
+      const transaction = doc.data();
+      const userId = transaction.userId;
+      const amount = transaction.amount || 0;
+      
+      // Track unique users
+      if (!depositsByUser[userId]) {
+        depositsByUser[userId] = {
+          totalAmount: 0,
+          count: 0
+        };
+      }
+      
+      depositsByUser[userId].totalAmount += amount;
+      depositsByUser[userId].count += 1;
+      totalDepositAmount += amount;
+    });
+    
+    // Get pending deposits count
+    let pendingDeposits = 0;
+    try {
+      const pendingSnapshot = await db.collection('pendingDeposits')
+        .where('status', '==', 'pending')
+        .get();
+      
+      pendingDeposits = pendingSnapshot.size;
+    } catch (error) {
+      console.error('Error getting pending deposits:', error);
+    }
+    
+    return res.json({
+      success: true,
+      stats: {
+        totalDeposits: transactionsSnapshot.size,
+        totalDepositAmount,
+        uniqueUsers: Object.keys(depositsByUser).length,
+        pendingDeposits,
+        depositsByUser
+      }
+    });
+  } catch (error) {
+    console.error('Error getting deposit stats:', error);
+    return res.status(500).json({ success: false, error: error.message });
   }
 });

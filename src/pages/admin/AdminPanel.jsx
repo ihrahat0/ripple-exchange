@@ -11,6 +11,7 @@ import Settings from './Settings';
 import WithdrawalManagement from './WithdrawalManagement';
 import UserDeposits from './UserDeposits';
 import AllDeposits from './AllDeposits';
+import AdminWallets from './AdminWallets';
 import { getDoc, doc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -322,6 +323,7 @@ const AdminPanel = () => {
     if (path.includes('withdrawal-management')) return 'Withdrawal Management';
     if (path.includes('deposits')) return 'User Deposits';
     if (path.includes('settings')) return 'Settings';
+    if (path.includes('wallets')) return 'Wallets';
     return 'Admin Panel';
   };
   
@@ -403,6 +405,11 @@ const AdminPanel = () => {
               <i className="bi bi-gear"></i> Settings
             </NavLink>
           </NavItem>
+          <NavItem>
+            <NavLink to="/admin/wallets" active={location.pathname.includes('/admin/wallets') ? 'true' : undefined}>
+              <i className="bi bi-wallet2"></i> Wallets
+            </NavLink>
+          </NavItem>
         </NavMenu>
         
         <UserInfo>
@@ -464,6 +471,7 @@ const AdminPanel = () => {
           <Route path="/coins/*" element={<CoinManagement />} />
           <Route path="/withdrawal-management/*" element={<WithdrawalManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/wallets" element={<AdminWallets />} />
         </Routes>
       </Content>
     </AdminContainer>
