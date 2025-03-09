@@ -7,7 +7,11 @@
  */
 export const formatAddress = (address, startChars = 6, endChars = 4) => {
   if (!address) return '';
-  if (address.length <= startChars + endChars) return address;
   
-  return `${address.substring(0, startChars)}...${address.substring(address.length - endChars)}`;
+  // Convert non-string addresses to string to prevent errors
+  const addressStr = String(address);
+  
+  if (addressStr.length <= startChars + endChars) return addressStr;
+  
+  return `${addressStr.substring(0, startChars)}...${addressStr.substring(addressStr.length - endChars)}`;
 }; 

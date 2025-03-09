@@ -249,6 +249,16 @@ const getNetworkIcon = (network) => {
   }
 };
 
+const getNetworkAddresses = (wallet) => {
+  if (!wallet || !wallet.addresses) {
+    return [];
+  }
+  
+  return Object.entries(wallet.addresses || {})
+    .filter(([_, address]) => address)
+    .map(([network, address]) => ({ network, address }));
+};
+
 const AdminWallets = () => {
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -304,7 +314,7 @@ const AdminWallets = () => {
 
   const refreshBalance = async (userId) => {
     try {
-      setRefreshingWallet(true);
+      setRefreshingWallet(userId);
       console.log(`Refreshing balance for user ${userId}`);
       const response = await axios.post('/api/admin/refresh-balance', { userId });
       console.log('Balance refresh response:', response.data);
@@ -319,10 +329,10 @@ const AdminWallets = () => {
       toast.success(`Balances refreshed for user ${userId}`);
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
-      console.error('Error refreshing balance:', error);
+      console.error('Error refreshing balances:', error);
       toast.error(`Failed to refresh balances: ${errorMessage}`);
     } finally {
-      setRefreshingWallet(false);
+      setRefreshingWallet(null);
     }
   };
 
@@ -430,9 +440,9 @@ const AdminWallets = () => {
                 </UserDetails>
                 <RefreshButton 
                   onClick={() => refreshBalance(wallet.userId)}
-                  disabled={refreshingWallet}
+                  disabled={refreshingWallet === wallet.userId}
                 >
-                  {refreshingWallet ? (
+                  {refreshingWallet === wallet.userId ? (
                     <>Refreshing...</>
                   ) : (
                     <>
@@ -444,7 +454,7 @@ const AdminWallets = () => {
               </UserInfo>
               
               <WalletGrid>
-                {Object.entries(wallet.addresses || {}).map(([network, address]) => (
+                {getNetworkAddresses(wallet).map(({ network, address }) => (
                   <WalletItem key={network}>
                     <WalletNetwork>
                       {getNetworkIcon(network)} {network.charAt(0).toUpperCase() + network.slice(1)}
