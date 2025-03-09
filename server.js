@@ -6,6 +6,16 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const emailService = require('./server/utils/emailService');
 
+// Firebase Admin SDK initialization
+const admin = require('firebase-admin');
+const serviceAccount = require('./serviceAccountKey.json');
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount)
+});
+
+const db = admin.firestore();
+
 // Initialize the app
 const app = express();
 const port = process.env.PORT || 3001;
@@ -619,6 +629,88 @@ app.post('/api/verify-2fa-code', async (req, res) => {
     res.status(500).json({ error: 'Failed to verify 2FA code', details: error.message });
   }
 });
+
+// Add mock deposit processing for demonstration purposes
+app.post('/api/mock-deposit', async (req, res) => {
+  try {
+    const { userId, token, amount, txHash = 'mock-tx-' + Date.now(), chain = 'ethereum' } = req.body;
+    
+    if (!userId || !token || !amount) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Missing required fields: userId, token, amount' 
+      });
+    }
+    
+    console.log(`Processing deposit for user ${userId}: ${amount} ${token}`);
+    
+    // Create a deposit record in pendingDeposits
+    const depositRef = await db.collection('pendingDeposits').add({
+      userId,
+      amount: parseFloat(amount),
+      token,
+      chain,
+      txHash,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      masterWallet: MASTER_WALLETS[chain] || 'unknown'
+    });
+    
+    // Process the deposit (update user's balance)
+    await db.collection('transactions').add({
+      userId,
+      type: 'deposit',
+      amount: parseFloat(amount),
+      token,
+      chain,
+      txHash,
+      status: 'completed',
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Update user's balance
+    const userRef = db.collection('users').doc(userId);
+    const userDoc = await userRef.get();
+    
+    if (userDoc.exists) {
+      // Increment the user's balance
+      await userRef.update({
+        [`balances.${token}`]: admin.firestore.FieldValue.increment(parseFloat(amount))
+      });
+      
+      console.log(`Updated balance for user ${userId}: added ${amount} ${token}`);
+      
+      // Update the pending deposit status
+      await depositRef.update({
+        status: 'completed',
+        processedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      
+      return res.json({ 
+        success: true, 
+        message: `Successfully processed deposit of ${amount} ${token}`,
+        depositId: depositRef.id
+      });
+    } else {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+  } catch (error) {
+    console.error('Error processing mock deposit:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+const MASTER_WALLETS = {
+  ethereum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  bsc: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  polygon: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  arbitrum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  base: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  solana: 'DxXnPZvjgc8QdHYzx4BGwvKCs9GbxdkwVZSUvzKVPktr'
+};
 
 // Start the server
 app.listen(port, () => {

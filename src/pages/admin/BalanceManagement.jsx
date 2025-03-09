@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { db } from '../../firebase';
 import { collection, doc, getDoc, getDocs, updateDoc, query, where } from 'firebase/firestore';
 import styled from 'styled-components';
+import { toast } from 'react-hot-toast';
 
 const Container = styled.div`
   padding: 20px;
@@ -177,6 +178,8 @@ const UserSearch = () => {
   const [editingBalance, setEditingBalance] = useState({ userId: '', coin: '', amount: '' });
   const [userBalances, setUserBalances] = useState({});
   const navigate = useNavigate();
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editBalance, setEditBalance] = useState({ userId: '', token: '', amount: 0, operation: 'set' });
 
   // Check for userId in URL params on component mount
   useEffect(() => {
@@ -276,46 +279,84 @@ const UserSearch = () => {
   };
 
   const handleEditBalance = (userId, coin) => {
-    const currentAmount = userBalances[coin] || 0;
-    setEditingBalance({
+    setEditBalance({
       userId,
-      coin,
-      amount: currentAmount.toString()
+      token: coin,
+      amount: userBalances[coin] || 0,
+      operation: 'set'
     });
+    setShowEditForm(true);
   };
 
-  const handleUpdateBalance = async (e) => {
+  const handleAddDeposit = () => {
+    if (!searchResults) return;
+    
+    setEditBalance({
+      userId: searchResults.id,
+      token: Object.keys(DEFAULT_COINS)[0] || 'USDT',
+      amount: 0,
+      operation: 'deposit'
+    });
+    setShowEditForm(true);
+  };
+
+  const handleSubmitBalanceChange = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      const { userId, coin, amount } = editingBalance;
+      const { userId, token, amount, operation } = editBalance;
       const numericAmount = parseFloat(amount);
 
       if (isNaN(numericAmount)) {
         throw new Error('Amount must be a valid number');
       }
 
-      // Update the user's balance in Firestore
-      const userRef = doc(db, 'users', userId);
-      const userDoc = await getDoc(userRef);
+      // For deposit operation, we'll use the dedicated API endpoint
+      if (operation === 'deposit') {
+        const response = await fetch('/api/mock-deposit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            userId,
+            token,
+            amount: numericAmount
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+          toast.success(`Successfully added deposit of ${numericAmount} ${token}`);
+          // Refresh the user's balances
+          await fetchUserBalances(userId);
+        } else {
+          toast.error(`Failed to add deposit: ${data.error}`);
+        }
+      } else {
+        // Existing code for setting or updating balance
+        const userRef = doc(db, 'users', userId);
+        const userDoc = await getDoc(userRef);
 
-      if (!userDoc.exists()) {
-        throw new Error('User not found');
+        if (!userDoc.exists()) {
+          throw new Error('User not found');
+        }
+
+        const userData = userDoc.data();
+        const updatedBalances = { ...userData.balances } || {};
+        updatedBalances[token] = numericAmount;
+
+        await updateDoc(userRef, { balances: updatedBalances });
+
+        // Update local state
+        setUserBalances(updatedBalances);
+        setEditBalance({ userId: '', token: '', amount: '', operation: 'set' });
+        setSuccess(`Successfully updated ${token} balance to ${numericAmount}`);
       }
-
-      const userData = userDoc.data();
-      const updatedBalances = { ...userData.balances } || {};
-      updatedBalances[coin] = numericAmount;
-
-      await updateDoc(userRef, { balances: updatedBalances });
-
-      // Update local state
-      setUserBalances(updatedBalances);
-      setEditingBalance({ userId: '', coin: '', amount: '' });
-      setSuccess(`Successfully updated ${coin} balance to ${numericAmount}`);
     } catch (err) {
       console.error('Error updating balance:', err);
       setError('Failed to update balance: ' + err.message);
@@ -367,7 +408,23 @@ const UserSearch = () => {
               </UserDetails>
             </UserInfo>
             
-            <h3>User Balances</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h3>User Balances</h3>
+              <button 
+                onClick={handleAddDeposit}
+                style={{
+                  background: 'var(--primary)',
+                  color: 'white',
+                  border: 'none',
+                  padding: '8px 16px',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Add Deposit
+              </button>
+            </div>
+            
             {Object.keys(userBalances).length > 0 ? (
               <BalanceGrid>
                 {Object.entries(userBalances).map(([coin, balance]) => (
@@ -384,18 +441,18 @@ const UserSearch = () => {
               <p>No balances found for this user.</p>
             )}
             
-            {editingBalance.userId && (
+            {showEditForm && (
               <div style={{ marginTop: '30px' }}>
-                <h3>Edit {editingBalance.coin.toUpperCase()} Balance</h3>
-                <form onSubmit={handleUpdateBalance}>
+                <h3>Edit {editBalance.token.toUpperCase()} Balance</h3>
+                <form onSubmit={handleSubmitBalanceChange}>
                   <FormGroup>
                     <Label htmlFor="balanceAmount">Amount</Label>
                     <Input
                       id="balanceAmount"
                       type="number"
                       step="any"
-                      value={editingBalance.amount}
-                      onChange={(e) => setEditingBalance({...editingBalance, amount: e.target.value})}
+                      value={editBalance.amount}
+                      onChange={(e) => setEditBalance({...editBalance, amount: e.target.value})}
                       required
                     />
                   </FormGroup>
@@ -405,7 +462,7 @@ const UserSearch = () => {
                   <Button 
                     type="button" 
                     style={{ marginLeft: '10px', background: '#666' }} 
-                    onClick={() => setEditingBalance({ userId: '', coin: '', amount: '' })}
+                    onClick={() => setShowEditForm(false)}
                   >
                     Cancel
                   </Button>
@@ -414,7 +471,7 @@ const UserSearch = () => {
             )}
             
             {/* Option to add a new balance */}
-            {!editingBalance.userId && (
+            {!showEditForm && (
               <div style={{ marginTop: '30px' }}>
                 <h3>Add New Balance</h3>
                 <form onSubmit={(e) => {
@@ -422,10 +479,11 @@ const UserSearch = () => {
                   const coin = e.target.elements.coin.value.trim().toUpperCase();
                   const amount = parseFloat(e.target.elements.amount.value);
                   if (coin && !isNaN(amount)) {
-                    setEditingBalance({
+                    setEditBalance({
                       userId: searchResults.id,
-                      coin: coin,
-                      amount: amount.toString()
+                      token: coin,
+                      amount: amount.toString(),
+                      operation: 'set'
                     });
                   }
                 }}>
