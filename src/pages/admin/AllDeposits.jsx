@@ -544,7 +544,38 @@ const AllDeposits = () => {
   
   // Manual refresh handler
   const handleRefresh = () => {
-    fetchDeposits(true);
+    setRefreshing(true);
+    axios.get('/api/admin/check-deposits')
+      .then(response => {
+        console.log('Deposit refresh response:', response.data);
+        
+        // Log a summary of the transaction hash formats for debugging
+        if (response.data.deposits && response.data.deposits.length > 0) {
+          console.log('Deposit transaction hash analysis:');
+          response.data.deposits.forEach(deposit => {
+            if (deposit.txHash) {
+              console.log(`[${deposit.chain}] Hash: ${deposit.txHash} - Format valid: ${/^(0x)?[0-9a-fA-F]{64}$/.test(deposit.txHash)}`);
+            }
+          });
+        }
+        
+        setDeposits(response.data.deposits || []);
+        
+        // Track unique user IDs for fetching user info
+        const uniqueUserIds = [...new Set(response.data.deposits.map(d => d.userId))];
+        
+        // Batch fetch user info
+        if (uniqueUserIds.length > 0) {
+          fetchUserInfo(uniqueUserIds);
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing deposits:', error);
+        toast.error('Failed to refresh deposits');
+      })
+      .finally(() => {
+        setRefreshing(false);
+      });
   };
 
   const fetchUserInfo = useCallback(async (depositsToProcess) => {
@@ -599,9 +630,15 @@ const AllDeposits = () => {
         }
       }
       
+      // Validate hash format
+      const isValidEVMHash = /^(0x)?[0-9a-fA-F]{64}$/.test(cleanHash);
+      
       // Add proper prefix if needed
-      if (chain === 'ethereum' && !cleanHash.startsWith('0x')) {
+      if (['ethereum', 'bsc', 'polygon'].includes(chain) && !cleanHash.startsWith('0x') && isValidEVMHash) {
         cleanHash = '0x' + cleanHash;
+      } else if (['ethereum', 'bsc', 'polygon'].includes(chain) && !isValidEVMHash) {
+        console.error(`Invalid transaction hash format for ${chain}: ${cleanHash}`);
+        return '#';
       }
       
       // Return the appropriate blockchain explorer URL
@@ -618,7 +655,7 @@ const AllDeposits = () => {
           return `https://etherscan.io/tx/${cleanHash}`;
       }
     } catch (error) {
-      console.error('Error formatting explorer URL:', error);
+      console.error('Error formatting explorer URL:', error, { chain, hash });
       return '#';
     }
   };
@@ -724,6 +761,25 @@ const AllDeposits = () => {
       const explorerUrl = getExplorerUrl(deposit.chain, deposit.txHash);
       const displayHash = formatAddress(deposit.txHash);
       
+      if (explorerUrl === '#') {
+        console.warn(`Invalid transaction hash for ${deposit.chain}: ${deposit.txHash}`);
+        return (
+          <>
+            <span title={`Invalid hash: ${deposit.txHash}`} className="text-danger">
+              {displayHash} <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.8em' }}></i>
+            </span>
+            <CopyButton 
+              onClick={() => handleCopyClick(deposit.txHash)}
+              title="Copy transaction hash"
+            >
+              {copiedText === deposit.txHash ? 
+                <i className="bi bi-check-circle"></i> : 
+                <i className="bi bi-clipboard"></i>}
+            </CopyButton>
+          </>
+        );
+      }
+      
       return (
         <>
           <AddressLink 
@@ -747,7 +803,7 @@ const AllDeposits = () => {
       );
     } catch (error) {
       console.error('Error rendering transaction hash:', error, deposit);
-      return <span>{formatAddress(deposit.txHash) || 'Invalid Hash'}</span>;
+      return <span className="text-danger">Error: {error.message}</span>;
     }
   };
 

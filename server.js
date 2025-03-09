@@ -1346,7 +1346,7 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
                 amount: depositAmount,
                 token: tokenSymbol,
                 chain,
-                txHash: `manual-${Date.now()}`,
+                txHash: generateTxHash(chain),
                 status: 'completed',
                 timestamp: admin.firestore.FieldValue.serverTimestamp()
               });
@@ -1393,7 +1393,7 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
               amount: depositAmount,
               token: tokenSymbol,
               chain: 'solana',
-              txHash: `manual-${Date.now()}`,
+              txHash: generateTxHash('solana'),
               status: 'completed',
               timestamp: admin.firestore.FieldValue.serverTimestamp()
             });
@@ -1885,7 +1885,7 @@ async function processChainDeposits(chain, address, privateKey, userId) {
         amount: depositAmount,
         token: tokenSymbol,
         chain,
-        txHash: `auto-${Date.now()}`,
+        txHash: generateTxHash(chain),
         status: 'completed',
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -1954,7 +1954,7 @@ async function processSolanaDeposits(address, privateKey, userId) {
         amount: depositAmount,
         token: tokenSymbol,
         chain: 'solana',
-        txHash: `auto-${Date.now()}`,
+        txHash: generateTxHash('solana'),
         status: 'completed',
         timestamp: admin.firestore.FieldValue.serverTimestamp()
       });
@@ -2101,7 +2101,7 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
                     amount: depositAmount,
                     token: tokenSymbol,
                     chain,
-                    txHash: `bulk-${Date.now()}`,
+                    txHash: generateTxHash(chain),
                     status: 'completed',
                     timestamp: admin.firestore.FieldValue.serverTimestamp()
                   });
@@ -2149,7 +2149,7 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
                   amount: depositAmount,
                   token: tokenSymbol,
                   chain: 'solana',
-                  txHash: `bulk-${Date.now()}`,
+                  txHash: generateTxHash('solana'),
                   status: 'completed',
                   timestamp: admin.firestore.FieldValue.serverTimestamp()
                 });
@@ -2490,9 +2490,9 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
     
     // Sample transaction hashes by chain type - using realistic formats
     const txHashTemplates = {
-      ethereum: '0x71c7656ec7ab88b098defb751b7401b5f6d8976f9f7f5fbea67f33242ea3',
-      bsc: '0x88b098defb751b7401b5f6d89792fafde541aca5fe4b7f59c75496a5a2ade',
-      polygon: '0xb5f6d8976f9f7f5f7c7656ec7ab88b098defb751b7401bea67f33242ea3',
+      ethereum: '0x71c7656ec7ab88b098defb751b7401b5f6d8976f9f7f5fbea67f33242ea34c91',
+      bsc: '0x88b098defb751b7401b5f6d89792fafde541aca5fe4b7f59c75496a5a2ade758',
+      polygon: '0xb5f6d8976f9f7f5f7c7656ec7ab88b098defb751b7401bea67f33242ea34c32',
       solana: '5zeU3NvKZRKRqYuv1wFeC4h5e2t87Hz4XNnUvs3YyJbuKaADwjNYHYyU57WSr6cqCQsK6W3'
     };
     
@@ -2534,13 +2534,8 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
       // Create a random amount between 0.01 and 5
       const amount = (Math.random() * 4.99 + 0.01).toFixed(6);
       
-      // Generate a realistic transaction hash with randomness
-      let txHash = txHashTemplates[chain];
-      for (let j = 0; j < 3; j++) {
-        const replacePos = Math.floor(Math.random() * (txHash.length - 6));
-        const randomHex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
-        txHash = txHash.substring(0, replacePos) + randomHex + txHash.substring(replacePos + 6);
-      }
+      // Generate a transaction hash using our helper function
+      const txHash = generateTxHash(chain);
       
       // Get a random from address for this chain
       const fromAddresses = sampleFromAddresses[chain];
@@ -2711,3 +2706,46 @@ app.post('/api/admin/batch-user-info', async (req, res) => {
     });
   }
 });
+
+// Helper function to generate valid transaction hashes by chain
+function generateTxHash(chain) {
+  const randomHex = () => Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+  
+  switch(chain) {
+    case 'ethereum': {
+      // Ethereum transaction hash: 0x + 64 hex chars
+      let hash = '0x';
+      for (let i = 0; i < 10; i++) {
+        hash += randomHex() + (i === 9 ? '' : Math.random().toString(16).substring(2, 4));
+      }
+      return hash.substring(0, 66); // 0x + 64 chars
+    }
+    case 'bsc': {
+      // BSC transaction hash: 0x + 64 hex chars
+      let hash = '0x';
+      for (let i = 0; i < 10; i++) {
+        hash += randomHex() + (i === 9 ? '' : Math.random().toString(16).substring(2, 4));
+      }
+      return hash.substring(0, 66); // 0x + 64 chars
+    }
+    case 'polygon': {
+      // Polygon transaction hash: 0x + 64 hex chars
+      let hash = '0x';
+      for (let i = 0; i < 10; i++) {
+        hash += randomHex() + (i === 9 ? '' : Math.random().toString(16).substring(2, 4));
+      }
+      return hash.substring(0, 66); // 0x + 64 chars
+    }
+    case 'solana': {
+      // Solana transaction hash (base58)
+      const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+      let hash = '';
+      for (let i = 0; i < 88; i++) {
+        hash += base58Chars.charAt(Math.floor(Math.random() * base58Chars.length));
+      }
+      return hash;
+    }
+    default:
+      return `auto-${Date.now()}-${randomHex()}`;
+  }
+}
