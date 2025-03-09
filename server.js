@@ -1172,25 +1172,53 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     }
     
     const walletData = walletDoc.data();
-    console.log(`Found wallet data structure:`, Object.keys(walletData));
+    console.log(`Found wallet data for user ${userId}, keys:`, Object.keys(walletData));
     
     // Handle different wallet data structures
-    let wallets, privateKeys;
+    let wallets = {};
     
-    if (walletData.wallets && walletData.privateKeys) {
-      // Standard format
+    // Try to find wallet addresses in different possible locations
+    if (walletData.wallets) {
+      console.log(`User ${userId} has wallets property`);
       wallets = walletData.wallets;
-      privateKeys = walletData.privateKeys;
-    } else if (walletData.addresses && walletData.privateKeys) {
-      // Alternative format
+    } else if (walletData.addresses) {
+      console.log(`User ${userId} has addresses property`);
       wallets = walletData.addresses;
-      privateKeys = walletData.privateKeys;
+    } else if (typeof walletData.ethereum === 'string' || 
+              typeof walletData.bsc === 'string' || 
+              typeof walletData.polygon === 'string' || 
+              typeof walletData.solana === 'string') {
+      // The wallet addresses are at the root level
+      console.log(`User ${userId} has addresses at root level`);
+      wallets = {
+        ethereum: walletData.ethereum,
+        bsc: walletData.bsc,
+        polygon: walletData.polygon,
+        solana: walletData.solana
+      };
     } else {
-      console.log(`Wallet data format for user ${userId} is not supported:`, walletData);
-      return res.status(400).json({ error: 'Wallet data is in an unsupported format' });
+      // Log the actual data to debug
+      console.log(`Cannot find wallet addresses for user ${userId}. Data:`, JSON.stringify(walletData));
+      return res.status(400).json({ 
+        error: 'Cannot find wallet addresses',
+        message: 'Wallet structure does not contain expected addresses'
+      });
     }
     
-    console.log(`Found wallet addresses for user ${userId}: ${Object.keys(wallets).join(', ')}`);
+    // Check which chains we have addresses for
+    const availableChains = Object.keys(wallets).filter(chain => 
+      wallets[chain] && typeof wallets[chain] === 'string' && wallets[chain].length > 0
+    );
+    
+    if (availableChains.length === 0) {
+      console.log(`No valid blockchain addresses found for user ${userId}`);
+      return res.status(400).json({ 
+        error: 'No valid blockchain addresses found',
+        message: 'User has no valid blockchain addresses to check'
+      });
+    }
+    
+    console.log(`Found wallet addresses for user ${userId}: ${availableChains.join(', ')}`);
     
     // Get user data to check current balances
     const userDoc = await db.collection('users').doc(userId).get();
@@ -1325,48 +1353,105 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
 // Add the missing helper functions if they don't exist
 async function checkEVMBalance(chain, address) {
   try {
+    if (!address || typeof address !== 'string' || address.trim().length === 0) {
+      console.error(`Invalid ${chain} address: ${address}`);
+      return null;
+    }
+    
+    // Clean the address to ensure it's a valid format
+    address = address.trim();
+    
     // Determine which RPC URL to use based on the chain
     let rpcUrl;
     switch (chain) {
       case 'ethereum':
-        rpcUrl = 'https://eth-mainnet.g.alchemy.com/v2/demo';
+        rpcUrl = process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/demo';
         break;
       case 'bsc':
-        rpcUrl = 'https://bsc-dataseed1.binance.org';
+        rpcUrl = process.env.BSC_RPC_URL || 'https://bsc-dataseed1.binance.org';
         break;
       case 'polygon':
-        rpcUrl = 'https://polygon-rpc.com';
+        rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
         break;
       default:
         console.error(`Unsupported EVM chain: ${chain}`);
         return null;
     }
     
-    // Create ethers provider
-    const provider = new ethers.providers.JsonRpcProvider(rpcUrl);
+    // Create ethers provider with increased timeout
+    const provider = new ethers.providers.JsonRpcProvider({
+      url: rpcUrl,
+      timeout: 30000 // 30 seconds timeout
+    });
     
-    // Get balance
-    const balanceWei = await provider.getBalance(address);
-    const balance = ethers.utils.formatEther(balanceWei);
+    // Get balance with retry
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    return balance;
+    while (attempts < maxAttempts) {
+      try {
+        const balanceWei = await provider.getBalance(address);
+        const balance = ethers.utils.formatEther(balanceWei);
+        return balance;
+      } catch (err) {
+        attempts++;
+        console.warn(`Attempt ${attempts}/${maxAttempts} failed for ${chain} address ${address}: ${err.message}`);
+        
+        if (attempts >= maxAttempts) {
+          console.error(`All ${maxAttempts} attempts failed for ${chain} address ${address}`);
+          throw err;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    return null;
   } catch (error) {
-    console.error(`Error checking ${chain} balance:`, error);
+    console.error(`Error checking ${chain} balance for address ${address}:`, error);
     return null;
   }
 }
 
 async function checkSolanaBalance(address) {
   try {
+    if (!address || typeof address !== 'string' || address.trim().length === 0) {
+      console.error(`Invalid Solana address: ${address}`);
+      return null;
+    }
+    
+    // Clean the address to ensure it's a valid format
+    address = address.trim();
+    
     // Create connection to Solana
     const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
     
-    // Get balance
-    const publicKey = new PublicKey(address);
-    const balanceLamports = await connection.getBalance(publicKey);
-    const balance = balanceLamports / LAMPORTS_PER_SOL;
+    // Get balance with retry
+    let attempts = 0;
+    const maxAttempts = 3;
     
-    return balance.toString();
+    while (attempts < maxAttempts) {
+      try {
+        const publicKey = new PublicKey(address);
+        const balanceLamports = await connection.getBalance(publicKey);
+        const balance = balanceLamports / LAMPORTS_PER_SOL;
+        return balance.toString();
+      } catch (err) {
+        attempts++;
+        console.warn(`Attempt ${attempts}/${maxAttempts} failed for Solana address ${address}: ${err.message}`);
+        
+        if (attempts >= maxAttempts) {
+          console.error(`All ${maxAttempts} attempts failed for Solana address ${address}`);
+          throw err;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+    
+    return null;
   } catch (error) {
     console.error('Error checking Solana balance:', error);
     return null;
@@ -1765,23 +1850,57 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
         console.log(`Processing wallet for user ${userId}`);
         
         const walletData = walletDoc.data();
+        console.log(`Found wallet data for user ${userId}, keys:`, Object.keys(walletData));
         
         // Handle different wallet data structures
-        let wallets, privateKeys;
+        let wallets = {};
         
-        if (walletData.wallets && walletData.privateKeys) {
-          // Standard format
+        // Try to find wallet addresses in different possible locations
+        if (walletData.wallets) {
+          console.log(`User ${userId} has wallets property`);
           wallets = walletData.wallets;
-          privateKeys = walletData.privateKeys;
-        } else if (walletData.addresses && walletData.privateKeys) {
-          // Alternative format
+        } else if (walletData.addresses) {
+          console.log(`User ${userId} has addresses property`);
           wallets = walletData.addresses;
-          privateKeys = walletData.privateKeys;
+        } else if (typeof walletData.ethereum === 'string' || 
+                  typeof walletData.bsc === 'string' || 
+                  typeof walletData.polygon === 'string' || 
+                  typeof walletData.solana === 'string') {
+          // The wallet addresses are at the root level
+          console.log(`User ${userId} has addresses at root level`);
+          wallets = {
+            ethereum: walletData.ethereum,
+            bsc: walletData.bsc,
+            polygon: walletData.polygon,
+            solana: walletData.solana
+          };
         } else {
-          console.log(`Skipping wallet for user ${userId}: unsupported format`);
-          results.push({ userId, status: 'skipped', reason: 'unsupported_format' });
+          // Log the actual data to debug
+          console.log(`Cannot find wallet addresses for user ${userId}. Data:`, JSON.stringify(walletData));
+          results.push({
+            userId,
+            status: 'skipped',
+            reason: 'Cannot find wallet addresses'
+          });
           continue;
         }
+        
+        // Check which chains we have addresses for
+        const availableChains = Object.keys(wallets).filter(chain => 
+          wallets[chain] && typeof wallets[chain] === 'string' && wallets[chain].length > 0
+        );
+        
+        if (availableChains.length === 0) {
+          console.log(`No valid blockchain addresses found for user ${userId}`);
+          results.push({
+            userId,
+            status: 'skipped',
+            reason: 'No valid blockchain addresses'
+          });
+          continue;
+        }
+        
+        console.log(`Found wallet addresses for user ${userId}: ${availableChains.join(', ')}`);
         
         // Get user data to check current balances
         const userDoc = await db.collection('users').doc(userId).get();
@@ -1800,7 +1919,7 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
         
         // Check EVM chains (Ethereum, BSC, Polygon)
         for (const chain of ['ethereum', 'bsc', 'polygon']) {
-          if (wallets[chain]) {
+          if (wallets[chain] && typeof wallets[chain] === 'string' && wallets[chain].length > 0) {
             try {
               console.log(`Checking ${chain} balance for address ${wallets[chain]}`);
               const balance = await checkEVMBalance(chain, wallets[chain]);
@@ -1853,7 +1972,7 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
         }
         
         // Check Solana if available
-        if (wallets.solana) {
+        if (wallets.solana && typeof wallets.solana === 'string' && wallets.solana.length > 0) {
           try {
             console.log(`Checking Solana balance for address ${wallets.solana}`);
             const balance = await checkSolanaBalance(wallets.solana);

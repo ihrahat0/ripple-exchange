@@ -316,21 +316,52 @@ const AdminWallets = () => {
     try {
       setRefreshingWallet(userId);
       console.log(`Refreshing balance for user ${userId}`);
+      
+      // Show loading toast while refreshing
+      toast.loading(`Refreshing balances for user ${userId}...`, { id: `refresh-${userId}` });
+      
       const response = await axios.post('/api/admin/refresh-balance', { userId });
       console.log('Balance refresh response:', response.data);
       
-      // Update the wallets state with the new data
-      setWallets(prevWallets => 
-        prevWallets.map(wallet => 
-          wallet.userId === userId ? { ...wallet, balances: response.data.balances } : wallet
-        )
-      );
-      
-      toast.success(`Balances refreshed for user ${userId}`);
+      if (response.data && response.data.balances) {
+        // Update the wallets state with the new data
+        setWallets(prevWallets => 
+          prevWallets.map(wallet => 
+            wallet.userId === userId ? { ...wallet, balances: response.data.balances } : wallet
+          )
+        );
+        
+        const balanceCount = Object.keys(response.data.balances).length;
+        
+        if (response.data.updated) {
+          toast.success(`Balances updated for user ${userId}! Found deposits.`, { id: `refresh-${userId}` });
+        } else if (balanceCount > 0) {
+          toast.success(`Balances refreshed for user ${userId}. No new deposits.`, { id: `refresh-${userId}` });
+        } else {
+          toast.error(`No balances found for user ${userId}`, { id: `refresh-${userId}` });
+        }
+      } else {
+        console.error('Invalid response format:', response.data);
+        toast.error(`Invalid response format from server`, { id: `refresh-${userId}` });
+      }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      let errorMessage = 'Unknown error';
+      
+      if (error.response) {
+        // Server responded with an error
+        const serverError = error.response.data;
+        errorMessage = serverError.message || serverError.error || `Server error: ${error.response.status}`;
+        console.error('Server error details:', serverError);
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'No response from server. Check your connection.';
+      } else {
+        // Error setting up the request
+        errorMessage = error.message || 'Failed to send request';
+      }
+      
       console.error('Error refreshing balances:', error);
-      toast.error(`Failed to refresh balances: ${errorMessage}`);
+      toast.error(`Failed to refresh balances: ${errorMessage}`, { id: `refresh-${userId}` });
     } finally {
       setRefreshingWallet(null);
     }
