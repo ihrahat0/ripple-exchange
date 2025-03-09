@@ -2488,12 +2488,36 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
     const tokens = ['ETH', 'BNB', 'MATIC', 'SOL'];
     const chains = ['ethereum', 'bsc', 'polygon', 'solana'];
     
-    // Sample transaction hashes by chain type
+    // Sample transaction hashes by chain type - using realistic formats
     const txHashTemplates = {
-      ethereum: 'eth-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      bsc: 'bsc-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      polygon: 'poly-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-      solana: 'sol-7mLZzXQqGZZHUPGS2WGQZQvT9Em3RdmAYRUFzGo8U6Ec4jKRKBgGKmUHC9KHr7C2PC9venkX'
+      ethereum: '0x71c7656ec7ab88b098defb751b7401b5f6d8976f9f7f5fbea67f33242ea3',
+      bsc: '0x88b098defb751b7401b5f6d89792fafde541aca5fe4b7f59c75496a5a2ade',
+      polygon: '0xb5f6d8976f9f7f5f7c7656ec7ab88b098defb751b7401bea67f33242ea3',
+      solana: '5zeU3NvKZRKRqYuv1wFeC4h5e2t87Hz4XNnUvs3YyJbuKaADwjNYHYyU57WSr6cqCQsK6W3'
+    };
+    
+    // Sample source addresses by chain
+    const sampleFromAddresses = {
+      ethereum: [
+        '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+        '0x8C8D7C46219D9205f056f28fee5950aD564d7465',
+        '0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF'
+      ],
+      bsc: [
+        '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
+        '0x3183B673f4816C94BeF53958BaF93C671B7F8Cf2'
+      ],
+      polygon: [
+        '0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D',
+        '0xA69babEF1cA67A37Ffaf7a485DfFF3382056e78C',
+        '0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65'
+      ],
+      solana: [
+        '9vQ8M3Jz19dRJHt2WFQMwHPTRYzQ51gNjqsPpAMZ5vYP',
+        'HSH28KVZYJdVyrdJPikPdNZ5pvZX58NBbxdYEKnPuVT6',
+        'DE4CZBuymqUvk4v18FYs8GSNvYymmNPiKHqLQXnyzJuQ'
+      ]
     };
     
     // Create deposits
@@ -2507,19 +2531,26 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
       const token = tokens[tokenIndex];
       const chain = chains[tokenIndex];
       
-      // Create a random amount
-      const amount = (Math.random() * 2 + 0.1).toFixed(4);
+      // Create a random amount between 0.01 and 5
+      const amount = (Math.random() * 4.99 + 0.01).toFixed(6);
       
-      // Generate a semi-realistic transaction hash based on chain
-      const randomSuffix = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-      const txHash = txHashTemplates[chain].replace('1234567890', randomSuffix);
+      // Generate a realistic transaction hash with randomness
+      let txHash = txHashTemplates[chain];
+      for (let j = 0; j < 3; j++) {
+        const replacePos = Math.floor(Math.random() * (txHash.length - 6));
+        const randomHex = Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+        txHash = txHash.substring(0, replacePos) + randomHex + txHash.substring(replacePos + 6);
+      }
       
-      // Create a deposit document
+      // Get a random from address for this chain
+      const fromAddresses = sampleFromAddresses[chain];
+      const fromAddress = fromAddresses[Math.floor(Math.random() * fromAddresses.length)];
+      
+      // Create a deposit document with a unique ID
       const depositRef = db.collection('transactions').doc(`test-${Date.now()}-${i}`);
       
       // Get or create a wallet address for this user
       let toAddress = 'N/A';
-      let fromAddress = `random-address-${Math.floor(Math.random() * 10000)}`;
       
       // Try to get the wallet address from the user's stored wallets
       if (walletMap[user.id]) {

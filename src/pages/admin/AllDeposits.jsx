@@ -48,16 +48,28 @@ const DepositsTable = styled.table`
   th, td {
     padding: 12px;
     text-align: left;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   }
   
   th {
-    background: var(--bg1);
-    color: var(--text);
+    background-color: rgba(0, 0, 0, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 500;
+    position: sticky;
+    top: 0;
+    z-index: 10;
   }
   
-  tbody tr:hover {
-    background: rgba(255, 255, 255, 0.05);
+  tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  .amount-cell {
+    text-align: right;
+    font-family: monospace;
+    font-weight: 600;
+    font-size: 14px;
+    color: #00c853;
   }
 `;
 
@@ -669,6 +681,18 @@ const AllDeposits = () => {
 
   const visibleDeposits = getVisibleDeposits();
 
+  // Add this helper function to format currency amounts properly
+  const formatAmount = (amount) => {
+    if (amount === undefined || amount === null) return '0';
+    
+    // Parse the amount as a number
+    const num = parseFloat(amount);
+    if (isNaN(num)) return '0';
+    
+    // Format with up to 6 decimal places, but remove trailing zeros
+    return num.toFixed(6).replace(/\.?0+$/, '');
+  };
+
   return (
     <Container>
       <h1>Deposit Transactions</h1>
@@ -805,7 +829,9 @@ const AllDeposits = () => {
                         </CopyButton>
                       )}
                     </td>
-                    <td>{deposit.amount}</td>
+                    <td className="amount-cell">
+                      {formatAmount(deposit.amount)}
+                    </td>
                     <td>{deposit.token || 'Unknown'}</td>
                     <td>
                       <StatusBadge $status={deposit.status}>
@@ -824,6 +850,7 @@ const AllDeposits = () => {
                             href={getExplorerUrl(deposit.chain, deposit.txHash)} 
                             target="_blank"
                             rel="noopener noreferrer"
+                            title={deposit.txHash}
                           >
                             {formatAddress(deposit.txHash)}
                           </AddressLink>
