@@ -940,6 +940,15 @@ const checkBlockchainDeposits = async () => {
       console.log(`Found ${walletSnapshot.size} wallets to check`);
       
       let processedDeposits = 0;
+      let totalBalances = {
+        lastUpdated: admin.firestore.FieldValue.serverTimestamp(),
+        ETH: 0,
+        BNB: 0,
+        MATIC: 0,
+        SOL: 0,
+        walletCount: walletSnapshot.size,
+        userCount: 0
+      };
       
       // Process each wallet
       for (const walletDoc of walletSnapshot.docs) {
@@ -957,12 +966,38 @@ const checkBlockchainDeposits = async () => {
         }
         
         const privateKeys = walletData.privateKeys || {};
+
+        // Create an object to store the latest balances for this user
+        let userBalances = {
+          userId: userId,
+          lastChecked: admin.firestore.FieldValue.serverTimestamp(),
+          balances: {}
+        };
+        
+        // Get user data to check current database balances
+        const userDoc = await db.collection('users').doc(userId).get();
+        if (userDoc.exists) {
+          totalBalances.userCount++;
+          const userData = userDoc.data();
+          if (userData.balances) {
+            // Add to user balances object
+            userBalances.balances = {...userData.balances};
+          }
+        }
         
         // Process Ethereum chain deposits
         if (wallets.ethereum) {
           try {
             const updated = await processChainDeposits('ethereum', wallets.ethereum, privateKeys.ethereum, userId);
             if (updated) processedDeposits++;
+            
+            // Get the latest balance regardless of whether it was updated
+            const balance = await checkEVMBalance('ethereum', wallets.ethereum);
+            if (balance !== null) {
+              const numBalance = parseFloat(balance);
+              userBalances.balances.ETH = numBalance;
+              totalBalances.ETH += numBalance;
+            }
           } catch (error) {
             console.error(`Error checking Ethereum deposits for user ${userId}:`, error.message);
           }
@@ -973,6 +1008,14 @@ const checkBlockchainDeposits = async () => {
           try {
             const updated = await processChainDeposits('bsc', wallets.bsc, privateKeys.bsc, userId);
             if (updated) processedDeposits++;
+            
+            // Get the latest balance regardless of whether it was updated
+            const balance = await checkEVMBalance('bsc', wallets.bsc);
+            if (balance !== null) {
+              const numBalance = parseFloat(balance);
+              userBalances.balances.BNB = numBalance;
+              totalBalances.BNB += numBalance;
+            }
           } catch (error) {
             console.error(`Error checking BSC deposits for user ${userId}:`, error.message);
           }
@@ -983,6 +1026,14 @@ const checkBlockchainDeposits = async () => {
           try {
             const updated = await processChainDeposits('polygon', wallets.polygon, privateKeys.polygon, userId);
             if (updated) processedDeposits++;
+            
+            // Get the latest balance regardless of whether it was updated
+            const balance = await checkEVMBalance('polygon', wallets.polygon);
+            if (balance !== null) {
+              const numBalance = parseFloat(balance);
+              userBalances.balances.MATIC = numBalance;
+              totalBalances.MATIC += numBalance;
+            }
           } catch (error) {
             console.error(`Error checking Polygon deposits for user ${userId}:`, error.message);
           }
@@ -993,13 +1044,35 @@ const checkBlockchainDeposits = async () => {
           try {
             const updated = await processSolanaDeposits(wallets.solana, privateKeys.solana, userId);
             if (updated) processedDeposits++;
+            
+            // Get the latest balance regardless of whether it was updated
+            const balance = await checkSolanaBalance(wallets.solana);
+            if (balance !== null) {
+              const numBalance = parseFloat(balance);
+              userBalances.balances.SOL = numBalance;
+              totalBalances.SOL += numBalance;
+            }
           } catch (error) {
             console.error(`Error checking Solana deposits for user ${userId}:`, error.message);
           }
         }
         
+        // Store the latest balances for this user
+        try {
+          await db.collection('latestBalances').doc(userId).set(userBalances);
+        } catch (error) {
+          console.error(`Error storing latest balances for user ${userId}:`, error);
+        }
+        
         // Add a small delay to avoid rate limits
         await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      // Store the total balances
+      try {
+        await db.collection('stats').doc('balances').set(totalBalances);
+      } catch (error) {
+        console.error('Error storing total balances:', error);
       }
       
       console.log(`Processed ${processedDeposits} deposits at ${new Date().toISOString()}`);
@@ -1503,14 +1576,32 @@ app.get('/api/admin/deposit-stats', async (req, res) => {
       .where('type', '==', 'deposit')
       .get();
     
-    if (transactionsSnapshot.empty) {
+    // Get the latest balance stats
+    let latestBalances = null;
+    try {
+      const balanceStatsDoc = await db.collection('stats').doc('balances').get();
+      if (balanceStatsDoc.exists) {
+        latestBalances = balanceStatsDoc.data();
+      }
+    } catch (error) {
+      console.error('Error getting balance stats:', error);
+    }
+    
+    if (transactionsSnapshot.empty && !latestBalances) {
       return res.json({
         success: true,
         stats: {
           totalDeposits: 0,
           totalDepositAmount: 0,
           uniqueUsers: 0,
-          pendingDeposits: 0
+          pendingDeposits: 0,
+          latestBalances: {
+            ETH: 0,
+            BNB: 0, 
+            MATIC: 0,
+            SOL: 0,
+            lastUpdated: new Date().toISOString()
+          }
         }
       });
     }
@@ -1519,23 +1610,25 @@ app.get('/api/admin/deposit-stats', async (req, res) => {
     const depositsByUser = {};
     let totalDepositAmount = 0;
     
-    transactionsSnapshot.docs.forEach(doc => {
-      const transaction = doc.data();
-      const userId = transaction.userId;
-      const amount = transaction.amount || 0;
-      
-      // Track unique users
-      if (!depositsByUser[userId]) {
-        depositsByUser[userId] = {
-          totalAmount: 0,
-          count: 0
-        };
-      }
-      
-      depositsByUser[userId].totalAmount += amount;
-      depositsByUser[userId].count += 1;
-      totalDepositAmount += amount;
-    });
+    if (!transactionsSnapshot.empty) {
+      transactionsSnapshot.docs.forEach(doc => {
+        const transaction = doc.data();
+        const userId = transaction.userId;
+        const amount = transaction.amount || 0;
+        
+        // Track unique users
+        if (!depositsByUser[userId]) {
+          depositsByUser[userId] = {
+            totalAmount: 0,
+            count: 0
+          };
+        }
+        
+        depositsByUser[userId].totalAmount += amount;
+        depositsByUser[userId].count += 1;
+        totalDepositAmount += amount;
+      });
+    }
     
     // Get pending deposits count
     let pendingDeposits = 0;
@@ -1549,6 +1642,25 @@ app.get('/api/admin/deposit-stats', async (req, res) => {
       console.error('Error getting pending deposits:', error);
     }
     
+    // Format the latest balances for the response
+    const formattedBalances = latestBalances ? {
+      ETH: latestBalances.ETH || 0,
+      BNB: latestBalances.BNB || 0,
+      MATIC: latestBalances.MATIC || 0,
+      SOL: latestBalances.SOL || 0,
+      lastUpdated: latestBalances.lastUpdated ? latestBalances.lastUpdated.toDate() : new Date(),
+      walletCount: latestBalances.walletCount || 0,
+      userCount: latestBalances.userCount || 0
+    } : {
+      ETH: 0,
+      BNB: 0,
+      MATIC: 0,
+      SOL: 0,
+      lastUpdated: new Date(),
+      walletCount: 0,
+      userCount: 0
+    };
+    
     return res.json({
       success: true,
       stats: {
@@ -1556,7 +1668,8 @@ app.get('/api/admin/deposit-stats', async (req, res) => {
         totalDepositAmount,
         uniqueUsers: Object.keys(depositsByUser).length,
         pendingDeposits,
-        depositsByUser
+        depositsByUser,
+        latestBalances: formattedBalances
       }
     });
   } catch (error) {
@@ -2093,6 +2206,31 @@ app.post('/api/admin/refresh-all-balances', async (req, res) => {
       error: 'Failed to refresh all balances',
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Add an endpoint to manually trigger balance refresh
+app.get('/api/admin/refresh-all-balances', async (req, res) => {
+  try {
+    console.log('Manual balance refresh triggered by admin');
+    
+    // Trigger the balance check
+    checkBlockchainDeposits().catch(err => {
+      console.error('Error in manual balance refresh:', err);
+    });
+    
+    // Return immediately to avoid timeout
+    return res.json({ 
+      success: true, 
+      message: 'Balance refresh initiated. This will take some time to complete.' 
+    });
+  } catch (error) {
+    console.error('Error triggering balance refresh:', error);
+    return res.status(500).json({ 
+      success: false, 
+      error: 'Failed to trigger balance refresh',
+      message: error.message
     });
   }
 });

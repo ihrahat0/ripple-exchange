@@ -3,6 +3,7 @@ import styled from 'styled-components';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
+import axios from 'axios';
 
 const DashboardContainer = styled.div`
   display: grid;
@@ -31,6 +32,57 @@ const ActivityCard = styled.div`
   }
 `;
 
+const BalanceCard = styled(ActivityCard)`
+  .balance-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  
+  .balance-item {
+    padding: 10px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.2);
+    
+    .token {
+      font-weight: 500;
+      margin-bottom: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    
+    .amount {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e6edf3;
+    }
+  }
+  
+  .last-updated {
+    margin-top: 12px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    text-align: right;
+  }
+  
+  .refresh-button {
+    margin-top: 15px;
+    background: rgba(255, 114, 90, 0.1);
+    color: #ff725a;
+    border: 1px solid rgba(255, 114, 90, 0.2);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: rgba(255, 114, 90, 0.2);
+    }
+  }
+`;
+
 const ChartContainer = styled.div`
   background: rgba(22, 27, 34, 0.5);
   border-radius: 10px;
@@ -52,11 +104,35 @@ const ChartContainer = styled.div`
     display: flex;
     align-items: center;
     justify-content: center;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.3);
   }
 `;
 
-const RecentActivity = styled.div`
+const StatsCard = styled(ActivityCard)`
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+  }
+  
+  .stat-item {
+    padding: 10px;
+    
+    .label {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+      margin-bottom: 5px;
+    }
+    
+    .value {
+      font-size: 24px;
+      font-weight: 600;
+      color: #e6edf3;
+    }
+  }
+`;
+
+const RecentActivity = styled(ActivityCard)`
   .activity-item {
     padding: 12px 0;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -81,11 +157,28 @@ function Dashboard() {
     totalTransactions: 0,
     activeUsers: 0
   });
+  const [balances, setBalances] = useState({
+    ETH: 0,
+    BNB: 0,
+    MATIC: 0,
+    SOL: 0,
+    lastUpdated: null,
+    walletCount: 0,
+    userCount: 0
+  });
   const [recentActivity, setRecentActivity] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
+    
+    // Set up polling to refresh data every 30 seconds
+    const intervalId = setInterval(() => {
+      fetchDepositStats();
+    }, 30000);
+    
+    return () => clearInterval(intervalId);
   }, []);
 
   const fetchDashboardData = async () => {
@@ -134,11 +227,36 @@ function Dashboard() {
       });
       
       setRecentActivity(recentActivityList);
+      
+      // Fetch deposit stats separately
+      await fetchDepositStats();
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
     }
+  };
+  
+  const fetchDepositStats = async () => {
+    try {
+      const response = await axios.get('/api/admin/deposit-stats');
+      if (response.data && response.data.success && response.data.stats) {
+        const { latestBalances } = response.data.stats;
+        if (latestBalances) {
+          console.log('Latest balances:', latestBalances);
+          setBalances(latestBalances);
+        }
+      }
+    } catch (error) {
+      console.error("Error fetching deposit stats:", error);
+    }
+  };
+  
+  const formatBalanceTimestamp = (timestamp) => {
+    if (!timestamp) return 'Unknown';
+    
+    const date = new Date(timestamp);
+    return date.toLocaleString();
   };
   
   const formatActivityItem = (activity) => {
@@ -155,198 +273,105 @@ function Dashboard() {
         return `Transaction: ${activity.id}`;
     }
   };
+  
+  const handleBalanceRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Call the manual refresh endpoint
+      const refreshResponse = await axios.get('/api/admin/refresh-all-balances');
+      
+      if (refreshResponse.data && refreshResponse.data.success) {
+        // Show success message
+        alert(refreshResponse.data.message || 'Balance refresh initiated');
+        
+        // Wait a moment before fetching updated stats
+        setTimeout(async () => {
+          await fetchDepositStats();
+          setRefreshing(false);
+        }, 3000); // Wait 3 seconds to allow some time for the refresh to start
+      } else {
+        throw new Error('Failed to initiate balance refresh');
+      }
+    } catch (error) {
+      console.error("Error refreshing balances:", error);
+      alert('Failed to refresh balances: ' + (error.message || 'Unknown error'));
+      setRefreshing(false);
+    }
+  };
 
   return (
     <div>
       <DashboardContainer>
-        <ActivityCard>
+        <StatsCard>
           <h3>Platform Status</h3>
-          <div className="content">
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '8px', 
-              color: '#00c853', 
-              marginBottom: '10px' 
-            }}>
-              <span style={{ 
-                width: '10px', 
-                height: '10px', 
-                background: '#00c853', 
-                borderRadius: '50%',
-                display: 'inline-block'
-              }}></span>
-              All systems operational
+          <div className="stat-grid">
+            <div className="stat-item">
+              <div className="label">Users</div>
+              <div className="value">{stats.users}</div>
             </div>
-            <p>Server uptime: 99.98%</p>
-            <p>API status: Operational</p>
-            <p>Database: Operational</p>
+            <div className="stat-item">
+              <div className="label">Active Users</div>
+              <div className="value">{stats.activeUsers}</div>
+            </div>
+            <div className="stat-item">
+              <div className="label">Transactions</div>
+              <div className="value">{stats.totalTransactions}</div>
+            </div>
+            <div className="stat-item">
+              <div className="label">Pending Withdrawals</div>
+              <div className="value">{stats.pendingWithdrawals}</div>
+            </div>
           </div>
-        </ActivityCard>
+        </StatsCard>
         
-        <ActivityCard>
+        <BalanceCard>
+          <h3>Latest Balances</h3>
+          <div className="balance-grid">
+            <div className="balance-item">
+              <div className="token">ETH <img src="/images/tokens/eth.svg" width="16" alt="ETH" /></div>
+              <div className="amount">{balances.ETH.toFixed(4)}</div>
+            </div>
+            <div className="balance-item">
+              <div className="token">BNB <img src="/images/tokens/bnb.svg" width="16" alt="BNB" /></div>
+              <div className="amount">{balances.BNB.toFixed(4)}</div>
+            </div>
+            <div className="balance-item">
+              <div className="token">MATIC <img src="/images/tokens/matic.svg" width="16" alt="MATIC" /></div>
+              <div className="amount">{balances.MATIC.toFixed(4)}</div>
+            </div>
+            <div className="balance-item">
+              <div className="token">SOL <img src="/images/tokens/sol.svg" width="16" alt="SOL" /></div>
+              <div className="amount">{balances.SOL.toFixed(4)}</div>
+            </div>
+          </div>
+          <div className="last-updated">
+            Last updated: {formatBalanceTimestamp(balances.lastUpdated)}
+          </div>
+          <button 
+            className="refresh-button" 
+            onClick={handleBalanceRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh Balances'}
+          </button>
+        </BalanceCard>
+        
+        <RecentActivity>
           <h3>Recent Activity</h3>
-          <RecentActivity className="content">
-            {loading ? (
-              <div>Loading activity...</div>
-            ) : recentActivity.length === 0 ? (
-              <div>No recent activity found</div>
+          <div className="content">
+            {recentActivity.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px 0' }}>No recent activity</div>
             ) : (
-              recentActivity.map((activity, index) => (
-                <div className="activity-item" key={activity.id || index}>
+              recentActivity.map((activity) => (
+                <div key={activity.id} className="activity-item">
                   <div>{formatActivityItem(activity)}</div>
-                  <div className="time">
-                    {activity.timestamp ? activity.timestamp.toLocaleString() : 'Unknown time'}
-                  </div>
+                  <div className="time">{new Date(activity.timestamp).toLocaleString()}</div>
                 </div>
               ))
             )}
-          </RecentActivity>
-        </ActivityCard>
-        
-        <ActivityCard>
-          <h3>Quick Actions</h3>
-          <div className="content">
-            <div style={{ display: 'grid', gap: '10px' }}>
-              <button 
-                style={{
-                  background: 'rgba(255, 114, 90, 0.2)',
-                  color: '#ff725a',
-                  border: '1px solid rgba(255, 114, 90, 0.3)',
-                  borderRadius: '6px',
-                  padding: '10px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onClick={() => navigate('/admin/users')}
-              >
-                <i className="bi bi-person-plus"></i> Manage Users
-              </button>
-              
-              <button 
-                style={{
-                  background: 'rgba(33, 150, 243, 0.2)',
-                  color: '#2196f3',
-                  border: '1px solid rgba(33, 150, 243, 0.3)',
-                  borderRadius: '6px',
-                  padding: '10px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onClick={() => navigate('/admin/withdrawal-management')}
-              >
-                <i className="bi bi-currency-exchange"></i> Review Withdrawals
-                {stats.pendingWithdrawals > 0 && (
-                  <span style={{
-                    background: '#ff725a',
-                    color: 'white',
-                    borderRadius: '50%',
-                    width: '20px', 
-                    height: '20px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '12px',
-                    marginLeft: 'auto'
-                  }}>
-                    {stats.pendingWithdrawals}
-                  </span>
-                )}
-              </button>
-              
-              <button 
-                style={{
-                  background: 'rgba(0, 200, 83, 0.2)',
-                  color: '#00c853',
-                  border: '1px solid rgba(0, 200, 83, 0.3)',
-                  borderRadius: '6px',
-                  padding: '10px',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onClick={() => navigate('/admin/tokens')}
-              >
-                <i className="bi bi-coin"></i> Manage Tokens
-              </button>
-            </div>
           </div>
-        </ActivityCard>
+        </RecentActivity>
       </DashboardContainer>
-      
-      <ChartContainer>
-        <h3>Platform Overview</h3>
-        <div style={{ 
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '20px',
-          marginTop: '20px'
-        }}>
-          <div style={{
-            background: 'rgba(22, 27, 34, 0.3)',
-            borderRadius: '8px',
-            padding: '20px',
-            textAlign: 'center'
-          }}>
-            <h4 style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 10px 0' }}>
-              Total Users
-            </h4>
-            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff' }}>
-              {loading ? '...' : stats.users}
-            </div>
-          </div>
-          
-          <div style={{
-            background: 'rgba(22, 27, 34, 0.3)',
-            borderRadius: '8px',
-            padding: '20px',
-            textAlign: 'center'
-          }}>
-            <h4 style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 10px 0' }}>
-              Pending Withdrawals
-            </h4>
-            <div style={{ fontSize: '28px', fontWeight: 'bold', color: stats.pendingWithdrawals > 0 ? '#ff725a' : '#fff' }}>
-              {loading ? '...' : stats.pendingWithdrawals}
-            </div>
-          </div>
-          
-          <div style={{
-            background: 'rgba(22, 27, 34, 0.3)',
-            borderRadius: '8px',
-            padding: '20px',
-            textAlign: 'center'
-          }}>
-            <h4 style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 10px 0' }}>
-              Total Transactions
-            </h4>
-            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff' }}>
-              {loading ? '...' : stats.totalTransactions}
-            </div>
-          </div>
-          
-          <div style={{
-            background: 'rgba(22, 27, 34, 0.3)',
-            borderRadius: '8px',
-            padding: '20px',
-            textAlign: 'center'
-          }}>
-            <h4 style={{ fontSize: '16px', color: 'rgba(255, 255, 255, 0.7)', margin: '0 0 10px 0' }}>
-              Active Users
-            </h4>
-            <div style={{ fontSize: '28px', fontWeight: 'bold', color: '#fff' }}>
-              {loading ? '...' : stats.activeUsers}
-            </div>
-          </div>
-        </div>
-      </ChartContainer>
     </div>
   );
 }
