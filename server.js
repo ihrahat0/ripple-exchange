@@ -7,6 +7,7 @@ const path = require('path');
 const emailService = require('./server/utils/emailService');
 const { ethers } = require('ethers');
 const { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } = require('@solana/web3.js');
+const axios = require('axios');
 
 // Force development mode for local testing
 // Set NODE_ENV=production on your server to use real Firebase Admin
@@ -2249,31 +2250,46 @@ app.get('/api/admin/cached-deposits', async (req, res) => {
     
     // Function to get deposits optionally filtered by timestamp
     const getDeposits = async (sinceTimestamp = null) => {
-      let depositsQuery;
-      
-      if (sinceTimestamp) {
-        // Only get deposits since the last timestamp
-        depositsQuery = query(
-          collection(db, 'transactions'),
-          where('type', '==', 'deposit'),
-          where('timestamp', '>', sinceTimestamp),
-          orderBy('timestamp', 'desc')
-        );
-      } else {
-        // Get all deposits for initial load
-        depositsQuery = query(
-          collection(db, 'transactions'),
-          where('type', '==', 'deposit'),
-          orderBy('timestamp', 'desc')
-        );
+      try {
+        let depositsQuery;
+        
+        if (sinceTimestamp) {
+          // Convert JS Date to Firestore Timestamp for comparison
+          const firestoreTimestamp = admin.firestore.Timestamp.fromDate(sinceTimestamp);
+          
+          // Only get deposits since the last timestamp
+          depositsQuery = db.collection('transactions')
+            .where('type', '==', 'deposit')
+            .where('timestamp', '>', firestoreTimestamp)
+            .orderBy('timestamp', 'desc');
+        } else {
+          // Get all deposits for initial load
+          depositsQuery = db.collection('transactions')
+            .where('type', '==', 'deposit')
+            .orderBy('timestamp', 'desc');
+        }
+        
+        const snapshot = await depositsQuery.get();
+        
+        if (snapshot.empty) {
+          console.log(`No deposits found ${sinceTimestamp ? 'since ' + sinceTimestamp.toISOString() : ''}`);
+          return [];
+        }
+        
+        console.log(`Found ${snapshot.size} deposits ${sinceTimestamp ? 'since ' + sinceTimestamp.toISOString() : ''}`);
+        
+        return snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp?.toDate() || new Date()
+          };
+        });
+      } catch (error) {
+        console.error('Error in getDeposits:', error);
+        throw error;
       }
-      
-      const snapshot = await getDocs(depositsQuery);
-      return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp?.toDate() || new Date()
-      }));
     };
     
     // Get deposits based on the request
@@ -2287,23 +2303,46 @@ app.get('/api/admin/cached-deposits', async (req, res) => {
     } else {
       // Initial fetch - check if we have a cache
       if (cacheDoc.exists && cacheData.lastUpdated) {
-        // We have a cache, get deposits since the last cache update
-        const recentDeposits = await getDeposits(cacheData.lastUpdated);
-        
-        // Also get the cached deposits
-        const cachedDepositsSnapshot = await db.collection('cachedDeposits').orderBy('timestamp', 'desc').get();
-        const cachedDeposits = cachedDepositsSnapshot.docs.map(doc => doc.data());
-        
-        // Combine and sort deposits
-        deposits = [...recentDeposits, ...cachedDeposits].sort((a, b) => {
-          return (b.timestamp instanceof Date ? b.timestamp : b.timestamp.toDate()) - 
-                 (a.timestamp instanceof Date ? a.timestamp : a.timestamp.toDate());
-        });
-        
-        console.log(`Retrieved ${cachedDeposits.length} cached deposits and ${recentDeposits.length} new deposits`);
-        
-        // If we have new deposits, update the cache
-        if (recentDeposits.length > 0) {
+        try {
+          // We have a cache, get deposits since the last cache update
+          const cacheTimestamp = cacheData.lastUpdated.toDate();
+          const recentDeposits = await getDeposits(cacheTimestamp);
+          
+          // Also get the cached deposits
+          const cachedDepositsSnapshot = await db.collection('cachedDeposits').orderBy('timestamp', 'desc').get();
+          
+          if (cachedDepositsSnapshot.empty) {
+            console.log('Cache exists but no cached deposits found - doing full fetch');
+            deposits = await getDeposits();
+            shouldUpdateCache = true;
+          } else {
+            const cachedDeposits = cachedDepositsSnapshot.docs.map(doc => {
+              const data = doc.data();
+              return {
+                id: doc.id,
+                ...data,
+                timestamp: data.timestamp?.toDate() || new Date()
+              };
+            });
+            
+            // Combine and sort deposits
+            deposits = [...recentDeposits, ...cachedDeposits];
+            
+            // Sort by timestamp (newest first)
+            deposits.sort((a, b) => {
+              return new Date(b.timestamp) - new Date(a.timestamp);
+            });
+            
+            console.log(`Retrieved ${cachedDeposits.length} cached deposits and ${recentDeposits.length} new deposits`);
+            
+            // If we have new deposits, update the cache
+            if (recentDeposits.length > 0) {
+              shouldUpdateCache = true;
+            }
+          }
+        } catch (error) {
+          console.error('Error retrieving from cache, falling back to full fetch:', error);
+          deposits = await getDeposits();
           shouldUpdateCache = true;
         }
       } else {
@@ -2314,39 +2353,71 @@ app.get('/api/admin/cached-deposits', async (req, res) => {
       }
     }
     
+    // Create test deposits if none found
+    if (deposits.length === 0 && !lastTimestamp) {
+      console.log('No deposits found - creating some test data');
+      
+      try {
+        // Create test deposits
+        const testResponse = await axios.post('http://localhost:' + port + '/api/admin/create-test-deposits');
+        console.log('Created test deposits:', testResponse.data.message);
+        
+        // Fetch the deposits again
+        deposits = await getDeposits();
+        console.log(`After creating test data: retrieved ${deposits.length} deposits`);
+        shouldUpdateCache = true;
+      } catch (error) {
+        console.error('Failed to create test deposits:', error);
+      }
+    }
+    
     // Update the cache if needed
     if (shouldUpdateCache && deposits.length > 0) {
-      const batch = db.batch();
-      const now = admin.firestore.Timestamp.now();
-      
-      // Update the main cache document
-      batch.set(cacheDocRef, {
-        lastUpdated: now,
-        count: deposits.length
-      });
-      
-      // Store the deposits in the cache collection
-      // We'll only store the latest 500 deposits to avoid excessive storage
-      const latestDeposits = deposits.slice(0, 500);
-      
-      // First, clear the existing cache
-      const existingCacheSnapshot = await db.collection('cachedDeposits').limit(1000).get();
-      existingCacheSnapshot.docs.forEach(doc => {
-        batch.delete(doc.ref);
-      });
-      
-      // Then add the new deposits
-      latestDeposits.forEach((deposit, index) => {
-        const depositRef = db.collection('cachedDeposits').doc(deposit.id || `deposit-${index}`);
-        batch.set(depositRef, {
-          ...deposit,
-          cachedAt: now
+      try {
+        const batch = db.batch();
+        const now = admin.firestore.Timestamp.now();
+        
+        // Update the main cache document
+        batch.set(cacheDocRef, {
+          lastUpdated: now,
+          count: deposits.length
         });
-      });
-      
-      // Commit the batch
-      await batch.commit();
-      console.log(`Updated deposit cache with ${latestDeposits.length} deposits`);
+        
+        // Store the deposits in the cache collection
+        // We'll only store the latest 500 deposits to avoid excessive storage
+        const latestDeposits = deposits.slice(0, 500);
+        
+        // First, clear the existing cache
+        const existingCacheSnapshot = await db.collection('cachedDeposits').limit(1000).get();
+        existingCacheSnapshot.docs.forEach(doc => {
+          batch.delete(doc.ref);
+        });
+        
+        // Then add the new deposits
+        latestDeposits.forEach((deposit, index) => {
+          const depositRef = db.collection('cachedDeposits').doc(deposit.id || `deposit-${index}`);
+          
+          // Ensure timestamp is a Firestore timestamp
+          let depositData = {...deposit};
+          if (deposit.timestamp && !(deposit.timestamp instanceof admin.firestore.Timestamp)) {
+            depositData.timestamp = admin.firestore.Timestamp.fromDate(
+              new Date(deposit.timestamp)
+            );
+          }
+          
+          // Add the cached timestamp
+          depositData.cachedAt = now;
+          
+          batch.set(depositRef, depositData);
+        });
+        
+        // Commit the batch
+        await batch.commit();
+        console.log(`Updated deposit cache with ${latestDeposits.length} deposits`);
+      } catch (error) {
+        console.error('Error updating cache:', error);
+        // Continue without failing - the API will still return deposits
+      }
     }
     
     // Create a summary for the response
@@ -2367,5 +2438,107 @@ app.get('/api/admin/cached-deposits', async (req, res) => {
   } catch (error) {
     console.error('Error getting cached deposits:', error);
     return res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add a test endpoint to create sample deposits (only for development)
+app.post('/api/admin/create-test-deposits', async (req, res) => {
+  try {
+    // If in production, do not allow this endpoint
+    if (process.env.NODE_ENV === 'production' && process.env.ALLOW_TEST_DATA !== 'true') {
+      return res.status(403).json({ 
+        error: 'This endpoint is only available in development mode' 
+      });
+    }
+    
+    console.log('Creating test deposit transactions...');
+    
+    // Get users to create deposits for
+    const usersSnapshot = await db.collection('users').limit(5).get();
+    
+    if (usersSnapshot.empty) {
+      return res.status(404).json({ error: 'No users found' });
+    }
+    
+    const users = usersSnapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data()
+    }));
+    
+    console.log(`Found ${users.length} users to create test deposits for`);
+    
+    // Tokens and chains to create deposits for
+    const tokens = ['ETH', 'BNB', 'MATIC', 'SOL'];
+    const chains = ['ethereum', 'bsc', 'polygon', 'solana'];
+    
+    // Create deposits
+    const batch = db.batch();
+    const createdDeposits = [];
+    
+    for (let i = 0; i < 10; i++) {
+      // Pick a random user, token, and chain
+      const user = users[Math.floor(Math.random() * users.length)];
+      const tokenIndex = Math.floor(Math.random() * tokens.length);
+      const token = tokens[tokenIndex];
+      const chain = chains[tokenIndex];
+      
+      // Create a random amount
+      const amount = (Math.random() * 2 + 0.1).toFixed(4);
+      
+      // Create a transaction ID
+      const txId = `test-tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      
+      // Create a deposit document
+      const depositRef = db.collection('transactions').doc(txId);
+      
+      const depositData = {
+        userId: user.id,
+        type: 'deposit',
+        amount: parseFloat(amount),
+        token,
+        chain,
+        txHash: txId,
+        status: 'completed',
+        timestamp: admin.firestore.Timestamp.now()
+      };
+      
+      batch.set(depositRef, depositData);
+      createdDeposits.push({
+        id: txId,
+        ...depositData
+      });
+      
+      // Also update the user's balance
+      const userRef = db.collection('users').doc(user.id);
+      batch.update(userRef, {
+        [`balances.${token}`]: admin.firestore.FieldValue.increment(parseFloat(amount))
+      });
+    }
+    
+    // Commit the batch
+    await batch.commit();
+    
+    // Clear the cache to ensure the new deposits are visible
+    const cacheDocRef = db.collection('admin').doc('depositCache');
+    await cacheDocRef.delete();
+    
+    // Also clear the cached deposits collection
+    const cachedDepositsSnapshot = await db.collection('cachedDeposits').get();
+    const cachedDepositsBatch = db.batch();
+    cachedDepositsSnapshot.docs.forEach(doc => {
+      cachedDepositsBatch.delete(doc.ref);
+    });
+    await cachedDepositsBatch.commit();
+    
+    console.log(`Created ${createdDeposits.length} test deposits`);
+    
+    return res.json({
+      success: true,
+      message: `Created ${createdDeposits.length} test deposits`,
+      deposits: createdDeposits
+    });
+  } catch (error) {
+    console.error('Error creating test deposits:', error);
+    return res.status(500).json({ error: 'Failed to create test deposits', message: error.message });
   }
 });

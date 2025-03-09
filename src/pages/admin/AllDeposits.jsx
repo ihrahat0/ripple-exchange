@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { db } from '../../firebase';
 import { collection, getDocs, query, where, orderBy, limit, getDoc, doc } from 'firebase/firestore';
 import axios from 'axios';
+import toast, { Toaster } from 'react-hot-toast';
 
 const Container = styled.div`
   color: var(--text);
@@ -288,6 +289,47 @@ const ActionBar = styled.div`
   }
 `;
 
+const EmptyStateContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  
+  .empty-icon {
+    font-size: 60px;
+    color: rgba(255, 255, 255, 0.2);
+    margin-bottom: 20px;
+  }
+  
+  .message {
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.7);
+    margin-bottom: 30px;
+  }
+  
+  .create-button {
+    background: rgba(255, 114, 90, 0.1);
+    color: #ff725a;
+    border: 1px solid rgba(255, 114, 90, 0.2);
+    border-radius: 4px;
+    padding: 10px 20px;
+    font-size: 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    
+    &:hover {
+      background: rgba(255, 114, 90, 0.2);
+    }
+    
+    &:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  }
+`;
+
 const AllDeposits = () => {
   const navigate = useNavigate();
   const [deposits, setDeposits] = useState([]);
@@ -317,6 +359,8 @@ const AllDeposits = () => {
   
   // Use a ref to keep track of the polling interval
   const pollingIntervalRef = React.useRef(null);
+
+  const [creatingTestData, setCreatingTestData] = useState(false);
 
   // Fetch deposits with the cached endpoint
   const fetchDeposits = useCallback(async (forceRefresh = false) => {
@@ -518,6 +562,53 @@ const AllDeposits = () => {
       .catch(err => console.error('Failed to copy text: ', err));
   };
 
+  // Handle creating test deposits
+  const handleCreateTestDeposits = async () => {
+    try {
+      setCreatingTestData(true);
+      toast.loading('Creating test deposits...', { id: 'create-test' });
+      
+      const response = await axios.post('/api/admin/create-test-deposits');
+      
+      if (response.data && response.data.success) {
+        toast.success(`${response.data.message}`, { id: 'create-test' });
+        
+        // Refresh the deposits after a short delay
+        setTimeout(() => {
+          fetchDeposits(true);
+        }, 1000);
+      } else {
+        throw new Error('Failed to create test deposits');
+      }
+    } catch (error) {
+      console.error('Error creating test deposits:', error);
+      toast.error(`Error creating test deposits: ${error.message}`, { id: 'create-test' });
+    } finally {
+      setCreatingTestData(false);
+    }
+  };
+
+  // Empty state render
+  const renderEmptyState = () => {
+    return (
+      <EmptyStateContainer>
+        <div className="empty-icon">
+          <i className="bi bi-inbox"></i>
+        </div>
+        <div className="message">
+          No deposits found. Create some test deposits to see how it works.
+        </div>
+        <button 
+          className="create-button"
+          onClick={handleCreateTestDeposits}
+          disabled={creatingTestData}
+        >
+          {creatingTestData ? 'Creating...' : 'Create Test Deposits'}
+        </button>
+      </EmptyStateContainer>
+    );
+  };
+
   const visibleDeposits = getVisibleDeposits();
 
   return (
@@ -528,7 +619,7 @@ const AllDeposits = () => {
         <div className="left">
           <RefreshButton 
             onClick={handleRefresh} 
-            disabled={refreshing}
+            disabled={refreshing || creatingTestData}
           >
             <i className="bi bi-arrow-clockwise"></i>
             {refreshing ? 'Refreshing...' : 'Refresh Deposits'}
@@ -603,12 +694,10 @@ const AllDeposits = () => {
         {loading ? (
           <LoadingSpinner>
             <div className="spinner"></div>
+            <div>Loading deposits...</div>
           </LoadingSpinner>
-        ) : deposits.length === 0 ? (
-          <EmptyState>
-            <i className="bi bi-inbox"></i>
-            <p>No deposits found matching the selected filters.</p>
-          </EmptyState>
+        ) : visibleDeposits.length === 0 ? (
+          renderEmptyState()
         ) : (
           <>
             <DepositsTable>
@@ -722,6 +811,8 @@ const AllDeposits = () => {
           </>
         )}
       </Card>
+      
+      <Toaster position="top-right" />
     </Container>
   );
 };
