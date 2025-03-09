@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { db } from '../../firebase';
@@ -342,6 +342,15 @@ const EmptyStateContainer = styled.div`
   }
 `;
 
+const TableContainer = styled.div`
+  .transaction-hash {
+    max-width: 150px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+`;
+
 const AllDeposits = () => {
   const navigate = useNavigate();
   const [deposits, setDeposits] = useState([]);
@@ -373,6 +382,32 @@ const AllDeposits = () => {
   const pollingIntervalRef = React.useRef(null);
 
   const [creatingTestData, setCreatingTestData] = useState(false);
+
+  // Add state to track when component becomes visible
+  const [pageVisible, setPageVisible] = useState(true);
+
+  // Add visibility change handler to refresh data when tab becomes active
+  useEffect(() => {
+    // Function to handle visibility change
+    const handleVisibilityChange = () => {
+      const isVisible = document.visibilityState === 'visible';
+      setPageVisible(isVisible);
+      
+      // If page becomes visible and we have deposits, refresh to get latest data
+      if (isVisible && deposits.length > 0) {
+        console.log('Page became visible, refreshing deposits');
+        fetchDeposits(true);
+      }
+    };
+    
+    // Add event listener for visibility change
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Clean up on unmount
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [deposits]);
 
   // Fetch deposits with the cached endpoint
   const fetchDeposits = useCallback(async (forceRefresh = false) => {
@@ -428,15 +463,18 @@ const AllDeposits = () => {
         
         // Set the lastTimestamp to the current time for future incremental updates
         setLastTimestamp(new Date());
+        
+        // Extract all user IDs from the deposits for user info fetching
+        const allUserIds = [...new Set((newDeposits || []).map(d => d.userId))];
+        if (allUserIds.length > 0) {
+          console.log(`Fetching user info for ${allUserIds.length} users from deposits`);
+          await fetchUserInfo(newDeposits || []);
+        }
       }
-      
-      // Fetch user and wallet info for the visible deposits
-      const visibleDeposits = getVisibleDeposits();
-      await fetchUserInfo(visibleDeposits);
       
     } catch (error) {
       console.error("Error fetching deposits:", error);
-      // Optionally show an error message to the user
+      toast.error("Failed to fetch deposits");
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -481,7 +519,7 @@ const AllDeposits = () => {
   
   // Set up initial fetch and polling
   useEffect(() => {
-    // Initial fetch
+    // Force refresh on initial load to get all data immediately
     fetchDeposits(true);
     
     // Set up polling for new deposits every 30 seconds
@@ -497,7 +535,7 @@ const AllDeposits = () => {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, []);
+  }, [fetchDeposits]);
   
   // Re-fetch when filters or page changes
   useEffect(() => {
@@ -509,94 +547,79 @@ const AllDeposits = () => {
     fetchDeposits(true);
   };
 
-  const fetchUserInfo = async (depositsList) => {
-    // Get unique user IDs from the deposits
-    const userIds = [...new Set(depositsList.map(deposit => deposit.userId))];
+  const fetchUserInfo = useCallback(async (depositsToProcess) => {
+    if (!depositsToProcess || depositsToProcess.length === 0) return;
     
-    if (userIds.length === 0) return;
-    
-    console.log(`Fetching user info for ${userIds.length} users`);
-    
-    // Create a map of user IDs to user data
-    const newUserMap = { ...userMap };
-    const newWalletMap = { ...walletMap };
-    
-    // Only fetch for users we don't already have in the map
-    const usersToFetch = userIds.filter(id => !newUserMap[id]);
-    
-    // Fetch user data and wallet addresses for each user
-    for (const userId of usersToFetch) {
-      if (!userId) continue;
+    try {
+      // Get unique user IDs from the deposits
+      const userIds = [...new Set(depositsToProcess.map(d => d.userId))];
       
-      try {
-        // Fetch user data
-        const userDoc = await getDoc(doc(db, 'users', userId));
-        if (userDoc.exists()) {
-          newUserMap[userId] = {
-            id: userId,
-            ...userDoc.data()
-          };
-          console.log(`Fetched user data for ${userId}: ${newUserMap[userId].email || 'No email'}`);
-        } else {
-          console.log(`User document does not exist for ID: ${userId}`);
-        }
+      // Skip if no user IDs to fetch
+      if (!userIds.length) return;
+      
+      console.log(`Fetching user info for ${userIds.length} users`);
+      
+      // Batch user info request
+      const response = await axios.post('/api/admin/batch-user-info', { userIds });
+      
+      if (response.data && response.data.success) {
+        const userData = response.data.users || {};
+        const walletData = response.data.wallets || {};
         
-        // Fetch wallet address
-        const walletDoc = await getDoc(doc(db, 'walletAddresses', userId));
-        if (walletDoc.exists()) {
-          const walletData = walletDoc.data();
-          
-          // Handle different wallet data structures
-          let wallets = {};
-          
-          if (walletData.wallets) {
-            wallets = walletData.wallets;
-          } else if (walletData.addresses) {
-            wallets = walletData.addresses;
-          }
-          
-          newWalletMap[userId] = {
-            ...walletData,
-            wallets: wallets
-          };
-          
-          console.log(`Fetched wallet data for ${userId}, chains: ${Object.keys(wallets).join(', ')}`);
-        } else {
-          console.log(`Wallet document does not exist for ID: ${userId}`);
-        }
-      } catch (userError) {
-        console.error(`Error fetching info for user ${userId}:`, userError);
+        setUserMap(prevUserInfo => ({
+          ...prevUserInfo,
+          ...userData
+        }));
+        
+        setWalletMap(prevWalletInfo => ({
+          ...prevWalletInfo,
+          ...walletData
+        }));
+        
+        console.log(`Successfully fetched info for ${Object.keys(userData).length} users and ${Object.keys(walletData).length} wallets`);
       }
+    } catch (error) {
+      console.error("Error fetching user info:", error);
+      toast.error("Failed to fetch user information");
     }
-    
-    // Update state only if we fetched new data
-    if (usersToFetch.length > 0) {
-      setUserMap(newUserMap);
-      setWalletMap(newWalletMap);
-    }
-  };
+  }, []);
 
   // Function to get blockchain explorer URL based on chain and hash
   const getExplorerUrl = (chain, hash) => {
     if (!hash) return '#';
     
-    // If this is a test hash, extract the chain prefix if present
-    if (hash.startsWith('eth-') || hash.startsWith('bsc-') || 
-        hash.startsWith('poly-') || hash.startsWith('sol-')) {
-      hash = hash.substring(4); // Remove prefix
-    }
-    
-    switch (chain) {
-      case 'ethereum':
-        return `https://etherscan.io/tx/${hash}`;
-      case 'bsc':
-        return `https://bscscan.com/tx/${hash}`;
-      case 'polygon':
-        return `https://polygonscan.com/tx/${hash}`;
-      case 'solana':
-        return `https://solscan.io/tx/${hash}`;
-      default:
-        return `https://etherscan.io/tx/${hash}`;
+    try {
+      // Clean up the hash - remove any prefix like eth-, bsc-, etc.
+      let cleanHash = hash;
+      if (hash.includes('-')) {
+        const parts = hash.split('-');
+        // Check if the first part is a known prefix
+        if (['eth', 'bsc', 'poly', 'sol', 'manual', 'auto', 'test'].includes(parts[0])) {
+          cleanHash = parts.slice(1).join('-');
+        }
+      }
+      
+      // Add proper prefix if needed
+      if (chain === 'ethereum' && !cleanHash.startsWith('0x')) {
+        cleanHash = '0x' + cleanHash;
+      }
+      
+      // Return the appropriate blockchain explorer URL
+      switch (chain) {
+        case 'ethereum':
+          return `https://etherscan.io/tx/${cleanHash}`;
+        case 'bsc':
+          return `https://bscscan.com/tx/${cleanHash}`;
+        case 'polygon':
+          return `https://polygonscan.com/tx/${cleanHash}`;
+        case 'solana':
+          return `https://solscan.io/tx/${cleanHash}`;
+        default:
+          return `https://etherscan.io/tx/${cleanHash}`;
+      }
+    } catch (error) {
+      console.error('Error formatting explorer URL:', error);
+      return '#';
     }
   };
 
@@ -691,6 +714,41 @@ const AllDeposits = () => {
     
     // Format with up to 6 decimal places, but remove trailing zeros
     return num.toFixed(6).replace(/\.?0+$/, '');
+  };
+
+  // Modify transaction hash rendering to handle display issues
+  const renderTransactionHash = (deposit) => {
+    if (!deposit.txHash) return <span>N/A</span>;
+    
+    try {
+      const explorerUrl = getExplorerUrl(deposit.chain, deposit.txHash);
+      const displayHash = formatAddress(deposit.txHash);
+      
+      return (
+        <>
+          <AddressLink 
+            href={explorerUrl} 
+            target="_blank"
+            rel="noopener noreferrer"
+            title={deposit.txHash}
+          >
+            {displayHash}
+            <i className="bi bi-box-arrow-up-right ms-1" style={{ fontSize: '0.8em' }}></i>
+          </AddressLink>
+          <CopyButton 
+            onClick={() => handleCopyClick(deposit.txHash)}
+            title="Copy transaction hash"
+          >
+            {copiedText === deposit.txHash ? 
+              <i className="bi bi-check-circle"></i> : 
+              <i className="bi bi-clipboard"></i>}
+          </CopyButton>
+        </>
+      );
+    } catch (error) {
+      console.error('Error rendering transaction hash:', error, deposit);
+      return <span>{formatAddress(deposit.txHash) || 'Invalid Hash'}</span>;
+    }
   };
 
   return (
@@ -843,26 +901,8 @@ const AllDeposits = () => {
                         {deposit.status?.charAt(0).toUpperCase() + deposit.status?.slice(1) || 'Unknown'}
                       </StatusBadge>
                     </td>
-                    <td>
-                      {deposit.txHash ? (
-                        <>
-                          <AddressLink 
-                            href={getExplorerUrl(deposit.chain, deposit.txHash)} 
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title={deposit.txHash}
-                          >
-                            {formatAddress(deposit.txHash)}
-                          </AddressLink>
-                          <CopyButton onClick={() => handleCopyClick(deposit.txHash)}>
-                            {copiedText === deposit.txHash ? 
-                              <i className="bi bi-check-circle"></i> : 
-                              <i className="bi bi-clipboard"></i>}
-                          </CopyButton>
-                        </>
-                      ) : (
-                        'N/A'
-                      )}
+                    <td className="transaction-hash">
+                      {renderTransactionHash(deposit)}
                     </td>
                     <td>{formatTimestamp(deposit.timestamp)}</td>
                   </tr>

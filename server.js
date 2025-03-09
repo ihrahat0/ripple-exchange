@@ -2615,3 +2615,99 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
     return res.status(500).json({ error: 'Failed to create test deposits', message: error.message });
   }
 });
+
+// Add batch user info endpoint
+app.post('/api/admin/batch-user-info', checkAuth, checkAdmin, async (req, res) => {
+  try {
+    const { userIds } = req.body;
+    
+    if (!userIds || !Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid or empty userIds array'
+      });
+    }
+    
+    console.log(`Processing batch user info request for ${userIds.length} users`);
+    
+    // Fetch all users and wallets in parallel
+    const userPromises = userIds.map(async (userId) => {
+      try {
+        // Get user document
+        const userDoc = await admin.firestore().collection('users').doc(userId).get();
+        
+        // Get wallet document
+        const walletDoc = await admin.firestore().collection('walletAddresses').doc(userId).get();
+        
+        return {
+          userId,
+          userData: userDoc.exists ? userDoc.data() : null,
+          walletData: walletDoc.exists ? walletDoc.data() : null
+        };
+      } catch (error) {
+        console.error(`Error fetching data for user ${userId}:`, error);
+        return {
+          userId,
+          userData: null,
+          walletData: null,
+          error: error.message
+        };
+      }
+    });
+    
+    const results = await Promise.allSettled(userPromises);
+    
+    // Process results into response format
+    const users = {};
+    const wallets = {};
+    
+    results.forEach(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        const { userId, userData, walletData } = result.value;
+        
+        if (userData) {
+          users[userId] = {
+            id: userId,
+            ...userData
+          };
+        }
+        
+        if (walletData) {
+          // Handle different wallet data structures
+          let walletsData = {};
+          
+          if (walletData.wallets) {
+            walletsData = walletData.wallets;
+          } else if (walletData.addresses) {
+            walletsData = walletData.addresses;
+          }
+          
+          wallets[userId] = {
+            ...walletData,
+            wallets: walletsData
+          };
+        }
+      }
+    });
+    
+    // Send response
+    res.json({
+      success: true,
+      users,
+      wallets,
+      count: {
+        requested: userIds.length,
+        usersFound: Object.keys(users).length,
+        walletsFound: Object.keys(wallets).length
+      }
+    });
+    
+  } catch (error) {
+    console.error('Error in batch user info endpoint:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch batch user info',
+      error: error.message
+    });
+  }
+});
