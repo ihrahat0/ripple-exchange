@@ -6,9 +6,6 @@ import './App.scss'
 import ScrollToTop from "./ScrollToTop";
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import axios from 'axios';
-import reportWebVitals from './reportWebVitals';
-import './assets/css/style.css';
-import './assets/css/plugins.css';
 
 // Polyfills
 import { Buffer } from 'buffer';

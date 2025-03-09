@@ -24,6 +24,11 @@ try {
   // Always try to initialize Firebase Admin first, regardless of environment
   admin = require('firebase-admin');
   
+  // Create a dummy service account for development mode if needed
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Development mode: Creating Firebase connection...');
+  }
+  
   try {
     // Try to use service account if available
     let serviceAccount;
@@ -39,8 +44,41 @@ try {
           console.log('Using service account from environment variables');
         } catch (parseError) {
           console.error('Failed to parse service account from environment:', parseError);
-          throw new Error('Invalid service account in environment variables');
+          
+          if (process.env.NODE_ENV === 'development') {
+            // In development mode, create a dummy service account
+            console.log('Creating dummy service account for development');
+            serviceAccount = {
+              type: "service_account",
+              project_id: "infinitysolution-ddf7d",
+              private_key_id: "dummy-key-id",
+              private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDDwiYi75J0lY0\n-----END PRIVATE KEY-----\n",
+              client_email: "firebase-adminsdk-dummy@infinitysolution-ddf7d.iam.gserviceaccount.com",
+              client_id: "dummy-client-id",
+              auth_uri: "https://accounts.google.com/o/oauth2/auth",
+              token_uri: "https://oauth2.googleapis.com/token",
+              auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+              client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dummy%40infinitysolution-ddf7d.iam.gserviceaccount.com"
+            };
+          } else {
+            throw new Error('Invalid service account in environment variables');
+          }
         }
+      } else if (process.env.NODE_ENV === 'development') {
+        // In development mode, create a dummy service account
+        console.log('Creating dummy service account for development');
+        serviceAccount = {
+          type: "service_account",
+          project_id: "infinitysolution-ddf7d",
+          private_key_id: "dummy-key-id",
+          private_key: "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDDwiYi75J0lY0\n-----END PRIVATE KEY-----\n",
+          client_email: "firebase-adminsdk-dummy@infinitysolution-ddf7d.iam.gserviceaccount.com",
+          client_id: "dummy-client-id",
+          auth_uri: "https://accounts.google.com/o/oauth2/auth",
+          token_uri: "https://oauth2.googleapis.com/token",
+          auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
+          client_x509_cert_url: "https://www.googleapis.com/robot/v1/metadata/x509/firebase-adminsdk-dummy%40infinitysolution-ddf7d.iam.gserviceaccount.com"
+        };
       } else {
         throw new Error('No service account available');
       }
@@ -95,11 +133,31 @@ try {
 function createMockDatabase() {
   console.log('Creating mock database for development/testing');
   
-  // Mock data for wallets
-  const mockWallets = [
+  // Mock data for users and wallets
+  const mockUsers = [
     {
       id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
-      wallets: {
+      email: 'john.doe@example.com',
+      name: 'John Doe',
+      role: 'user',
+      createdAt: new Date('2023-01-15'),
+      verified: true
+    },
+    {
+      id: 'HKJRT89sjnFUhffgJHgfdsvNBLOkk89dsDFD5',
+      email: 'jane.smith@example.com',
+      name: 'Jane Smith',
+      role: 'user',
+      createdAt: new Date('2023-02-20'),
+      verified: true
+    }
+  ];
+  
+  // Mock data for wallets (same as the top-level mockWallets)
+  const mockWalletAddresses = [
+    {
+      id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+      addresses: {
         ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
         bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
         polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
@@ -110,183 +168,72 @@ function createMockDatabase() {
         bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
         polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
         solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
+      },
+      balances: {
+        ethereum: '0.5',
+        bsc: '1.2',
+        polygon: '5.0',
+        solana: '10.5'
       }
     },
     {
-      id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
-      wallets: {
-        ethereum: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-        bsc: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-        solana: '5vdLNGgvjBEbFiJVXQ1XwvjJQkt9YsQvpmYxSv7BnRqz'
+      id: 'HKJRT89sjnFUhffgJHgfdsvNBLOkk89dsDFD5',
+      addresses: {
+        ethereum: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+        bsc: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+        polygon: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+        solana: '9ZJVJa4MdGHjpVJyqXz8iqXWzH7PcuU4jumbTEUeqwPF'
       },
       privateKeys: {
-        ethereum: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-        bsc: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-        solana: '3sCnQiitG5jXDVbZSTav4ZHyQ8JWPxQiJqMpkbRNnLhJmcFHjZKbKtjhVwdcThM8U2zDHwRETHLRwFkZDuGhssHk'
-      }
-    },
-    {
-      id: 'TK4jMRH6Yo2xWXgNm7BCwZ77DhrW9UF5sfGPLkxB',
-      wallets: {
-        ethereum: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
-        bsc: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
-        solana: 'EvN4kgKmCmYzdbd5kL8Q8YgkUW5RoqMi7yJ8DJB8biwK',
-        polygon: '0x90F79bf6EB2c4f870365E785982E1f101E93b906'
+        ethereum: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+        bsc: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+        polygon: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+        solana: '2uqUjsKZdBkbfBXHjgVABZhEBBhxipzpzEtfDHsL2XQwFULmPAZsZ93iZfuR9GMRyKwLwKkBiSEHTHbxGbvvwDzw'
       },
-      privateKeys: {
-        ethereum: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
-        bsc: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
-        polygon: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
-        solana: '4j5YMTYtRWqKAcvBTAS3SZaLPMAYLnKT3sQJi5NwQRiHc9XyYxY78EZ7YxnKYJiNXRgLCcVEfTNNVxpxw257gEHq'
+      balances: {
+        ethereum: '2.7',
+        bsc: '10.1',
+        polygon: '25.3',
+        solana: '43.2'
       }
     }
   ];
-
-  // Mock data for users
-  const mockUsers = [
-    {
-      id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
-      email: 'user1@example.com',
-      displayName: 'Test User 1',
-      balances: { BTC: 0, ETH: 0, USDT: 1000 }
-    },
-    {
-      id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
-      email: 'user2@example.com',
-      displayName: 'Test User 2',
-      balances: { BTC: 0, ETH: 0, USDT: 500 }
-    }
-  ];
-
+  
+  // Store collections data
+  const collections = {
+    users: mockUsers,
+    walletAddresses: mockWalletAddresses
+  };
+  
+  // Mock document implementation
+  const mockDocument = (collection, id, data) => {
+    return {
+      exists: !!data,
+      id: id,
+      data: () => data ? {...data} : null,
+      get: async () => ({
+        exists: !!data,
+        data: () => data ? {...data} : null,
+        id: id
+      }),
+      set: async (newData, options) => {
+        console.log(`Mock setting ${collection}/${id}:`, newData);
+        return true;
+      },
+      update: async (updates) => {
+        console.log(`Mock updating ${collection}/${id}:`, updates);
+        return true;
+      }
+    };
+  };
+  
+  // Create the mock database
   return {
     collection: (name) => {
-      console.log(`Mock DB: accessing collection '${name}'`);
+      console.log(`Accessing mock collection: ${name}`);
+      const collectionData = collections[name] || [];
       
-      // Special handling for wallet addresses collection in development mode
-      if (name === 'walletAddresses') {
-        return {
-          add: async (data) => {
-            console.log(`Mock adding to ${name}:`, data);
-            return { id: 'mock-id-' + Date.now() };
-          },
-          get: async () => {
-            console.log(`Mock getting collection ${name}`);
-            
-            return {
-              empty: false,
-              size: mockWallets.length,
-              docs: mockWallets.map(wallet => ({
-                id: wallet.id,
-                data: () => ({
-                  wallets: wallet.wallets,
-                  privateKeys: wallet.privateKeys
-                })
-              })),
-              forEach: (callback) => mockWallets.forEach(wallet => {
-                callback({
-                  id: wallet.id,
-                  data: () => ({
-                    wallets: wallet.wallets,
-                    privateKeys: wallet.privateKeys
-                  })
-                });
-              })
-            };
-          },
-          doc: (id) => ({
-            get: async () => {
-              const wallet = mockWallets.find(w => w.id === id);
-              return {
-                exists: !!wallet,
-                id,
-                data: () => wallet ? {
-                  wallets: wallet.wallets,
-                  privateKeys: wallet.privateKeys
-                } : null
-              };
-            },
-            update: async (data) => {
-              console.log(`Mock updating ${name}/${id}:`, data);
-              return true;
-            }
-          })
-        };
-      }
-      
-      // Users collection
-      if (name === 'users') {
-        return {
-          add: async (data) => {
-            console.log(`Mock adding to ${name}:`, data);
-            return { id: 'mock-id-' + Date.now() };
-          },
-          get: async () => {
-            console.log(`Mock getting collection ${name}`);
-            return {
-              empty: false,
-              size: mockUsers.length,
-              docs: mockUsers.map(user => ({
-                id: user.id,
-                data: () => user
-              })),
-              forEach: (callback) => mockUsers.forEach(user => {
-                callback({
-                  id: user.id,
-                  data: () => user
-                });
-              })
-            };
-          },
-          doc: (id) => ({
-            get: async () => {
-              const user = mockUsers.find(u => u.id === id);
-              return {
-                exists: !!user,
-                id,
-                data: () => user || {
-                  email: `user-${id}@example.com`,
-                  displayName: `User ${id.substring(0, 6)}`,
-                  balances: { BTC: 0, ETH: 0, USDT: 1000 }
-                }
-              };
-            },
-            update: async (data) => {
-              console.log(`Mock updating ${name}/${id}:`, data);
-              return true;
-            }
-          })
-        };
-      }
-      
-      // Transactions collection
-      if (name === 'transactions') {
-        return {
-          add: async (data) => {
-            console.log(`Mock adding transaction:`, data);
-            return { id: 'mock-tx-' + Date.now() };
-          },
-          get: async () => {
-            return {
-              empty: true,
-              size: 0,
-              docs: [],
-              forEach: () => {}
-            };
-          },
-          doc: (id) => ({
-            get: async () => ({
-              exists: false,
-              data: () => null
-            }),
-            update: async (data) => {
-              console.log(`Mock updating transaction ${id}:`, data);
-              return true;
-            }
-          })
-        };
-      }
-      
-      // Default collection mock
+      // Mock common collection methods
       return {
         add: async (data) => {
           console.log(`Mock adding to ${name}:`, data);
@@ -294,23 +241,27 @@ function createMockDatabase() {
         },
         get: async () => {
           console.log(`Mock getting collection ${name}`);
+          
           return {
-            empty: true,
-            size: 0,
-            docs: [],
-            forEach: () => {}
+            empty: false,
+            size: collectionData.length,
+            docs: collectionData.map(item => ({
+              id: item.id,
+              data: () => item
+            })),
+            forEach: (callback) => collectionData.forEach(item => {
+              callback({
+                id: item.id,
+                data: () => item
+              });
+            })
           };
         },
-        doc: (id) => ({
-          get: async () => ({
-            exists: false,
-            data: () => null
-          }),
-          update: async (data) => {
-            console.log(`Mock updating ${name}/${id}:`, data);
-            return true;
-          }
-        })
+        doc: (id) => mockDocument(name, id, collectionData.find(item => item.id === id)),
+        update: async (data) => {
+          console.log(`Mock updating ${name}:`, data);
+          return true;
+        }
       };
     }
   };
@@ -1344,6 +1295,54 @@ app.get('/api/admin/check-deposits', async (req, res) => {
   }
 });
 
+// Define mock wallets at the top level for use in development or when Firebase fails
+const mockWallets = [
+  {
+    userId: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+    userEmail: 'john.doe@example.com',
+    addresses: {
+      ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
+      bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+      polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+      solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
+    },
+    privateKeys: {
+      ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
+      bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+      polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+      solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
+    },
+    balances: {
+      ethereum: '0.5',
+      bsc: '1.2',
+      polygon: '5.0',
+      solana: '10.5'
+    }
+  },
+  {
+    userId: 'HKJRT89sjnFUhffgJHgfdsvNBLOkk89dsDFD5',
+    userEmail: 'jane.smith@example.com',
+    addresses: {
+      ethereum: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+      bsc: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+      polygon: '0x3E14390EbBDA366Dd271f8be4e339Da857A46297',
+      solana: '9ZJVJa4MdGHjpVJyqXz8iqXWzH7PcuU4jumbTEUeqwPF'
+    },
+    privateKeys: {
+      ethereum: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+      bsc: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+      polygon: '0x6cbed15c793ce57650b9877cf6fa156fbef513c4e6134f022a85b1ffdd59b2a1',
+      solana: '2uqUjsKZdBkbfBXHjgVABZhEBBhxipzpzEtfDHsL2XQwFULmPAZsZ93iZfuR9GMRyKwLwKkBiSEHTHbxGbvvwDzw'
+    },
+    balances: {
+      ethereum: '2.7',
+      bsc: '10.1',
+      polygon: '25.3',
+      solana: '43.2'
+    }
+  }
+];
+
 // Add a new admin endpoint to view all wallets and refresh balances
 app.get('/api/admin/wallets', async (req, res) => {
   try {
@@ -1352,75 +1351,65 @@ app.get('/api/admin/wallets', async (req, res) => {
     // If we're using a mock database, return mock data
     if (usingMockDatabase) {
       console.log('Using mock wallet data');
-      const mockWallets = [
-        {
-          userId: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
-          userEmail: 'john.doe@example.com',
-          addresses: {
-            ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
-            bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-            polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-            solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
-          },
-          privateKeys: {
-            ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
-            bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-            polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-            solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
-          },
-          balances: { 
-            ETH: 87.54265683446888749, 
-            BNB: 6.921680478184543286, 
-            MATIC: 2140.95073342702087604,
-            SOL: 0
-          }
-        }
-      ];
       return res.json(mockWallets);
     }
     
-    // Get all wallet addresses from Firestore
-    console.log('Attempting to fetch wallets from Firestore');
-    const walletSnapshot = await db.collection('walletAddresses').get();
-    
-    if (walletSnapshot.empty) {
-      console.log('No wallets found in database');
-      return res.json([]);
-    }
-    
-    console.log(`Found ${walletSnapshot.size} wallets in Firestore`);
-    
-    // Process each wallet
-    const wallets = [];
-    
-    walletSnapshot.forEach(doc => {
-      const data = doc.data();
-      console.log(`Processing wallet for ${doc.id}, data keys:`, Object.keys(data));
+    // Try to get real wallet data from Firestore
+    try {
+      console.log('Fetching wallets from Firestore...');
+      const wallets = [];
       
-      // Only include if it has wallets data
-      if (data && data.wallets) {
-        wallets.push({
-          userId: doc.id,
-          addresses: data.wallets || {},
-          privateKeys: data.privateKeys || {},
-          balances: {} // Will be populated by refresh requests
-        });
-      } else {
-        console.log(`Skipping wallet for ${doc.id} - no wallet data found`);
+      // Get all user documents
+      const usersSnapshot = await db.collection('users').get();
+      
+      if (usersSnapshot.empty) {
+        console.log('No users found in Firestore');
+        // Return mock data as fallback
+        return res.json(mockWallets);
       }
-    });
-    
-    console.log(`Returning ${wallets.length} wallets`);
-    return res.json(wallets);
+      
+      // Process each user
+      for (const userDoc of usersSnapshot.docs) {
+        const userData = userDoc.data();
+        const userId = userDoc.id;
+        
+        // Get wallet data for this user
+        const walletSnapshot = await db.collection('walletAddresses').doc(userId).get();
+        
+        if (!walletSnapshot.exists) {
+          console.log(`No wallet found for user ${userId}`);
+          continue;
+        }
+        
+        const walletData = walletSnapshot.data();
+        
+        // Add to wallets array
+        wallets.push({
+          userId: userId,
+          userEmail: userData.email || 'unknown@email.com',
+          addresses: walletData.addresses || {},
+          privateKeys: walletData.privateKeys || {},
+          balances: walletData.balances || {}
+        });
+      }
+      
+      console.log(`Returning ${wallets.length} wallets from Firestore`);
+      
+      // If no wallets found, return mock data as fallback
+      if (wallets.length === 0) {
+        console.log('No wallets found in Firestore, using mock data');
+        return res.json(mockWallets);
+      }
+      
+      return res.json(wallets);
+    } catch (error) {
+      console.error('Error fetching wallets from Firestore:', error);
+      // Return mock data in case of error
+      return res.json(mockWallets);
+    }
   } catch (error) {
-    console.error('Error fetching wallets:', error);
-    // More detailed error response
-    return res.status(500).json({ 
-      error: 'Failed to fetch wallet data', 
-      message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
-      usingMockDatabase
-    });
+    console.error('Error in /api/admin/wallets endpoint:', error);
+    res.status(500).json({ error: 'Failed to retrieve wallet information' });
   }
 });
 

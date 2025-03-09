@@ -251,8 +251,8 @@ const getNetworkIcon = (network) => {
 
 const AdminWallets = () => {
   const [wallets, setWallets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [refreshingWallet, setRefreshingWallet] = useState(null);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(null);
 
@@ -263,48 +263,39 @@ const AdminWallets = () => {
   const fetchWallets = async () => {
     try {
       setLoading(true);
-      console.log('Fetching wallets from server...');
+      console.log('Fetching wallets data...');
       const response = await axios.get('/api/admin/wallets');
-      console.log('Wallets data received:', response.data);
+      console.log('Wallet data received:', response.data);
       
-      // Handle different response formats
-      if (response.data) {
-        if (Array.isArray(response.data)) {
-          // Process the wallet data
-          const processedWallets = response.data.map(wallet => {
-            // If wallet already has userEmail, use it
-            if (wallet.userEmail) {
-              return wallet;
-            }
-            
-            // Otherwise generate a placeholder email from userId
-            return {
-              ...wallet,
-              userEmail: `user-${wallet.userId.substring(0, 6)}@example.com`
-            };
-          });
+      if (Array.isArray(response.data)) {
+        // Process each wallet to ensure it has user email
+        const processedWallets = response.data.map(wallet => {
+          // If wallet already has userEmail, keep it
+          if (wallet.userEmail) {
+            return wallet;
+          }
           
-          setWallets(processedWallets);
-          toast.success(`Found ${processedWallets.length} wallets`);
-        } else if (response.data.error) {
-          // Handle error in response data
-          toast.error(`Server error: ${response.data.message || response.data.error}`);
-          setWallets([]);
-        } else {
-          // Unexpected response format
-          console.warn('Unexpected response format:', response.data);
-          toast.error('Received unexpected data format from server');
-          setWallets([]);
-        }
+          // Otherwise generate placeholder based on userId
+          return {
+            ...wallet,
+            userEmail: wallet.userId ? `user-${wallet.userId.substring(0, 6)}@example.com` : 'unknown@email.com'
+          };
+        });
+        
+        setWallets(processedWallets);
+        toast.success(`Successfully loaded ${processedWallets.length} wallets`);
+      } else if (response.data.error) {
+        console.error('Error in response:', response.data.error);
+        toast.error(`Error: ${response.data.error}`);
+        setWallets([]);
       } else {
-        // Empty response
-        toast.error('No data received from server');
+        console.warn('Unexpected response format:', response.data);
+        toast.error('Received unexpected data format from server');
         setWallets([]);
       }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
       console.error('Error fetching wallets:', error);
-      toast.error(`Failed to fetch wallets: ${errorMessage}`);
+      toast.error(`Failed to fetch wallets: ${error.message || 'Unknown error'}`);
       setWallets([]);
     } finally {
       setLoading(false);
@@ -313,7 +304,7 @@ const AdminWallets = () => {
 
   const refreshBalance = async (userId) => {
     try {
-      setRefreshing(true);
+      setRefreshingWallet(true);
       console.log(`Refreshing balance for user ${userId}`);
       const response = await axios.post('/api/admin/refresh-balance', { userId });
       console.log('Balance refresh response:', response.data);
@@ -331,7 +322,7 @@ const AdminWallets = () => {
       console.error('Error refreshing balance:', error);
       toast.error(`Failed to refresh balances: ${errorMessage}`);
     } finally {
-      setRefreshing(false);
+      setRefreshingWallet(false);
     }
   };
 
@@ -439,9 +430,9 @@ const AdminWallets = () => {
                 </UserDetails>
                 <RefreshButton 
                   onClick={() => refreshBalance(wallet.userId)}
-                  disabled={refreshing}
+                  disabled={refreshingWallet}
                 >
-                  {refreshing ? (
+                  {refreshingWallet ? (
                     <>Refreshing...</>
                   ) : (
                     <>
