@@ -2617,7 +2617,7 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
 });
 
 // Add batch user info endpoint
-app.post('/api/admin/batch-user-info', checkAuth, checkAdmin, async (req, res) => {
+app.post('/api/admin/batch-user-info', async (req, res) => {
   try {
     const { userIds } = req.body;
     
