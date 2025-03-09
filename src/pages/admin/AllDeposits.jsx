@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { db } from '../../firebase';
 import { collection, getDocs, query, where, orderBy, limit, getDoc, doc } from 'firebase/firestore';
+import axios from 'axios';
 
 const Container = styled.div`
   color: var(--text);
@@ -238,15 +239,66 @@ const LoadingSpinner = styled.div`
   }
 `;
 
+const RefreshButton = styled.button`
+  background: rgba(255, 114, 90, 0.1);
+  color: #ff725a;
+  border: 1px solid rgba(255, 114, 90, 0.2);
+  border-radius: 4px;
+  padding: 8px 15px;
+  margin-right: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  
+  &:hover {
+    background: rgba(255, 114, 90, 0.2);
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  
+  i {
+    margin-right: 6px;
+  }
+`;
+
+const ActionBar = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  
+  .left {
+    display: flex;
+    align-items: center;
+  }
+  
+  .right {
+    display: flex;
+    align-items: center;
+  }
+  
+  .last-updated {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 12px;
+    margin-right: 15px;
+  }
+`;
+
 const AllDeposits = () => {
   const navigate = useNavigate();
   const [deposits, setDeposits] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({
     totalDeposits: 0,
     totalDepositAmount: 0,
     totalUsers: 0,
     pendingDeposits: 0,
+    lastUpdated: null
   });
   const [filters, setFilters] = useState({
     status: 'all',
@@ -259,87 +311,161 @@ const AllDeposits = () => {
   const [userMap, setUserMap] = useState({});
   const [walletMap, setWalletMap] = useState({});
   const [copiedText, setCopiedText] = useState(null);
+  
+  // Store the last timestamp we received deposits for
+  const [lastTimestamp, setLastTimestamp] = useState(null);
+  
+  // Use a ref to keep track of the polling interval
+  const pollingIntervalRef = React.useRef(null);
 
-  useEffect(() => {
-    fetchDeposits();
-  }, [filters, page]);
-
-  const fetchDeposits = async () => {
+  // Fetch deposits with the cached endpoint
+  const fetchDeposits = useCallback(async (forceRefresh = false) => {
     try {
-      setLoading(true);
+      if (!forceRefresh && refreshing) return; // Prevent concurrent refreshes
       
-      // Build the query for deposits
-      let depositsQuery = query(
-        collection(db, 'transactions'),
-        where('type', '==', 'deposit'),
-        orderBy('timestamp', 'desc')
-      );
+      const isInitialFetch = !lastTimestamp || forceRefresh;
       
-      // Get all deposits
-      const depositsSnapshot = await getDocs(depositsQuery);
-      let allDeposits = depositsSnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp?.toDate() || new Date()
-      }));
-      
-      // Apply filters
-      let filteredDeposits = allDeposits;
-      if (filters.status !== 'all') {
-        filteredDeposits = filteredDeposits.filter(deposit => deposit.status === filters.status);
-      }
-      if (filters.network !== 'all') {
-        filteredDeposits = filteredDeposits.filter(deposit => deposit.network === filters.network);
-      }
-      if (filters.currency !== 'all') {
-        filteredDeposits = filteredDeposits.filter(deposit => deposit.currency === filters.currency);
+      if (forceRefresh) {
+        setRefreshing(true);
+      } else if (isInitialFetch) {
+        setLoading(true);
       }
       
-      // Calculate stats
-      const totalDeposits = allDeposits.length;
-      const totalDepositAmount = allDeposits.reduce((sum, deposit) => {
-        return sum + (parseFloat(deposit.amount) || 0);
-      }, 0);
-      const uniqueUsers = new Set(allDeposits.map(deposit => deposit.userId));
-      const pendingDeposits = allDeposits.filter(deposit => deposit.status === 'pending').length;
+      // Build the URL with query params if we have a lastTimestamp
+      const url = '/api/admin/cached-deposits' + 
+        (isInitialFetch ? '' : `?lastTimestamp=${lastTimestamp.toISOString()}`);
       
-      setStats({
-        totalDeposits,
-        totalDepositAmount: totalDepositAmount.toFixed(2),
-        totalUsers: uniqueUsers.size,
-        pendingDeposits,
-      });
+      console.log(`Fetching deposits: ${isInitialFetch ? 'initial' : 'incremental'} fetch`);
       
-      // Calculate pagination
-      setTotalPages(Math.ceil(filteredDeposits.length / itemsPerPage));
+      const response = await axios.get(url);
       
-      // Paginate results
-      const paginatedDeposits = filteredDeposits.slice(
-        (page - 1) * itemsPerPage,
-        page * itemsPerPage
-      );
+      if (response.data && response.data.success) {
+        const { deposits: newDeposits, summary } = response.data;
+        
+        if (isInitialFetch) {
+          // Initial load - replace all deposits
+          setDeposits(newDeposits || []);
+        } else if (newDeposits && newDeposits.length > 0) {
+          // Incremental update - add new deposits to the beginning
+          setDeposits(prevDeposits => {
+            // Combine arrays avoiding duplicates (by id)
+            const depositIds = new Set(prevDeposits.map(d => d.id));
+            const uniqueNewDeposits = newDeposits.filter(d => !depositIds.has(d.id));
+            
+            // Sort combined array by timestamp (newest first)
+            return [...uniqueNewDeposits, ...prevDeposits].sort((a, b) => {
+              return new Date(b.timestamp) - new Date(a.timestamp);
+            });
+          });
+        }
+        
+        // Update stats
+        if (summary) {
+          setStats({
+            totalDeposits: summary.totalDeposits || 0,
+            totalDepositAmount: summary.totalAmount?.toFixed(2) || 0,
+            totalUsers: summary.uniqueUsers || 0,
+            pendingDeposits: 0, // We don't track this in summary yet
+            lastUpdated: summary.lastUpdated ? new Date(summary.lastUpdated) : new Date()
+          });
+        }
+        
+        // Set the lastTimestamp to the current time for future incremental updates
+        setLastTimestamp(new Date());
+      }
       
-      // Fetch user and wallet info for each deposit
-      await fetchUserInfo(paginatedDeposits);
+      // Fetch user and wallet info for the visible deposits
+      const visibleDeposits = getVisibleDeposits();
+      await fetchUserInfo(visibleDeposits);
       
-      setDeposits(paginatedDeposits);
     } catch (error) {
       console.error("Error fetching deposits:", error);
+      // Optionally show an error message to the user
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [lastTimestamp, refreshing]);
   
+  // Get the visible deposits (filtered and paginated)
+  const getVisibleDeposits = useCallback(() => {
+    // Apply filters
+    let filteredDeposits = deposits;
+    
+    if (filters.status !== 'all') {
+      filteredDeposits = filteredDeposits.filter(deposit => deposit.status === filters.status);
+    }
+    
+    if (filters.network !== 'all') {
+      filteredDeposits = filteredDeposits.filter(deposit => deposit.chain === filters.network.toLowerCase());
+    }
+    
+    if (filters.currency !== 'all') {
+      filteredDeposits = filteredDeposits.filter(deposit => deposit.token === filters.currency);
+    }
+    
+    // Calculate pagination
+    const totalItems = filteredDeposits.length;
+    const calculatedTotalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+    
+    if (calculatedTotalPages !== totalPages) {
+      setTotalPages(calculatedTotalPages);
+      // Reset to page 1 if current page is out of bounds
+      if (page > calculatedTotalPages) {
+        setPage(1);
+      }
+    }
+    
+    // Return paginated results
+    return filteredDeposits.slice(
+      (page - 1) * itemsPerPage,
+      page * itemsPerPage
+    );
+  }, [deposits, filters, page, totalPages]);
+  
+  // Set up initial fetch and polling
+  useEffect(() => {
+    // Initial fetch
+    fetchDeposits(true);
+    
+    // Set up polling for new deposits every 30 seconds
+    pollingIntervalRef.current = setInterval(() => {
+      if (lastTimestamp) {
+        fetchDeposits();
+      }
+    }, 30000);
+    
+    // Clean up interval on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+  
+  // Re-fetch when filters or page changes
+  useEffect(() => {
+    // No need to fetch from backend, just recalculate visible deposits
+  }, [filters, page]);
+  
+  // Manual refresh handler
+  const handleRefresh = () => {
+    fetchDeposits(true);
+  };
+
   const fetchUserInfo = async (depositsList) => {
     // Get unique user IDs from the deposits
     const userIds = [...new Set(depositsList.map(deposit => deposit.userId))];
     
     // Create a map of user IDs to user data
-    const newUserMap = {};
-    const newWalletMap = {};
+    const newUserMap = { ...userMap };
+    const newWalletMap = { ...walletMap };
+    
+    // Only fetch for users we don't already have in the map
+    const usersToFetch = userIds.filter(id => !newUserMap[id]);
     
     // Fetch user data and wallet addresses for each user
-    for (const userId of userIds) {
+    for (const userId of usersToFetch) {
       if (!userId) continue;
       
       try {
@@ -352,103 +478,104 @@ const AllDeposits = () => {
           };
         }
         
-        // Fetch wallet addresses
+        // Fetch wallet address
         const walletDoc = await getDoc(doc(db, 'walletAddresses', userId));
         if (walletDoc.exists()) {
-          newWalletMap[userId] = walletDoc.data().wallets || {};
+          const walletData = walletDoc.data();
+          newWalletMap[userId] = {
+            ...walletData
+          };
         }
-      } catch (error) {
-        console.error(`Error fetching data for user ${userId}:`, error);
+      } catch (userError) {
+        console.error(`Error fetching info for user ${userId}:`, userError);
       }
     }
     
-    setUserMap(newUserMap);
-    setWalletMap(newWalletMap);
+    // Update state only if we fetched new data
+    if (usersToFetch.length > 0) {
+      setUserMap(newUserMap);
+      setWalletMap(newWalletMap);
+    }
   };
 
-  const copyToClipboard = (text) => {
+  const formatTimestamp = timestamp => {
+    if (!timestamp) return 'Unknown';
+    
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch (e) {
+      return 'Invalid date';
+    }
+  };
+
+  const handleCopyClick = text => {
     navigator.clipboard.writeText(text)
       .then(() => {
         setCopiedText(text);
         setTimeout(() => setCopiedText(null), 2000);
       })
-      .catch(err => {
-        console.error('Failed to copy to clipboard:', err);
-      });
+      .catch(err => console.error('Failed to copy text: ', err));
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const getExplorerUrl = (txHash, network) => {
-    if (!txHash) return '#';
-    
-    switch (network) {
-      case 'ethereum':
-        return `https://etherscan.io/tx/${txHash}`;
-      case 'bsc':
-        return `https://bscscan.com/tx/${txHash}`;
-      case 'polygon':
-        return `https://polygonscan.com/tx/${txHash}`;
-      case 'solana':
-        return `https://solscan.io/tx/${txHash}`;
-      case 'arbitrum':
-        return `https://arbiscan.io/tx/${txHash}`;
-      case 'base':
-        return `https://basescan.org/tx/${txHash}`;
-      default:
-        return '#';
-    }
-  };
-
-  const handleStatusFilterChange = (e) => {
-    setFilters({ ...filters, status: e.target.value });
-    setPage(1);
-  };
-
-  const handleNetworkFilterChange = (e) => {
-    setFilters({ ...filters, network: e.target.value });
-    setPage(1);
-  };
-
-  const handleCurrencyFilterChange = (e) => {
-    setFilters({ ...filters, currency: e.target.value });
-    setPage(1);
-  };
-
-  const getWalletAddress = (userId, network) => {
-    if (!userId || !network || !walletMap[userId]) return 'N/A';
-    return walletMap[userId][network] || 'N/A';
-  };
-
-  const getNetworkOptions = () => {
-    const networks = ['ethereum', 'bsc', 'polygon', 'solana', 'arbitrum', 'base'];
-    return (
-      <>
-        <option value="all">All Networks</option>
-        {networks.map(network => (
-          <option key={network} value={network}>
-            {network.charAt(0).toUpperCase() + network.slice(1)}
-          </option>
-        ))}
-      </>
-    );
-  };
-
-  const getUserName = (userId) => {
-    if (!userId || !userMap[userId]) return 'Unknown User';
-    return userMap[userId].displayName || userMap[userId].email || 'Unknown User';
-  };
+  const visibleDeposits = getVisibleDeposits();
 
   return (
     <Container>
+      <h1>Deposit Transactions</h1>
+      
+      <ActionBar>
+        <div className="left">
+          <RefreshButton 
+            onClick={handleRefresh} 
+            disabled={refreshing}
+          >
+            <i className="bi bi-arrow-clockwise"></i>
+            {refreshing ? 'Refreshing...' : 'Refresh Deposits'}
+          </RefreshButton>
+          
+          <span className="last-updated">
+            Last updated: {stats.lastUpdated ? formatTimestamp(stats.lastUpdated) : 'Never'}
+          </span>
+        </div>
+        
+        <div className="right">
+          <FilterContainer>
+            <Select 
+              value={filters.status}
+              onChange={e => setFilters({...filters, status: e.target.value})}
+            >
+              <option value="all">All Statuses</option>
+              <option value="completed">Completed</option>
+              <option value="pending">Pending</option>
+              <option value="failed">Failed</option>
+            </Select>
+            
+            <Select 
+              value={filters.network}
+              onChange={e => setFilters({...filters, network: e.target.value})}
+            >
+              <option value="all">All Networks</option>
+              <option value="ethereum">Ethereum</option>
+              <option value="bsc">BSC</option>
+              <option value="polygon">Polygon</option>
+              <option value="solana">Solana</option>
+            </Select>
+            
+            <Select 
+              value={filters.currency}
+              onChange={e => setFilters({...filters, currency: e.target.value})}
+            >
+              <option value="all">All Currencies</option>
+              <option value="ETH">ETH</option>
+              <option value="BNB">BNB</option>
+              <option value="MATIC">MATIC</option>
+              <option value="SOL">SOL</option>
+            </Select>
+          </FilterContainer>
+        </div>
+      </ActionBar>
+      
       <Card>
         <h2>Deposit Statistics</h2>
         <StatsContainer>
@@ -473,27 +600,6 @@ const AllDeposits = () => {
       
       <Card>
         <h2>All User Deposits</h2>
-        <FilterContainer>
-          <Select onChange={handleStatusFilterChange} value={filters.status}>
-            <option value="all">All Statuses</option>
-            <option value="completed">Completed</option>
-            <option value="pending">Pending</option>
-            <option value="failed">Failed</option>
-          </Select>
-          
-          <Select onChange={handleNetworkFilterChange} value={filters.network}>
-            {getNetworkOptions()}
-          </Select>
-          
-          <Select onChange={handleCurrencyFilterChange} value={filters.currency}>
-            <option value="all">All Currencies</option>
-            <option value="BTC">Bitcoin (BTC)</option>
-            <option value="ETH">Ethereum (ETH)</option>
-            <option value="USDT">Tether (USDT)</option>
-            <option value="USDC">USD Coin (USDC)</option>
-          </Select>
-        </FilterContainer>
-        
         {loading ? (
           <LoadingSpinner>
             <div className="spinner"></div>
@@ -520,22 +626,22 @@ const AllDeposits = () => {
                 </tr>
               </thead>
               <tbody>
-                {deposits.map(deposit => (
+                {visibleDeposits.map(deposit => (
                   <tr key={deposit.id}>
                     <td>
                       <UserLink onClick={() => navigate(`/admin/deposits/${deposit.userId}`)}>
-                        {getUserName(deposit.userId)}
+                        {userMap[deposit.userId]?.displayName || userMap[deposit.userId]?.email || 'Unknown User'}
                       </UserLink>
                     </td>
                     <td>
-                      <NetworkBadge network={deposit.network}>
-                        {deposit.network?.charAt(0).toUpperCase() + deposit.network?.slice(1) || 'Unknown'}
+                      <NetworkBadge network={deposit.chain}>
+                        {deposit.chain?.charAt(0).toUpperCase() + deposit.chain?.slice(1) || 'Unknown'}
                       </NetworkBadge>
                     </td>
                     <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {deposit.fromAddress || 'N/A'}
                       {deposit.fromAddress && (
-                        <CopyButton onClick={() => copyToClipboard(deposit.fromAddress)}>
+                        <CopyButton onClick={() => handleCopyClick(deposit.fromAddress)}>
                           {copiedText === deposit.fromAddress ? 
                             <i className="bi bi-check-circle"></i> : 
                             <i className="bi bi-clipboard"></i>}
@@ -543,15 +649,15 @@ const AllDeposits = () => {
                       )}
                     </td>
                     <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {getWalletAddress(deposit.userId, deposit.network)}
-                      <CopyButton onClick={() => copyToClipboard(getWalletAddress(deposit.userId, deposit.network))}>
-                        {copiedText === getWalletAddress(deposit.userId, deposit.network) ? 
+                      {walletMap[deposit.userId]?.wallets?.[deposit.chain] || 'N/A'}
+                      <CopyButton onClick={() => handleCopyClick(walletMap[deposit.userId]?.wallets?.[deposit.chain] || '')}>
+                        {copiedText === walletMap[deposit.userId]?.wallets?.[deposit.chain] ? 
                           <i className="bi bi-check-circle"></i> : 
                           <i className="bi bi-clipboard"></i>}
                       </CopyButton>
                     </td>
                     <td>{deposit.amount}</td>
-                    <td>{deposit.currency || 'Unknown'}</td>
+                    <td>{deposit.token || 'Unknown'}</td>
                     <td>
                       <StatusBadge $status={deposit.status}>
                         <i className={`bi bi-${
@@ -566,13 +672,13 @@ const AllDeposits = () => {
                       {deposit.transactionHash ? (
                         <>
                           <AddressLink 
-                            href={getExplorerUrl(deposit.transactionHash, deposit.network)} 
+                            href={`https://etherscan.io/tx/${deposit.transactionHash}`} 
                             target="_blank"
                             rel="noopener noreferrer"
                           >
                             {`${deposit.transactionHash.substring(0, 8)}...${deposit.transactionHash.substring(deposit.transactionHash.length - 6)}`}
                           </AddressLink>
-                          <CopyButton onClick={() => copyToClipboard(deposit.transactionHash)}>
+                          <CopyButton onClick={() => handleCopyClick(deposit.transactionHash)}>
                             {copiedText === deposit.transactionHash ? 
                               <i className="bi bi-check-circle"></i> : 
                               <i className="bi bi-clipboard"></i>}
@@ -582,7 +688,7 @@ const AllDeposits = () => {
                         'N/A'
                       )}
                     </td>
-                    <td>{formatDate(deposit.timestamp)}</td>
+                    <td>{formatTimestamp(deposit.timestamp)}</td>
                   </tr>
                 ))}
               </tbody>

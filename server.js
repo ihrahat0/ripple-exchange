@@ -2234,3 +2234,138 @@ app.get('/api/admin/refresh-all-balances', async (req, res) => {
     });
   }
 });
+
+// Add endpoint to get cached deposits with incremental updates
+app.get('/api/admin/cached-deposits', async (req, res) => {
+  try {
+    // Get the last timestamp from the request
+    const lastTimestamp = req.query.lastTimestamp ? new Date(req.query.lastTimestamp) : null;
+    console.log(`Fetching deposits${lastTimestamp ? ' since ' + lastTimestamp.toISOString() : ' (initial fetch)'}`);
+    
+    // Check if we need to update the cache
+    const cacheDocRef = db.collection('admin').doc('depositCache');
+    let cacheDoc = await cacheDocRef.get();
+    let cacheData = cacheDoc.exists ? cacheDoc.data() : { lastUpdated: null, count: 0 };
+    
+    // Function to get deposits optionally filtered by timestamp
+    const getDeposits = async (sinceTimestamp = null) => {
+      let depositsQuery;
+      
+      if (sinceTimestamp) {
+        // Only get deposits since the last timestamp
+        depositsQuery = query(
+          collection(db, 'transactions'),
+          where('type', '==', 'deposit'),
+          where('timestamp', '>', sinceTimestamp),
+          orderBy('timestamp', 'desc')
+        );
+      } else {
+        // Get all deposits for initial load
+        depositsQuery = query(
+          collection(db, 'transactions'),
+          where('type', '==', 'deposit'),
+          orderBy('timestamp', 'desc')
+        );
+      }
+      
+      const snapshot = await getDocs(depositsQuery);
+      return snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+        timestamp: doc.data().timestamp?.toDate() || new Date()
+      }));
+    };
+    
+    // Get deposits based on the request
+    let deposits;
+    let shouldUpdateCache = false;
+    
+    if (lastTimestamp) {
+      // Incremental fetch - get only new deposits
+      deposits = await getDeposits(lastTimestamp);
+      console.log(`Found ${deposits.length} new deposits since ${lastTimestamp.toISOString()}`);
+    } else {
+      // Initial fetch - check if we have a cache
+      if (cacheDoc.exists && cacheData.lastUpdated) {
+        // We have a cache, get deposits since the last cache update
+        const recentDeposits = await getDeposits(cacheData.lastUpdated);
+        
+        // Also get the cached deposits
+        const cachedDepositsSnapshot = await db.collection('cachedDeposits').orderBy('timestamp', 'desc').get();
+        const cachedDeposits = cachedDepositsSnapshot.docs.map(doc => doc.data());
+        
+        // Combine and sort deposits
+        deposits = [...recentDeposits, ...cachedDeposits].sort((a, b) => {
+          return (b.timestamp instanceof Date ? b.timestamp : b.timestamp.toDate()) - 
+                 (a.timestamp instanceof Date ? a.timestamp : a.timestamp.toDate());
+        });
+        
+        console.log(`Retrieved ${cachedDeposits.length} cached deposits and ${recentDeposits.length} new deposits`);
+        
+        // If we have new deposits, update the cache
+        if (recentDeposits.length > 0) {
+          shouldUpdateCache = true;
+        }
+      } else {
+        // No cache exists, do a full fetch
+        deposits = await getDeposits();
+        console.log(`Initial fetch: retrieved ${deposits.length} deposits`);
+        shouldUpdateCache = true;
+      }
+    }
+    
+    // Update the cache if needed
+    if (shouldUpdateCache && deposits.length > 0) {
+      const batch = db.batch();
+      const now = admin.firestore.Timestamp.now();
+      
+      // Update the main cache document
+      batch.set(cacheDocRef, {
+        lastUpdated: now,
+        count: deposits.length
+      });
+      
+      // Store the deposits in the cache collection
+      // We'll only store the latest 500 deposits to avoid excessive storage
+      const latestDeposits = deposits.slice(0, 500);
+      
+      // First, clear the existing cache
+      const existingCacheSnapshot = await db.collection('cachedDeposits').limit(1000).get();
+      existingCacheSnapshot.docs.forEach(doc => {
+        batch.delete(doc.ref);
+      });
+      
+      // Then add the new deposits
+      latestDeposits.forEach((deposit, index) => {
+        const depositRef = db.collection('cachedDeposits').doc(deposit.id || `deposit-${index}`);
+        batch.set(depositRef, {
+          ...deposit,
+          cachedAt: now
+        });
+      });
+      
+      // Commit the batch
+      await batch.commit();
+      console.log(`Updated deposit cache with ${latestDeposits.length} deposits`);
+    }
+    
+    // Create a summary for the response
+    const summary = {
+      totalDeposits: deposits.length,
+      totalAmount: deposits.reduce((sum, deposit) => sum + (parseFloat(deposit.amount) || 0), 0),
+      uniqueUsers: new Set(deposits.map(deposit => deposit.userId)).size,
+      lastUpdated: new Date()
+    };
+    
+    // Return the deposits and summary
+    return res.json({
+      success: true,
+      deposits,
+      summary,
+      hasMore: false // Assume we fetched all available deposits
+    });
+  } catch (error) {
+    console.error('Error getting cached deposits:', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+});
