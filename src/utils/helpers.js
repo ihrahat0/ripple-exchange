@@ -9,5 +9,5 @@ export const formatAddress = (address, startChars = 6, endChars = 4) => {
   if (!address) return '';
   if (address.length <= startChars + endChars) return address;
   
-  return `${address.slice(0, startChars)}...${address.slice(-endChars)}`;
+  return `${address.substring(0, startChars)}...${address.substring(address.length - endChars)}`;
 }; 

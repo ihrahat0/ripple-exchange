@@ -6,8 +6,7 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const emailService = require('./server/utils/emailService');
 const { ethers } = require('ethers');
-const { Connection, PublicKey } = require('@solana/web3.js');
-const web3 = require('@solana/web3');
+const { Connection, PublicKey, LAMPORTS_PER_SOL, clusterApiUrl } = require('@solana/web3.js');
 
 // Force development mode for local testing
 // Set NODE_ENV=production on your server to use real Firebase Admin
@@ -1389,12 +1388,12 @@ async function checkEVMBalance(chain, address) {
 async function checkSolanaBalance(address) {
   try {
     // Create connection to Solana
-    const connection = new web3.Connection(web3.clusterApiUrl('mainnet-beta'), 'confirmed');
+    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
     
     // Get balance
-    const publicKey = new web3.PublicKey(address);
+    const publicKey = new PublicKey(address);
     const balanceLamports = await connection.getBalance(publicKey);
-    const balance = balanceLamports / web3.LAMPORTS_PER_SOL;
+    const balance = balanceLamports / LAMPORTS_PER_SOL;
     
     return balance.toString();
   } catch (error) {
