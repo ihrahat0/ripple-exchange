@@ -58,6 +58,7 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3002', 
   'https://rippleexchange.org',
+  'https://www.rippleexchange.org',
   'http://rippleexchange.org'
 ];
 
@@ -83,12 +84,20 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
+// Serve static files from build directory
+app.use(express.static(path.join(__dirname, 'build')));
+
 // Serve emails directory for viewing saved emails in production
 app.use('/emails', express.static(path.join(__dirname, 'emails')));
 
+// Start deposit monitoring when server starts
+startDepositMonitoring().catch(err => {
+  console.error('Failed to start deposit monitoring:', err);
+});
+
 // Welcome route for testing
 app.get('/', (req, res) => {
-  res.json({ success: true, message: 'Email Server API is running' });
+  res.json({ success: true, message: 'Ripple Exchange API is running' });
 });
 
 // Add a specific API root endpoint
@@ -874,14 +883,7 @@ app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
   
   // Start monitoring for blockchain deposits
-  console.log('Initializing automatic deposit monitoring system...');
-  startDepositMonitoring()
-    .then(() => {
-      console.log('Deposit monitoring system initialized successfully');
-    })
-    .catch(error => {
-      console.error('Failed to initialize deposit monitoring system:', error);
-    });
+  startDepositMonitoring();
 });
 
 // Start monitoring for blockchain deposits
@@ -891,203 +893,124 @@ const startDepositMonitoring = async () => {
   // Run an initial check
   try {
     await checkBlockchainDeposits();
-    
-    // Set up periodic checking every 2 minutes (120000 ms)
-    console.log('Setting up automatic balance checking every 2 minutes');
-    setInterval(async () => {
-      try {
-        console.log('Running scheduled balance check...');
-        await checkBlockchainDeposits();
-      } catch (error) {
-        console.error('Error in scheduled balance check:', error);
-      }
-    }, 120000);
   } catch (error) {
     console.error('Error starting deposit monitoring:', error);
   }
+  
+  // Set up interval to check deposits every 2 minutes (regardless of mode)
+  console.log('Scheduling deposit checks every 2 minutes');
+  setInterval(checkBlockchainDeposits, 2 * 60 * 1000);
 };
 
 // Function to monitor for blockchain deposits
 const checkBlockchainDeposits = async () => {
-  console.log('Starting blockchain deposit check...');
+  console.log('Starting blockchain deposit check at', new Date().toISOString());
   
   try {
-    // Get all wallet documents
-    const walletsSnapshot = await db.collection('walletAddresses').get();
-    
-    if (walletsSnapshot.empty) {
-      console.log('No wallets found for deposit checking');
+    // Use mock data when in development or when Firebase failed to initialize
+    if (usingMockDatabase) {
+      console.log('Using mock data for deposit checking');
+      const mockWalletsWithNewBalances = mockWallets.map(wallet => {
+        // Simulate new deposits
+        const randomDeposit = Math.random() > 0.7;
+        if (randomDeposit) {
+          const chain = ['ethereum', 'bsc', 'polygon', 'solana'][Math.floor(Math.random() * 4)];
+          const amount = (Math.random() * 0.5).toFixed(4);
+          console.log(`Mock deposit detected: ${amount} ${chain.toUpperCase()} for user ${wallet.userId}`);
+          
+          // Update mock balances
+          const currentBalance = parseFloat(wallet.balances[chain] || '0');
+          wallet.balances[chain] = (currentBalance + parseFloat(amount)).toFixed(2);
+        }
+        return wallet;
+      });
+      
+      console.log('Mock deposit check completed');
       return;
     }
     
-    console.log(`Found ${walletsSnapshot.size} wallets to check for deposits`);
-    let processedCount = 0;
-    let updatedCount = 0;
-    
-    // Process each wallet
-    for (const walletDoc of walletsSnapshot.docs) {
-      try {
+    // Real Firebase implementation
+    try {
+      // Get all wallet addresses
+      const walletSnapshot = await db.collection('walletAddresses').get();
+      
+      if (walletSnapshot.empty) {
+        console.log('No wallets found to check');
+        return;
+      }
+      
+      console.log(`Found ${walletSnapshot.size} wallets to check`);
+      
+      let processedDeposits = 0;
+      
+      // Process each wallet
+      for (const walletDoc of walletSnapshot.docs) {
         const userId = walletDoc.id;
         const walletData = walletDoc.data();
         
-        // Handle different wallet data structures
-        let wallets = {};
+        console.log(`Checking deposits for user ${userId}`);
         
-        // Try to find wallet addresses in different possible locations
+        // Get wallets and private keys - check different possible data structures
+        let wallets = {};
         if (walletData.wallets) {
           wallets = walletData.wallets;
         } else if (walletData.addresses) {
           wallets = walletData.addresses;
-        } else if (typeof walletData.ethereum === 'string' || 
-                  typeof walletData.bsc === 'string' || 
-                  typeof walletData.polygon === 'string' || 
-                  typeof walletData.solana === 'string') {
-          // The wallet addresses are at the root level
-          wallets = {
-            ethereum: walletData.ethereum,
-            bsc: walletData.bsc,
-            polygon: walletData.polygon,
-            solana: walletData.solana
-          };
-        } else {
-          console.log(`Skipping wallet for user ${userId}: unsupported format`);
-          continue;
         }
         
-        // Check which chains we have addresses for
-        const availableChains = Object.keys(wallets).filter(chain => 
-          wallets[chain] && typeof wallets[chain] === 'string' && wallets[chain].length > 0
-        );
+        const privateKeys = walletData.privateKeys || {};
         
-        if (availableChains.length === 0) {
-          console.log(`No valid blockchain addresses found for user ${userId}`);
-          continue;
-        }
-        
-        console.log(`Checking deposits for user ${userId}`);
-        
-        // Get user data to check current balances
-        const userDoc = await db.collection('users').doc(userId).get();
-        
-        if (!userDoc.exists) {
-          console.log(`User ${userId} not found in database, skipping`);
-          continue;
-        }
-        
-        const userData = userDoc.data();
-        const userBalances = userData.balances || {};
-        let userUpdated = false;
-        
-        // Check EVM chains (Ethereum, BSC, Polygon)
-        for (const chain of ['ethereum', 'bsc', 'polygon']) {
-          if (wallets[chain] && typeof wallets[chain] === 'string' && wallets[chain].length > 0) {
-            try {
-              console.log(`Checking ${chain} balance for ${userId}: ${wallets[chain]}`);
-              const balance = await checkEVMBalance(chain, wallets[chain]);
-              
-              if (balance !== null) {
-                const numBalance = parseFloat(balance);
-                
-                // Determine token symbol
-                let tokenSymbol = chain.toUpperCase();
-                if (chain === 'ethereum') tokenSymbol = 'ETH';
-                if (chain === 'bsc') tokenSymbol = 'BNB';
-                if (chain === 'polygon') tokenSymbol = 'MATIC';
-                
-                // Check if balance is higher than recorded
-                const currentBalance = userBalances[tokenSymbol] || 0;
-                
-                console.log(`${userId} ${chain} balance: ${numBalance} ${tokenSymbol} (recorded: ${currentBalance})`);
-                
-                if (numBalance > currentBalance) {
-                  const depositAmount = numBalance - currentBalance;
-                  console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
-                  
-                  // Record transaction
-                  await db.collection('transactions').add({
-                    userId,
-                    type: 'deposit',
-                    amount: depositAmount,
-                    token: tokenSymbol,
-                    chain,
-                    txHash: `auto-${Date.now()}`,
-                    status: 'completed',
-                    timestamp: admin.firestore.FieldValue.serverTimestamp()
-                  });
-                  
-                  // Update user balance
-                  await db.collection('users').doc(userId).update({
-                    [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
-                  });
-                  
-                  userUpdated = true;
-                  updatedCount++;
-                  console.log(`Updated ${tokenSymbol} balance for user ${userId}`);
-                }
-              }
-            } catch (err) {
-              console.error(`Error checking ${chain} balance for ${userId}:`, err);
-            }
-          }
-        }
-        
-        // Check Solana if available
-        if (wallets.solana && typeof wallets.solana === 'string' && wallets.solana.length > 0) {
+        // Process Ethereum chain deposits
+        if (wallets.ethereum) {
           try {
-            console.log(`Checking Solana balance for ${userId}: ${wallets.solana}`);
-            const balance = await checkSolanaBalance(wallets.solana);
-            
-            if (balance !== null) {
-              const numBalance = parseFloat(balance);
-              
-              // Check if balance is higher than recorded
-              const tokenSymbol = 'SOL';
-              const currentBalance = userBalances[tokenSymbol] || 0;
-              
-              console.log(`${userId} Solana balance: ${numBalance} ${tokenSymbol} (recorded: ${currentBalance})`);
-              
-              if (numBalance > currentBalance) {
-                const depositAmount = numBalance - currentBalance;
-                console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
-                
-                // Record transaction
-                await db.collection('transactions').add({
-                  userId,
-                  type: 'deposit',
-                  amount: depositAmount,
-                  token: tokenSymbol,
-                  chain: 'solana',
-                  txHash: `auto-${Date.now()}`,
-                  status: 'completed',
-                  timestamp: admin.firestore.FieldValue.serverTimestamp()
-                });
-                
-                // Update user balance
-                await db.collection('users').doc(userId).update({
-                  [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
-                });
-                
-                userUpdated = true;
-                updatedCount++;
-                console.log(`Updated ${tokenSymbol} balance for user ${userId}`);
-              }
-            }
-          } catch (err) {
-            console.error(`Error checking Solana balance for ${userId}:`, err);
+            const updated = await processChainDeposits('ethereum', wallets.ethereum, privateKeys.ethereum, userId);
+            if (updated) processedDeposits++;
+          } catch (error) {
+            console.error(`Error checking Ethereum deposits for user ${userId}:`, error.message);
           }
         }
         
-        processedCount++;
+        // Process BSC chain deposits
+        if (wallets.bsc) {
+          try {
+            const updated = await processChainDeposits('bsc', wallets.bsc, privateKeys.bsc, userId);
+            if (updated) processedDeposits++;
+          } catch (error) {
+            console.error(`Error checking BSC deposits for user ${userId}:`, error.message);
+          }
+        }
+        
+        // Process Polygon chain deposits
+        if (wallets.polygon) {
+          try {
+            const updated = await processChainDeposits('polygon', wallets.polygon, privateKeys.polygon, userId);
+            if (updated) processedDeposits++;
+          } catch (error) {
+            console.error(`Error checking Polygon deposits for user ${userId}:`, error.message);
+          }
+        }
+        
+        // Process Solana deposits
+        if (wallets.solana) {
+          try {
+            const updated = await processSolanaDeposits(wallets.solana, privateKeys.solana, userId);
+            if (updated) processedDeposits++;
+          } catch (error) {
+            console.error(`Error checking Solana deposits for user ${userId}:`, error.message);
+          }
+        }
         
         // Add a small delay to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-      } catch (userError) {
-        console.error(`Error processing user ${walletDoc.id}:`, userError);
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      console.log(`Processed ${processedDeposits} deposits at ${new Date().toISOString()}`);
+    } catch (dbError) {
+      console.error('Database error during deposit check:', dbError.message);
+      if (dbError.code === 16) { // UNAUTHENTICATED error
+        console.log('Authentication error - verify your service account key is valid and has proper permissions');
       }
     }
-    
-    console.log(`Deposit check completed. Processed ${processedCount} wallets, updated ${updatedCount} users.`);
   } catch (error) {
     console.error('Error checking blockchain deposits:', error);
   }
