@@ -5,6 +5,7 @@ import { toast } from 'react-hot-toast';
 import { useAuth } from '../../contexts/AuthContext';
 import { formatAddress } from '../../utils/helpers';
 import { SUPPORTED_CHAINS } from '../../services/walletService';
+import AdminNavbar from '../../components/AdminNavbar';
 
 const Container = styled.div`
   padding: 20px;
@@ -51,9 +52,10 @@ const WalletCard = styled.div`
 
 const UserInfo = styled.div`
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 16px;
+  margin-bottom: 15px;
+  padding-bottom: 15px;
   border-bottom: 1px solid var(--line);
 `;
 
@@ -86,141 +88,126 @@ const UserEmail = styled.div`
   color: var(--text-secondary);
 `;
 
-const UserId = styled.div`
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: monospace;
+const UserId = styled.h3`
+  color: var(--text);
+  margin: 0;
 `;
 
-const WalletList = styled.div`
+const WalletGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 20px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const WalletItem = styled.div`
-  background: var(--bg1);
+  border: 1px solid var(--line);
   border-radius: 6px;
-  padding: 16px;
+  padding: 15px;
   position: relative;
 `;
 
-const ChainInfo = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-`;
-
-const ChainName = styled.div`
-  font-weight: 600;
-  color: var(--text);
-`;
-
-const ChainBadge = styled.div`
-  background: ${props => {
-    switch(props.chain) {
-      case 'ethereum': return '#627EEA';
-      case 'bsc': return '#F3BA2F';
-      case 'polygon': return '#8247E5';
-      case 'solana': return '#14F195';
-      default: return 'var(--primary)';
-    }
-  }};
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  color: white;
-`;
-
-const AddressInfo = styled.div`
-  margin-bottom: 12px;
-`;
-
-const AddressLabel = styled.div`
-  font-size: 12px;
+const WalletNetwork = styled.h4`
   color: var(--text-secondary);
-  margin-bottom: 4px;
+  text-transform: capitalize;
+  margin-top: 0;
+  margin-bottom: 10px;
 `;
 
-const Address = styled.div`
-  font-family: monospace;
+const WalletAddress = styled.div`
   background: var(--bg3);
-  padding: 8px;
+  padding: 10px;
   border-radius: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
+  margin-bottom: 10px;
+  font-family: monospace;
   display: flex;
   justify-content: space-between;
   align-items: center;
 `;
 
-const CopyButton = styled.button`
-  background: transparent;
-  border: none;
-  color: var(--primary);
-  cursor: pointer;
-  padding: 2px;
+const WalletPrivateKey = styled.div`
+  background: var(--bg3);
+  padding: 10px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  font-family: monospace;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
 `;
 
-const ActionButton = styled.button`
-  width: 100%;
-  background: ${props => props.primary ? 'var(--primary)' : 'var(--bg3)'};
-  color: ${props => props.primary ? 'white' : 'var(--text)'};
+const CopyButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 14px;
+  
+  &:hover {
+    text-decoration: underline;
+  }
+`;
+
+const RefreshAllButton = styled.button`
+  background: var(--primary);
+  color: white;
   border: none;
   border-radius: 4px;
-  padding: 8px 16px;
+  padding: 10px 15px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
+  font-weight: bold;
+  transition: background 0.2s;
+  margin-left: 10px;
+  
+  &:hover {
+    background: var(--primary-hover);
+  }
   
   &:disabled {
-    opacity: 0.6;
+    background: var(--primary-disabled);
     cursor: not-allowed;
   }
 `;
 
-const BalanceInfo = styled.div`
-  margin: 12px 0;
-`;
-
-const BalanceLabel = styled.div`
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 4px;
-`;
-
-const BalanceValue = styled.div`
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
+const ButtonContainer = styled.div`
+  display: flex;
+  margin-bottom: 20px;
 `;
 
 const LoadingOverlay = styled.div`
-  position: absolute;
+  position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.8);
   display: flex;
-  align-items: center;
   justify-content: center;
-  color: white;
-  font-size: 14px;
+  align-items: center;
+  z-index: 1000;
+  font-size: 24px;
+  font-weight: bold;
+`;
+
+const BalanceDisplay = styled.div`
+  margin-top: 6px;
+  font-weight: bold;
+  color: var(--text);
 `;
 
 const AdminWallets = () => {
   const { currentUser } = useAuth();
   const [wallets, setWallets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshingUser, setRefreshingUser] = useState(null);
-  const [refreshingWallet, setRefreshingWallet] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshingAll, setRefreshingAll] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState(null);
   
   useEffect(() => {
@@ -247,7 +234,7 @@ const AdminWallets = () => {
   
   const refreshUserBalance = async (userId) => {
     try {
-      setRefreshingUser(userId);
+      setRefreshing(true);
       const response = await axios.post('/api/admin/refresh-balance', { userId });
       
       if (response.data.success) {
@@ -277,13 +264,41 @@ const AdminWallets = () => {
       console.error('Error refreshing balance:', error);
       toast.error('Error refreshing balance: ' + error.message);
     } finally {
-      setRefreshingUser(null);
+      setRefreshing(false);
     }
   };
   
   const refreshAllBalances = async () => {
-    for (const wallet of wallets) {
-      await refreshUserBalance(wallet.userId);
+    try {
+      setRefreshingAll(true);
+      
+      // Sequentially refresh each wallet to prevent overwhelming the server
+      for (const wallet of wallets) {
+        try {
+          const response = await axios.post('/api/admin/refresh-balance', { userId: wallet.userId });
+          
+          // Update the wallets state with the new data
+          setWallets(prevWallets => 
+            prevWallets.map(w => 
+              w.userId === wallet.userId ? { ...w, balances: response.data.balances } : w
+            )
+          );
+          
+          toast.success(`Refreshed balances for user ${wallet.userId}`);
+        } catch (err) {
+          console.error(`Error refreshing balance for ${wallet.userId}:`, err);
+        }
+        
+        // Add a small delay between requests
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      
+      toast.success('All balances have been refreshed');
+    } catch (error) {
+      toast.error('Failed to refresh all balances');
+      console.error('Error refreshing all balances:', error);
+    } finally {
+      setRefreshingAll(false);
     }
   };
   
@@ -309,124 +324,106 @@ const AdminWallets = () => {
   };
   
   return (
-    <Container>
-      <Header>
-        <Title>Admin Wallet Manager</Title>
-        <RefreshButton 
-          onClick={fetchWallets} 
-          disabled={loading}
-        >
-          <i className="bi bi-arrow-clockwise"></i>
-          Refresh List
-        </RefreshButton>
-      </Header>
-      
-      {loading ? (
-        <div>Loading wallet data...</div>
-      ) : wallets.length === 0 ? (
-        <div>No wallets found</div>
-      ) : (
-        <>
-          <div style={{ marginBottom: '20px' }}>
-            <RefreshButton 
-              onClick={refreshAllBalances}
-              disabled={!!refreshingUser}
-            >
-              <i className="bi bi-lightning-charge"></i>
-              Refresh All Balances
-            </RefreshButton>
-          </div>
-          
-          {wallets.map(wallet => (
-            <WalletCard key={wallet.userId}>
-              <UserInfo>
-                <Avatar>{getInitials(wallet.userInfo.displayName)}</Avatar>
-                <UserDetails>
-                  <UserName>{wallet.userInfo.displayName}</UserName>
-                  <UserEmail>{wallet.userInfo.email}</UserEmail>
-                  <UserId>{wallet.userId}</UserId>
-                </UserDetails>
-                <ActionButton 
-                  primary
-                  onClick={() => refreshUserBalance(wallet.userId)}
-                  disabled={refreshingUser === wallet.userId}
+    <>
+      <AdminNavbar />
+      <Container>
+        <Header>
+          <Title>Admin Wallet Manager</Title>
+          <RefreshButton 
+            onClick={fetchWallets} 
+            disabled={loading}
+          >
+            <i className="bi bi-arrow-clockwise"></i>
+            Refresh List
+          </RefreshButton>
+        </Header>
+        
+        {loading ? (
+          <div>Loading wallet data...</div>
+        ) : wallets.length === 0 ? (
+          <div>No wallets found</div>
+        ) : (
+          <>
+            <div style={{ marginBottom: '20px' }}>
+              <ButtonContainer>
+                <RefreshAllButton 
+                  onClick={refreshAllBalances}
+                  disabled={refreshingAll || wallets.length === 0}
                 >
-                  {refreshingUser === wallet.userId ? (
-                    <>Refreshing...</>
-                  ) : (
-                    <>
-                      <i className="bi bi-lightning-charge"></i>
-                      Refresh Balances
-                    </>
-                  )}
-                </ActionButton>
-              </UserInfo>
-              
-              <WalletList>
-                {wallet.walletAddresses.map(w => (
-                  <WalletItem key={`${w.chain}-${w.address}`}>
-                    {refreshingWallet === `${wallet.userId}-${w.chain}` && (
-                      <LoadingOverlay>Checking Balance...</LoadingOverlay>
+                  <i className="bi bi-lightning-charge"></i>
+                  Refresh All Balances
+                </RefreshAllButton>
+              </ButtonContainer>
+            </div>
+            
+            {wallets.map(wallet => (
+              <WalletCard key={wallet.userId}>
+                <UserInfo>
+                  <Avatar>{getInitials(wallet.userInfo.displayName)}</Avatar>
+                  <UserDetails>
+                    <UserName>{wallet.userInfo.displayName}</UserName>
+                    <UserEmail>{wallet.userInfo.email}</UserEmail>
+                    <UserId>{wallet.userId}</UserId>
+                  </UserDetails>
+                  <RefreshButton 
+                    onClick={() => refreshUserBalance(wallet.userId)}
+                    disabled={refreshing}
+                  >
+                    {refreshing ? (
+                      <>Refreshing...</>
+                    ) : (
+                      <>
+                        <i className="bi bi-lightning-charge"></i>
+                        Refresh Balances
+                      </>
                     )}
-                    
-                    <ChainInfo>
-                      <ChainName>{getChainName(w.chain)}</ChainName>
-                      <ChainBadge chain={w.chain}>{w.chain}</ChainBadge>
-                    </ChainInfo>
-                    
-                    <AddressInfo>
-                      <AddressLabel>Wallet Address</AddressLabel>
-                      <Address>
-                        <span>{formatAddress(w.address)}</span>
+                  </RefreshButton>
+                </UserInfo>
+                
+                <WalletGrid>
+                  {Object.entries(wallet.addresses).map(([network, address]) => (
+                    <WalletItem key={network}>
+                      <WalletNetwork>{network}</WalletNetwork>
+                      <WalletAddress>
+                        <span>{formatAddress(address)}</span>
                         <CopyButton 
-                          onClick={() => copyToClipboard(w.address)}
+                          onClick={() => copyToClipboard(address)}
                           title="Copy Address"
                         >
-                          {copiedAddress === w.address ? (
+                          {copiedAddress === address ? (
                             <i className="bi bi-check-lg"></i>
                           ) : (
                             <i className="bi bi-copy"></i>
                           )}
                         </CopyButton>
-                      </Address>
-                    </AddressInfo>
-                    
-                    <BalanceInfo>
-                      <BalanceLabel>Recorded Balance</BalanceLabel>
-                      <BalanceValue>
-                        {(() => {
-                          // Determine the token symbol based on chain
-                          let tokenSymbol = w.chain.toUpperCase();
-                          if (w.chain === 'ethereum') tokenSymbol = 'ETH';
-                          if (w.chain === 'bsc') tokenSymbol = 'BNB';
-                          
-                          const balance = wallet.userInfo.balances?.[tokenSymbol] || 0;
-                          return `${balance} ${tokenSymbol}`;
-                        })()}
-                      </BalanceValue>
-                    </BalanceInfo>
-                    
-                    {getExplorerUrl(w.chain, w.address) && (
-                      <a 
-                        href={getExplorerUrl(w.chain, w.address)} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={{ textDecoration: 'none' }}
-                      >
-                        <ActionButton>
-                          <i className="bi bi-box-arrow-up-right"></i>
-                          View on Explorer
-                        </ActionButton>
-                      </a>
-                    )}
-                  </WalletItem>
-                ))}
-              </WalletList>
-            </WalletCard>
-          ))}
-        </>
-      )}
-    </Container>
+                      </WalletAddress>
+                      
+                      {wallet.privateKeys && wallet.privateKeys[network] && (
+                        <WalletPrivateKey>
+                          <span>{formatAddress(wallet.privateKeys[network])}</span>
+                          <CopyButton 
+                            onClick={() => copyToClipboard(wallet.privateKeys[network])}
+                            title="Copy Private Key"
+                          >
+                            <i className="bi bi-key"></i>
+                          </CopyButton>
+                        </WalletPrivateKey>
+                      )}
+                      
+                      {wallet.balances && wallet.balances[network] && (
+                        <BalanceDisplay>
+                          Balance: {wallet.balances[network]} {network.toUpperCase()}
+                        </BalanceDisplay>
+                      )}
+                    </WalletItem>
+                  ))}
+                </WalletGrid>
+              </WalletCard>
+            ))}
+          </>
+        )}
+      </Container>
+    </>
   );
 };
 
