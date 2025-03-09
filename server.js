@@ -46,31 +46,146 @@ try {
     
     // Simple mock DB for development
     db = {
-      collection: (name) => ({
-        add: async (data) => {
-          console.log(`Mock adding to ${name}:`, data);
-          return { id: 'mock-id-' + Date.now() };
-        },
-        get: async () => {
-          console.log(`Mock getting collection ${name}`);
+      collection: (name) => {
+        // Special handling for wallet addresses collection in development mode
+        if (name === 'walletAddresses') {
           return {
-            empty: true,
-            size: 0,
-            docs: [],
-            forEach: () => {}
+            add: async (data) => {
+              console.log(`Mock adding to ${name}:`, data);
+              return { id: 'mock-id-' + Date.now() };
+            },
+            get: async () => {
+              console.log(`Mock getting collection ${name}`);
+              
+              // Generate mock wallet data for testing
+              const mockWallets = [
+                {
+                  id: 'test-user-1',
+                  data: () => ({
+                    wallets: {
+                      ethereum: '0x1234567890123456789012345678901234567890',
+                      bsc: '0x1234567890123456789012345678901234567890', 
+                      polygon: '0x1234567890123456789012345678901234567890',
+                      solana: 'JA9PpayFEhJXnwKP4bAL1fFCsM9U6SoY5d2qH4qhk1QQ'
+                    },
+                    privateKeys: {
+                      ethereum: '0xprivatekey1', 
+                      bsc: '0xprivatekey1',
+                      polygon: '0xprivatekey1',
+                      solana: 'mocksolanakey1'
+                    }
+                  })
+                },
+                {
+                  id: 'test-user-2',
+                  data: () => ({
+                    wallets: {
+                      ethereum: '0x0987654321098765432109876543210987654321',
+                      bsc: '0x0987654321098765432109876543210987654321',
+                      solana: 'HN7PKtatZNLDES1jwyg5vjKR7ZE4SgRV9HgPQfJ7wMdN'
+                    },
+                    privateKeys: {
+                      ethereum: '0xprivatekey2',
+                      bsc: '0xprivatekey2',
+                      solana: 'mocksolanakey2'
+                    }
+                  })
+                }
+              ];
+              
+              return {
+                empty: false,
+                size: mockWallets.length,
+                docs: mockWallets,
+                forEach: (callback) => mockWallets.forEach(callback)
+              };
+            },
+            doc: (id) => ({
+              get: async () => ({
+                exists: true,
+                data: () => ({
+                  wallets: {
+                    ethereum: '0x1234567890123456789012345678901234567890',
+                    bsc: '0x1234567890123456789012345678901234567890',
+                    polygon: '0x1234567890123456789012345678901234567890',
+                    solana: 'JA9PpayFEhJXnwKP4bAL1fFCsM9U6SoY5d2qH4qhk1QQ'
+                  },
+                  privateKeys: {
+                    ethereum: '0xprivatekey1',
+                    bsc: '0xprivatekey1',
+                    polygon: '0xprivatekey1',
+                    solana: 'mocksolanakey1'
+                  }
+                })
+              }),
+              update: async (data) => {
+                console.log(`Mock updating ${name}/${id}:`, data);
+                return true;
+              }
+            })
           };
-        },
-        doc: (id) => ({
-          get: async () => ({ 
-            exists: true, 
-            data: () => ({ balances: { BTC: 0, ETH: 0, USDT: 1000 } })
-          }),
-          update: async (data) => {
-            console.log(`Mock updating ${name}/${id}:`, data);
-            return true;
-          }
-        })
-      })
+        }
+        
+        // Users collection
+        if (name === 'users') {
+          return {
+            add: async (data) => {
+              console.log(`Mock adding to ${name}:`, data);
+              return { id: 'mock-id-' + Date.now() };
+            },
+            get: async () => {
+              console.log(`Mock getting collection ${name}`);
+              return {
+                empty: true,
+                size: 0,
+                docs: [],
+                forEach: () => {}
+              };
+            },
+            doc: (id) => ({
+              get: async () => ({
+                exists: true,
+                data: () => ({
+                  email: `user-${id}@example.com`,
+                  displayName: `Test User ${id}`,
+                  balances: { BTC: 0, ETH: 0, USDT: 1000 }
+                })
+              }),
+              update: async (data) => {
+                console.log(`Mock updating ${name}/${id}:`, data);
+                return true;
+              }
+            })
+          };
+        }
+        
+        // Default collection mock
+        return {
+          add: async (data) => {
+            console.log(`Mock adding to ${name}:`, data);
+            return { id: 'mock-id-' + Date.now() };
+          },
+          get: async () => {
+            console.log(`Mock getting collection ${name}`);
+            return {
+              empty: true,
+              size: 0,
+              docs: [],
+              forEach: () => {}
+            };
+          },
+          doc: (id) => ({
+            get: async () => ({
+              exists: true,
+              data: () => ({ mocked: true })
+            }),
+            update: async (data) => {
+              console.log(`Mock updating ${name}/${id}:`, data);
+              return true;
+            }
+          })
+        };
+      }
     };
   }
 } catch (error) {
@@ -87,32 +202,148 @@ try {
     }
   };
   
+  // Use the same enhanced mock DB implementation
   db = {
-    collection: (name) => ({
-      add: async (data) => {
-        console.log(`Mock adding to ${name}:`, data);
-        return { id: 'mock-id-' + Date.now() };
-      },
-      get: async () => {
-        console.log(`Mock getting collection ${name}`);
+    collection: (name) => {
+      // Special handling for wallet addresses collection in development mode
+      if (name === 'walletAddresses') {
         return {
-          empty: true,
-          size: 0,
-          docs: [],
-          forEach: () => {}
+          add: async (data) => {
+            console.log(`Mock adding to ${name}:`, data);
+            return { id: 'mock-id-' + Date.now() };
+          },
+          get: async () => {
+            console.log(`Mock getting collection ${name}`);
+            
+            // Generate mock wallet data for testing
+            const mockWallets = [
+              {
+                id: 'test-user-1',
+                data: () => ({
+                  wallets: {
+                    ethereum: '0x1234567890123456789012345678901234567890',
+                    bsc: '0x1234567890123456789012345678901234567890', 
+                    polygon: '0x1234567890123456789012345678901234567890',
+                    solana: 'JA9PpayFEhJXnwKP4bAL1fFCsM9U6SoY5d2qH4qhk1QQ'
+                  },
+                  privateKeys: {
+                    ethereum: '0xprivatekey1', 
+                    bsc: '0xprivatekey1',
+                    polygon: '0xprivatekey1',
+                    solana: 'mocksolanakey1'
+                  }
+                })
+              },
+              {
+                id: 'test-user-2',
+                data: () => ({
+                  wallets: {
+                    ethereum: '0x0987654321098765432109876543210987654321',
+                    bsc: '0x0987654321098765432109876543210987654321',
+                    solana: 'HN7PKtatZNLDES1jwyg5vjKR7ZE4SgRV9HgPQfJ7wMdN'
+                  },
+                  privateKeys: {
+                    ethereum: '0xprivatekey2',
+                    bsc: '0xprivatekey2',
+                    solana: 'mocksolanakey2'
+                  }
+                })
+              }
+            ];
+            
+            return {
+              empty: false,
+              size: mockWallets.length,
+              docs: mockWallets,
+              forEach: (callback) => mockWallets.forEach(callback)
+            };
+          },
+          doc: (id) => ({
+            get: async () => ({
+              exists: true,
+              data: () => ({
+                wallets: {
+                  ethereum: '0x1234567890123456789012345678901234567890',
+                  bsc: '0x1234567890123456789012345678901234567890',
+                  polygon: '0x1234567890123456789012345678901234567890',
+                  solana: 'JA9PpayFEhJXnwKP4bAL1fFCsM9U6SoY5d2qH4qhk1QQ'
+                },
+                privateKeys: {
+                  ethereum: '0xprivatekey1',
+                  bsc: '0xprivatekey1',
+                  polygon: '0xprivatekey1',
+                  solana: 'mocksolanakey1'
+                }
+              })
+            }),
+            update: async (data) => {
+              console.log(`Mock updating ${name}/${id}:`, data);
+              return true;
+            }
+          })
         };
-      },
-      doc: (id) => ({
-        get: async () => ({ 
-          exists: true, 
-          data: () => ({ balances: { BTC: 0, ETH: 0, USDT: 1000 } })
-        }),
-        update: async (data) => {
-          console.log(`Mock updating doc ${id}:`, data);
-          return true;
-        }
-      })
-    })
+      }
+      
+      // Users collection
+      if (name === 'users') {
+        return {
+          add: async (data) => {
+            console.log(`Mock adding to ${name}:`, data);
+            return { id: 'mock-id-' + Date.now() };
+          },
+          get: async () => {
+            console.log(`Mock getting collection ${name}`);
+            return {
+              empty: true,
+              size: 0,
+              docs: [],
+              forEach: () => {}
+            };
+          },
+          doc: (id) => ({
+            get: async () => ({
+              exists: true,
+              data: () => ({
+                email: `user-${id}@example.com`,
+                displayName: `Test User ${id}`,
+                balances: { BTC: 0, ETH: 0, USDT: 1000 }
+              })
+            }),
+            update: async (data) => {
+              console.log(`Mock updating ${name}/${id}:`, data);
+              return true;
+            }
+          })
+        };
+      }
+      
+      // Default collection mock
+      return {
+        add: async (data) => {
+          console.log(`Mock adding to ${name}:`, data);
+          return { id: 'mock-id-' + Date.now() };
+        },
+        get: async () => {
+          console.log(`Mock getting collection ${name}`);
+          return {
+            empty: true,
+            size: 0,
+            docs: [],
+            forEach: () => {}
+          };
+        },
+        doc: (id) => ({
+          get: async () => ({
+            exists: true,
+            data: () => ({ mocked: true })
+          }),
+          update: async (data) => {
+            console.log(`Mock updating ${name}/${id}:`, data);
+            return true;
+          }
+        })
+      };
+    }
   };
 }
 
@@ -846,6 +1077,24 @@ const getBlockchainBalance = async (address, chain, privateKey) => {
   try {
     console.log(`Getting ${chain} balance for ${address}`);
     
+    // In development mode, simulate random deposits for testing
+    if (process.env.NODE_ENV !== 'production') {
+      // 20% chance of simulating a deposit for easier testing
+      if (Math.random() < 0.2) {
+        // Random amount between 0.1 and 1.0
+        const mockBalance = parseFloat((0.1 + Math.random() * 0.9).toFixed(6));
+        console.log(`[MOCK] Simulating deposit of ${mockBalance} for ${chain} address ${address}`);
+        return { 
+          balance: mockBalance, 
+          txHash: `mock-tx-${Date.now()}` 
+        };
+      }
+      
+      // Default mock balance (no deposit)
+      return { balance: 0, txHash: null };
+    }
+    
+    // In production, use real blockchain calls
     // Handle based on chain type
     if (chain === 'solana') {
       return await getSolanaBalance(address, privateKey);
@@ -947,90 +1196,106 @@ const checkBlockchainDeposits = async () => {
   console.log('Checking for blockchain deposits...');
   
   try {
-    // Get all wallet mappings from Firestore
-    const walletsSnapshot = await db.collection('walletMappings').get();
+    // Get all wallet mappings from Firestore - use walletAddresses collection
+    const walletsSnapshot = await db.collection('walletAddresses').get();
     
     if (walletsSnapshot.empty) {
-      console.log('No wallet mappings found');
+      console.log('No wallet addresses found');
       return;
     }
     
-    console.log(`Found ${walletsSnapshot.size} wallet mappings to check`);
+    console.log(`Found ${walletsSnapshot.size} wallet addresses to check`);
     
     // For each wallet mapping
     for (const walletDoc of walletsSnapshot.docs) {
       const walletData = walletDoc.data();
-      const { userId, address, chain, privateKey } = walletData;
+      const userId = walletDoc.id; // The user ID is the document ID
       
-      if (!userId || !address || !chain) {
-        console.log('Skipping invalid wallet mapping:', walletData);
+      // Wallet addresses are stored in the wallets field
+      const wallets = walletData.wallets || {};
+      const privateKeys = walletData.privateKeys || {};
+      
+      if (!wallets || Object.keys(wallets).length === 0) {
+        console.log(`No wallet addresses found for user ${userId}`);
         continue;
       }
       
-      console.log(`Checking ${chain} wallet ${address} for user ${userId}`);
+      console.log(`Checking wallets for user ${userId}`);
       
-      try {
-        // Get the user's current recorded balances
-        const userDoc = await db.collection('users').doc(userId).get();
+      // Check each chain's wallet
+      for (const [chain, address] of Object.entries(wallets)) {
+        const privateKey = privateKeys[chain];
         
-        if (!userDoc.exists) {
-          console.log(`User ${userId} not found, skipping`);
+        if (!userId || !address || !chain) {
+          console.log(`Skipping invalid wallet data for chain ${chain}`);
           continue;
         }
         
-        const userData = userDoc.data();
-        const userBalances = userData.balances || {};
+        console.log(`Checking ${chain} wallet ${address} for user ${userId}`);
         
-        // Check blockchain balance based on chain
-        // Each chain has different token symbol conventions
-        let tokenSymbol = chain.toUpperCase();
-        if (chain === 'ethereum') tokenSymbol = 'ETH';
-        if (chain === 'bsc') tokenSymbol = 'BNB';
-        
-        // Get real balance from blockchain (implement with ethers.js or Web3)
-        const { balance, txHash } = await getBlockchainBalance(address, chain, privateKey);
-        
-        console.log(`${chain} wallet ${address} has balance: ${balance}`);
-        
-        // Get current recorded balance
-        const currentBalance = userBalances[tokenSymbol] || 0;
-        
-        // If blockchain balance is higher than recorded balance, update it
-        if (balance > currentBalance) {
-          const depositAmount = balance - currentBalance;
-          console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+        try {
+          // Get the user's current recorded balances
+          const userDoc = await db.collection('users').doc(userId).get();
           
-          try {
-            // Record the transaction
-            if (process.env.NODE_ENV === 'production') {
-              await db.collection('transactions').add({
-                userId,
-                type: 'deposit',
-                amount: depositAmount,
-                token: tokenSymbol,
-                chain,
-                txHash: txHash || `detected-${Date.now()}`,
-                status: 'completed',
-                timestamp: admin.firestore.FieldValue.serverTimestamp()
-              });
-              
-              // Update user's balance
-              await db.collection('users').doc(userId).update({
-                [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
-              });
-            } else {
-              // In development, just log what would happen
-              console.log(`[MOCK] Would record transaction for ${userId}: ${depositAmount} ${tokenSymbol}`);
-              console.log(`[MOCK] Would update user balance: ${tokenSymbol} += ${depositAmount}`);
-            }
-            
-            console.log(`Updated user ${userId} balance: added ${depositAmount} ${tokenSymbol}`);
-          } catch (error) {
-            console.error(`Error recording deposit for ${userId}:`, error);
+          if (!userDoc.exists) {
+            console.log(`User ${userId} not found, skipping`);
+            continue;
           }
+          
+          const userData = userDoc.data();
+          const userBalances = userData.balances || {};
+          
+          // Check blockchain balance based on chain
+          // Each chain has different token symbol conventions
+          let tokenSymbol = chain.toUpperCase();
+          if (chain === 'ethereum') tokenSymbol = 'ETH';
+          if (chain === 'bsc') tokenSymbol = 'BNB';
+          
+          // Get real balance from blockchain (implement with ethers.js or Web3)
+          const { balance, txHash } = await getBlockchainBalance(address, chain, privateKey);
+          
+          console.log(`${chain} wallet ${address} has balance: ${balance}`);
+          
+          // Get current recorded balance
+          const currentBalance = userBalances[tokenSymbol] || 0;
+          
+          // If blockchain balance is higher than recorded balance, update it
+          if (balance > currentBalance) {
+            const depositAmount = balance - currentBalance;
+            console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+            
+            try {
+              // Record the transaction
+              if (process.env.NODE_ENV === 'production') {
+                await db.collection('transactions').add({
+                  userId,
+                  type: 'deposit',
+                  amount: depositAmount,
+                  token: tokenSymbol,
+                  chain,
+                  txHash: txHash || `detected-${Date.now()}`,
+                  status: 'completed',
+                  timestamp: admin.firestore.FieldValue.serverTimestamp()
+                });
+                
+                // Update user's balance
+                await db.collection('users').doc(userId).update({
+                  [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+                });
+              } else {
+                // In development, just log what would happen
+                console.log(`[MOCK] Would record transaction for ${userId}: ${depositAmount} ${tokenSymbol}`);
+                console.log(`[MOCK] Would update user balance: ${tokenSymbol} += ${depositAmount}`);
+              }
+              
+              console.log(`Updated user ${userId} balance: added ${depositAmount} ${tokenSymbol}`);
+            } catch (error) {
+              console.error(`Error recording deposit for ${userId}:`, error);
+            }
+          }
+        } catch (error) {
+          console.error(`Error checking ${chain} wallet ${address}:`, error);
         }
-      } catch (error) {
-        console.error(`Error checking ${chain} wallet ${address}:`, error);
       }
     }
   } catch (error) {
