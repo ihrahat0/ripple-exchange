@@ -105,6 +105,21 @@ function createMockDatabase() {
         bsc: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
         solana: '3sCnQiitG5jXDVbZSTav4ZHyQ8JWPxQiJqMpkbRNnLhJmcFHjZKbKtjhVwdcThM8U2zDHwRETHLRwFkZDuGhssHk'
       }
+    },
+    {
+      id: 'TK4jMRH6Yo2xWXgNm7BCwZ77DhrW9UF5sfGPLkxB',
+      wallets: {
+        ethereum: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+        bsc: '0x90F79bf6EB2c4f870365E785982E1f101E93b906',
+        solana: 'EvN4kgKmCmYzdbd5kL8Q8YgkUW5RoqMi7yJ8DJB8biwK',
+        polygon: '0x90F79bf6EB2c4f870365E785982E1f101E93b906'
+      },
+      privateKeys: {
+        ethereum: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
+        bsc: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
+        polygon: '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6',
+        solana: '4j5YMTYtRWqKAcvBTAS3SZaLPMAYLnKT3sQJi5NwQRiHc9XyYxY78EZ7YxnKYJiNXRgLCcVEfTNNVxpxw257gEHq'
+      }
     }
   ];
 
@@ -1638,14 +1653,54 @@ app.get('/api/admin/all-wallets', async (req, res) => {
     
     // This will only work in production mode with real Firebase
     if (process.env.NODE_ENV !== 'production') {
+      // Mock user data for development
+      const mockUserData = [
+        {
+          id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+          email: 'johndoe@example.com',
+          displayName: 'John Doe',
+          balances: { 
+            ETH: 87.54265683446888749, 
+            BNB: 6.921680478184543286, 
+            MATIC: 2140.95073342702087604,
+            SOL: 0
+          },
+          lastLogin: new Date().toISOString()
+        },
+        {
+          id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
+          email: 'jane.smith@example.com',
+          displayName: 'Jane Smith',
+          balances: { 
+            ETH: 12.354, 
+            BNB: 25.4332
+          },
+          lastLogin: new Date().toISOString()
+        },
+        {
+          id: 'TK4jMRH6Yo2xWXgNm7BCwZ77DhrW9UF5sfGPLkxB',
+          email: 'michael.wilson@example.com',
+          displayName: 'Michael Wilson',
+          balances: { 
+            ETH: 3.87,
+            SOL: 45.21
+          },
+          lastLogin: new Date().toISOString()
+        }
+      ];
+      
       return res.json({
-        success: false,
-        error: 'This endpoint only works in production mode with real Firebase',
-        mockDataAvailable: true,
-        mockWallets: mockWallets.map(wallet => ({
+        success: true,
+        message: 'Using mock data in development mode',
+        mockData: true,
+        wallets: mockWallets.map((wallet, index) => ({
           userId: wallet.id,
+          userEmail: mockUserData[index % mockUserData.length].email,
+          userName: mockUserData[index % mockUserData.length].displayName,
           addresses: wallet.wallets,
-          privateKeys: wallet.privateKeys
+          privateKeys: wallet.privateKeys,
+          balances: mockUserData[index % mockUserData.length].balances,
+          lastLogin: mockUserData[index % mockUserData.length].lastLogin
         }))
       });
     }
@@ -1685,7 +1740,10 @@ app.get('/api/admin/all-wallets', async (req, res) => {
         userName: user.displayName,
         addresses: walletData.wallets || {},
         privateKeys: walletData.privateKeys || {},
-        balances: user.balances || {}
+        balances: user.balances || {},
+        lastLogin: user.lastLogin || null,
+        createdAt: user.createdAt || null,
+        status: user.status || 'active'
       });
     });
     
