@@ -263,41 +263,43 @@ const AdminWallets = () => {
   const fetchWallets = async () => {
     try {
       setLoading(true);
+      console.log('Fetching wallets from server...');
       const response = await axios.get('/api/admin/wallets');
       console.log('Wallets data received:', response.data);
       
-      // If we have actual wallet data
-      if (response.data && Array.isArray(response.data)) {
-        // Try to get user information for each wallet
-        const walletsWithUserInfo = await Promise.all(
-          response.data.map(async (wallet) => {
-            try {
-              // Try to get user info from Firebase
-              const userResponse = await axios.get(`/api/admin/user/${wallet.userId}`);
-              if (userResponse.data && userResponse.data.email) {
-                return {
-                  ...wallet,
-                  userEmail: userResponse.data.email,
-                  userName: userResponse.data.displayName || ''
-                };
-              }
-            } catch (err) {
-              console.log(`Could not fetch user info for ${wallet.userId}`);
+      // Handle different response formats
+      if (response.data) {
+        if (Array.isArray(response.data)) {
+          // Process the wallet data
+          const processedWallets = response.data.map(wallet => {
+            // If wallet already has userEmail, use it
+            if (wallet.userEmail) {
+              return wallet;
             }
             
-            // Fallback: Generate email from userId if we couldn't get real user data
+            // Otherwise generate a placeholder email from userId
             return {
               ...wallet,
               userEmail: `user-${wallet.userId.substring(0, 6)}@example.com`
             };
-          })
-        );
-        
-        setWallets(walletsWithUserInfo);
+          });
+          
+          setWallets(processedWallets);
+          toast.success(`Found ${processedWallets.length} wallets`);
+        } else if (response.data.error) {
+          // Handle error in response data
+          toast.error(`Server error: ${response.data.message || response.data.error}`);
+          setWallets([]);
+        } else {
+          // Unexpected response format
+          console.warn('Unexpected response format:', response.data);
+          toast.error('Received unexpected data format from server');
+          setWallets([]);
+        }
       } else {
-        // Fallback in case we didn't get expected data format
+        // Empty response
+        toast.error('No data received from server');
         setWallets([]);
-        toast.error('Unexpected data format received');
       }
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';

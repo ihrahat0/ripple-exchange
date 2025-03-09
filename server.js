@@ -18,6 +18,7 @@ console.log(`Running in ${process.env.NODE_ENV} mode`);
 // Firebase Admin SDK initialization with environment check
 let admin;
 let db;
+let usingMockDatabase = false;
 
 try {
   // Always try to initialize Firebase Admin first, regardless of environment
@@ -25,20 +26,52 @@ try {
   
   try {
     // Try to use service account if available
-    const serviceAccount = require('./serviceAccountKey.json');
+    let serviceAccount;
+    try {
+      serviceAccount = require('./serviceAccountKey.json');
+      console.log('Found service account key file');
+    } catch (keyError) {
+      console.log('Service account key file not found, trying environment variables');
+      // Check if we have service account as environment variables
+      if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+        try {
+          serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+          console.log('Using service account from environment variables');
+        } catch (parseError) {
+          console.error('Failed to parse service account from environment:', parseError);
+          throw new Error('Invalid service account in environment variables');
+        }
+      } else {
+        throw new Error('No service account available');
+      }
+    }
+    
+    // Initialize with service account
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
     console.log('Firebase Admin SDK initialized with service account');
+    db = admin.firestore();
   } catch (serviceAccountError) {
+    console.warn('Failed to initialize with service account:', serviceAccountError.message);
+    
     // Fallback to application default credentials
-    admin.initializeApp({
-      projectId: "infinitysolution-ddf7d"
-    });
-    console.log('Firebase Admin SDK initialized with application default credentials');
+    try {
+      // Check if app is already initialized
+      if (admin.apps.length) {
+        admin.app().delete();
+      }
+      
+      admin.initializeApp({
+        projectId: "infinitysolution-ddf7d"
+      });
+      console.log('Firebase Admin SDK initialized with application default credentials');
+      db = admin.firestore();
+    } catch (appError) {
+      console.error('Failed to initialize with application defaults:', appError);
+      throw new Error('Cannot initialize Firebase');
+    }
   }
-  
-  db = admin.firestore();
 } catch (error) {
   console.error('Error initializing Firebase Admin:', error);
   console.log('Continuing with mock Firebase implementation');
@@ -55,6 +88,7 @@ try {
   
   // Use mock database as last resort
   db = createMockDatabase();
+  usingMockDatabase = true;
 }
 
 // Function to create a mock database for development/testing
@@ -1315,29 +1349,65 @@ app.get('/api/admin/wallets', async (req, res) => {
   try {
     console.log('Admin requesting wallet list...');
     
+    // If we're using a mock database, return mock data
+    if (usingMockDatabase) {
+      console.log('Using mock wallet data');
+      const mockWallets = [
+        {
+          userId: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+          userEmail: 'john.doe@example.com',
+          addresses: {
+            ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
+            bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+            polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+            solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
+          },
+          privateKeys: {
+            ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
+            bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+            polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+            solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
+          },
+          balances: { 
+            ETH: 87.54265683446888749, 
+            BNB: 6.921680478184543286, 
+            MATIC: 2140.95073342702087604,
+            SOL: 0
+          }
+        }
+      ];
+      return res.json(mockWallets);
+    }
+    
     // Get all wallet addresses from Firestore
+    console.log('Attempting to fetch wallets from Firestore');
     const walletSnapshot = await db.collection('walletAddresses').get();
     
     if (walletSnapshot.empty) {
-      console.log('No wallets found');
+      console.log('No wallets found in database');
       return res.json([]);
     }
     
-    console.log(`Found ${walletSnapshot.size} wallets`);
+    console.log(`Found ${walletSnapshot.size} wallets in Firestore`);
     
     // Process each wallet
     const wallets = [];
     
     walletSnapshot.forEach(doc => {
       const data = doc.data();
-      console.log(`Processing wallet for ${doc.id}`);
+      console.log(`Processing wallet for ${doc.id}, data keys:`, Object.keys(data));
       
-      wallets.push({
-        userId: doc.id,
-        addresses: data.wallets || {},
-        privateKeys: data.privateKeys || {},
-        balances: {} // Will be populated by refresh requests
-      });
+      // Only include if it has wallets data
+      if (data && data.wallets) {
+        wallets.push({
+          userId: doc.id,
+          addresses: data.wallets || {},
+          privateKeys: data.privateKeys || {},
+          balances: {} // Will be populated by refresh requests
+        });
+      } else {
+        console.log(`Skipping wallet for ${doc.id} - no wallet data found`);
+      }
     });
     
     console.log(`Returning ${wallets.length} wallets`);
@@ -1348,7 +1418,8 @@ app.get('/api/admin/wallets', async (req, res) => {
     return res.status(500).json({ 
       error: 'Failed to fetch wallet data', 
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+      usingMockDatabase
     });
   }
 });
