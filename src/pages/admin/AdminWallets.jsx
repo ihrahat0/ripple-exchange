@@ -320,7 +320,11 @@ const AdminWallets = () => {
       // Show loading toast while refreshing
       toast.loading(`Refreshing balances for user ${userId}...`, { id: `refresh-${userId}` });
       
-      const response = await axios.post('/api/admin/refresh-balance', { userId });
+      // Set a longer timeout for balance checking (60 seconds)
+      const response = await axios.post('/api/admin/refresh-balance', { userId }, {
+        timeout: 60000 // 60 seconds timeout
+      });
+      
       console.log('Balance refresh response:', response.data);
       
       if (response.data && response.data.balances) {
@@ -354,7 +358,7 @@ const AdminWallets = () => {
         console.error('Server error details:', serverError);
       } else if (error.request) {
         // Request was made but no response received
-        errorMessage = 'No response from server. Check your connection.';
+        errorMessage = 'Request timeout. This may take longer than expected.';
       } else {
         // Error setting up the request
         errorMessage = error.message || 'Failed to send request';
@@ -372,19 +376,39 @@ const AdminWallets = () => {
       setRefreshingAll(true);
       toast.loading('Refreshing all wallet balances...', { id: 'refresh-all' });
       
-      // Use the new bulk refresh endpoint
-      const response = await axios.post('/api/admin/refresh-all-balances');
+      // Use the new bulk refresh endpoint with increased timeout
+      const response = await axios.post('/api/admin/refresh-all-balances', {}, {
+        timeout: 180000 // 3 minutes timeout
+      });
+      
       console.log('Bulk refresh response:', response.data);
       
       // Fetch wallets again to get updated data
       await fetchWallets();
       
-      toast.success(
-        `All balances refreshed! Processed ${response.data.processed} wallets, updated ${response.data.updated} users.`, 
-        { id: 'refresh-all', duration: 5000 }
-      );
+      if (response.data && response.data.processed) {
+        toast.success(
+          `All balances refreshed! Processed ${response.data.processed} wallets, updated ${response.data.updated} users.`, 
+          { id: 'refresh-all', duration: 5000 }
+        );
+      } else {
+        toast.error('Invalid response from server', { id: 'refresh-all' });
+      }
     } catch (error) {
-      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
+      let errorMessage = 'Unknown error';
+      
+      if (error.response) {
+        // Server responded with an error
+        const serverError = error.response.data;
+        errorMessage = serverError.message || serverError.error || `Server error: ${error.response.status}`;
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'Request timeout. The operation may still be running on the server.';
+      } else {
+        // Error setting up the request
+        errorMessage = error.message || 'Failed to send request';
+      }
+      
       console.error('Error refreshing all balances:', error);
       toast.error(`Failed to refresh all balances: ${errorMessage}`, { id: 'refresh-all' });
     } finally {

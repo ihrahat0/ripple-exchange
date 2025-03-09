@@ -1361,52 +1361,74 @@ async function checkEVMBalance(chain, address) {
     // Clean the address to ensure it's a valid format
     address = address.trim();
     
-    // Determine which RPC URL to use based on the chain
-    let rpcUrl;
+    // Determine which RPC URLs to use based on the chain (with fallbacks)
+    let rpcUrls = [];
+    
     switch (chain) {
       case 'ethereum':
-        rpcUrl = process.env.ETH_RPC_URL || 'https://eth-mainnet.g.alchemy.com/v2/demo';
+        // Multiple fallback endpoints for Ethereum
+        rpcUrls = [
+          process.env.ETH_RPC_URL || 'https://eth-mainnet.public.blastapi.io',
+          'https://ethereum.publicnode.com',
+          'https://rpc.ankr.com/eth',
+          'https://eth.llamarpc.com',
+          'https://rpc.builder0x69.io',
+          'https://eth.rpc.blxrbdn.com',
+          'https://1rpc.io/eth'
+        ];
         break;
       case 'bsc':
-        rpcUrl = process.env.BSC_RPC_URL || 'https://bsc-dataseed1.binance.org';
+        rpcUrls = [
+          process.env.BSC_RPC_URL || 'https://bsc-dataseed1.binance.org',
+          'https://bsc-dataseed2.binance.org',
+          'https://bsc-dataseed3.binance.org',
+          'https://bsc-dataseed4.binance.org',
+          'https://bsc-rpc.gateway.pokt.network'
+        ];
         break;
       case 'polygon':
-        rpcUrl = process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com';
+        rpcUrls = [
+          process.env.POLYGON_RPC_URL || 'https://polygon-rpc.com',
+          'https://polygon-mainnet.public.blastapi.io',
+          'https://polygon.llamarpc.com',
+          'https://rpc-mainnet.matic.quiknode.pro',
+          'https://polygon.blockpi.network/v1/rpc/public'
+        ];
         break;
       default:
         console.error(`Unsupported EVM chain: ${chain}`);
         return null;
     }
     
-    // Create ethers provider with increased timeout
-    const provider = new ethers.providers.JsonRpcProvider({
-      url: rpcUrl,
-      timeout: 30000 // 30 seconds timeout
-    });
+    console.log(`Checking ${chain} balance using available RPC endpoints`);
     
-    // Get balance with retry
-    let attempts = 0;
-    const maxAttempts = 3;
-    
-    while (attempts < maxAttempts) {
+    // Try each RPC URL until one works
+    for (const rpcUrl of rpcUrls) {
       try {
+        console.log(`Trying ${chain} RPC endpoint: ${rpcUrl}`);
+        
+        // Create ethers provider with increased timeout
+        const provider = new ethers.providers.JsonRpcProvider({
+          url: rpcUrl,
+          timeout: 15000 // 15 seconds timeout
+        });
+        
+        // Add a quick check to see if the provider is connected
+        await provider.getNetwork();
+        
+        // Get balance
         const balanceWei = await provider.getBalance(address);
         const balance = ethers.utils.formatEther(balanceWei);
+        console.log(`Successfully retrieved ${chain} balance using ${rpcUrl}`);
         return balance;
       } catch (err) {
-        attempts++;
-        console.warn(`Attempt ${attempts}/${maxAttempts} failed for ${chain} address ${address}: ${err.message}`);
-        
-        if (attempts >= maxAttempts) {
-          console.error(`All ${maxAttempts} attempts failed for ${chain} address ${address}`);
-          throw err;
-        }
-        
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.warn(`Failed to use ${chain} RPC endpoint ${rpcUrl}: ${err.message}`);
+        // Continue to next RPC URL
       }
     }
     
+    // If we get here, all RPC URLs failed
+    console.error(`All ${chain} RPC endpoints failed for address ${address}`);
     return null;
   } catch (error) {
     console.error(`Error checking ${chain} balance for address ${address}:`, error);
@@ -1424,36 +1446,46 @@ async function checkSolanaBalance(address) {
     // Clean the address to ensure it's a valid format
     address = address.trim();
     
-    // Create connection to Solana
-    const connection = new Connection(clusterApiUrl('mainnet-beta'), 'confirmed');
+    // Multiple Solana RPC endpoints to try
+    const rpcEndpoints = [
+      process.env.SOLANA_RPC_URL || clusterApiUrl('mainnet-beta'),
+      'https://api.mainnet-beta.solana.com',
+      'https://solana-mainnet.g.alchemy.com/v2/demo',
+      'https://rpc.ankr.com/solana',
+      'https://mainnet.rpcpool.com'
+    ];
     
-    // Get balance with retry
-    let attempts = 0;
-    const maxAttempts = 3;
+    console.log(`Checking Solana balance using available RPC endpoints`);
     
-    while (attempts < maxAttempts) {
+    // Try each RPC URL until one works
+    for (const rpcEndpoint of rpcEndpoints) {
       try {
+        console.log(`Trying Solana RPC endpoint: ${rpcEndpoint}`);
+        
+        // Create connection to Solana
+        const connection = new Connection(rpcEndpoint, 'confirmed');
+        
+        // Test the connection first
+        await connection.getLatestBlockhash();
+        
+        // Get balance
         const publicKey = new PublicKey(address);
         const balanceLamports = await connection.getBalance(publicKey);
         const balance = balanceLamports / LAMPORTS_PER_SOL;
+        
+        console.log(`Successfully retrieved Solana balance using ${rpcEndpoint}`);
         return balance.toString();
       } catch (err) {
-        attempts++;
-        console.warn(`Attempt ${attempts}/${maxAttempts} failed for Solana address ${address}: ${err.message}`);
-        
-        if (attempts >= maxAttempts) {
-          console.error(`All ${maxAttempts} attempts failed for Solana address ${address}`);
-          throw err;
-        }
-        
-        // Wait before retrying
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        console.warn(`Failed to use Solana RPC endpoint ${rpcEndpoint}: ${err.message}`);
+        // Continue to next RPC URL
       }
     }
     
+    // If we get here, all RPC URLs failed
+    console.error(`All Solana RPC endpoints failed for address ${address}`);
     return null;
   } catch (error) {
-    console.error('Error checking Solana balance:', error);
+    console.error(`Error checking Solana balance for address ${address}:`, error);
     return null;
   }
 }
