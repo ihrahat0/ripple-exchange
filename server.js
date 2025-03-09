@@ -90,11 +90,6 @@ app.use(express.static(path.join(__dirname, 'build')));
 // Serve emails directory for viewing saved emails in production
 app.use('/emails', express.static(path.join(__dirname, 'emails')));
 
-// Start deposit monitoring when server starts
-startDepositMonitoring().catch(err => {
-  console.error('Failed to start deposit monitoring:', err);
-});
-
 // Welcome route for testing
 app.get('/', (req, res) => {
   res.json({ success: true, message: 'Ripple Exchange API is running' });
@@ -882,8 +877,11 @@ const getSolanaBalance = async (address, privateKey) => {
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
   
-  // Start monitoring for blockchain deposits
-  startDepositMonitoring();
+  // Start monitoring for blockchain deposits after server starts
+  console.log('Initializing deposit monitoring...');
+  startDepositMonitoring().catch(err => {
+    console.error('Failed to start deposit monitoring:', err);
+  });
 });
 
 // Start monitoring for blockchain deposits
