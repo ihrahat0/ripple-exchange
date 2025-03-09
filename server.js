@@ -51,6 +51,15 @@ try {
           console.log(`Mock adding to ${name}:`, data);
           return { id: 'mock-id-' + Date.now() };
         },
+        get: async () => {
+          console.log(`Mock getting collection ${name}`);
+          return {
+            empty: true,
+            size: 0,
+            docs: [],
+            forEach: () => {}
+          };
+        },
         doc: (id) => ({
           get: async () => ({ 
             exists: true, 
@@ -83,6 +92,15 @@ try {
       add: async (data) => {
         console.log(`Mock adding to ${name}:`, data);
         return { id: 'mock-id-' + Date.now() };
+      },
+      get: async () => {
+        console.log(`Mock getting collection ${name}`);
+        return {
+          empty: true,
+          size: 0,
+          docs: [],
+          forEach: () => {}
+        };
       },
       doc: (id) => ({
         get: async () => ({ 
@@ -982,24 +1000,34 @@ const checkBlockchainDeposits = async () => {
           const depositAmount = balance - currentBalance;
           console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
           
-          // Record the transaction
-          await db.collection('transactions').add({
-            userId,
-            type: 'deposit',
-            amount: depositAmount,
-            token: tokenSymbol,
-            chain,
-            txHash: txHash || `detected-${Date.now()}`,
-            status: 'completed',
-            timestamp: admin.firestore.FieldValue.serverTimestamp()
-          });
-          
-          // Update user's balance
-          await db.collection('users').doc(userId).update({
-            [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
-          });
-          
-          console.log(`Updated user ${userId} balance: added ${depositAmount} ${tokenSymbol}`);
+          try {
+            // Record the transaction
+            if (process.env.NODE_ENV === 'production') {
+              await db.collection('transactions').add({
+                userId,
+                type: 'deposit',
+                amount: depositAmount,
+                token: tokenSymbol,
+                chain,
+                txHash: txHash || `detected-${Date.now()}`,
+                status: 'completed',
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+              });
+              
+              // Update user's balance
+              await db.collection('users').doc(userId).update({
+                [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+              });
+            } else {
+              // In development, just log what would happen
+              console.log(`[MOCK] Would record transaction for ${userId}: ${depositAmount} ${tokenSymbol}`);
+              console.log(`[MOCK] Would update user balance: ${tokenSymbol} += ${depositAmount}`);
+            }
+            
+            console.log(`Updated user ${userId} balance: added ${depositAmount} ${tokenSymbol}`);
+          } catch (error) {
+            console.error(`Error recording deposit for ${userId}:`, error);
+          }
         }
       } catch (error) {
         console.error(`Error checking ${chain} wallet ${address}:`, error);
