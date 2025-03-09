@@ -218,15 +218,14 @@ const AdminWallets = () => {
     try {
       setLoading(true);
       const response = await axios.get('/api/admin/wallets');
-      
-      if (response.data.success) {
-        setWallets(response.data.wallets || []);
-      } else {
-        toast.error('Failed to fetch wallets');
-      }
+      console.log('Wallets data received:', response.data);
+      setWallets(response.data);
     } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
       console.error('Error fetching wallets:', error);
-      toast.error('Error fetching wallets: ' + error.message);
+      toast.error(`Failed to fetch wallets: ${errorMessage}`);
+      // Set empty array to avoid undefined errors
+      setWallets([]);
     } finally {
       setLoading(false);
     }
@@ -235,34 +234,22 @@ const AdminWallets = () => {
   const refreshUserBalance = async (userId) => {
     try {
       setRefreshing(true);
+      console.log(`Refreshing balance for user ${userId}`);
       const response = await axios.post('/api/admin/refresh-balance', { userId });
+      console.log('Balance refresh response:', response.data);
       
-      if (response.data.success) {
-        toast.success('Balance refreshed successfully');
-        
-        // Check if any balances were updated
-        const updates = response.data.updates || {};
-        const updateKeys = Object.keys(updates);
-        
-        if (updateKeys.length > 0) {
-          updateKeys.forEach(token => {
-            const update = updates[token];
-            toast.success(
-              `Updated ${token} balance: ${update.oldBalance} → ${update.newBalance} (+${update.depositAmount})`
-            );
-          });
-          
-          // Refresh the wallet list to show updated balances
-          fetchWallets();
-        } else {
-          toast.info('No balance changes detected');
-        }
-      } else {
-        toast.error('Failed to refresh balance');
-      }
+      // Update the wallets state with the new data
+      setWallets(prevWallets => 
+        prevWallets.map(wallet => 
+          wallet.userId === userId ? { ...wallet, balances: response.data.balances } : wallet
+        )
+      );
+      
+      toast.success(`Balances refreshed for user ${userId}`);
     } catch (error) {
+      const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
       console.error('Error refreshing balance:', error);
-      toast.error('Error refreshing balance: ' + error.message);
+      toast.error(`Failed to refresh balances: ${errorMessage}`);
     } finally {
       setRefreshing(false);
     }

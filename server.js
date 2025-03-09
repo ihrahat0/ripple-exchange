@@ -33,25 +33,10 @@ try {
     console.log('Firebase Admin SDK initialized in production mode');
   } else {
     // In development, try to use real Firebase but with a different approach
-    console.log('Running in development mode - trying to use real Firebase');
+    console.log('Running in development mode - using mock Firebase');
     
     try {
-      admin = require('firebase-admin');
-      
-      // Try to initialize with environment variables if available
-      admin.initializeApp({
-        projectId: "infinitysolution-ddf7d",
-        // In development, we'll use application default credentials or nothing
-        // This allows it to work with firebase emulators or real db with proper permissions
-      });
-      
-      db = admin.firestore();
-      console.log('Successfully initialized Firebase Admin in development mode');
-    } catch (firebaseError) {
-      console.error('Could not initialize Firebase Admin in development:', firebaseError);
-      console.log('Falling back to mock implementation');
-      
-      // Fall back to mock implementation
+      // Setting up mock Firebase admin
       admin = {
         firestore: {
           FieldValue: {
@@ -61,8 +46,12 @@ try {
         }
       };
       
-      // Simple mock DB for development
+      // Use mock database
       db = createMockDatabase();
+      console.log('Mock database initialized successfully');
+    } catch (mockError) {
+      console.error('Error initializing mock database:', mockError);
+      throw mockError;
     }
   }
 } catch (error) {
@@ -85,8 +74,60 @@ try {
 
 // Function to create a mock database for development/testing
 function createMockDatabase() {
+  console.log('Creating mock database for development/testing');
+  
+  // Mock data for wallets
+  const mockWallets = [
+    {
+      id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+      wallets: {
+        ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
+        bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+        polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
+        solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
+      },
+      privateKeys: {
+        ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
+        bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+        polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
+        solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
+      }
+    },
+    {
+      id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
+      wallets: {
+        ethereum: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+        bsc: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+        solana: '5vdLNGgvjBEbFiJVXQ1XwvjJQkt9YsQvpmYxSv7BnRqz'
+      },
+      privateKeys: {
+        ethereum: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
+        bsc: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
+        solana: '3sCnQiitG5jXDVbZSTav4ZHyQ8JWPxQiJqMpkbRNnLhJmcFHjZKbKtjhVwdcThM8U2zDHwRETHLRwFkZDuGhssHk'
+      }
+    }
+  ];
+
+  // Mock data for users
+  const mockUsers = [
+    {
+      id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
+      email: 'user1@example.com',
+      displayName: 'Test User 1',
+      balances: { BTC: 0, ETH: 0, USDT: 1000 }
+    },
+    {
+      id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
+      email: 'user2@example.com',
+      displayName: 'Test User 2',
+      balances: { BTC: 0, ETH: 0, USDT: 500 }
+    }
+  ];
+
   return {
     collection: (name) => {
+      console.log(`Mock DB: accessing collection '${name}'`);
+      
       // Special handling for wallet addresses collection in development mode
       if (name === 'walletAddresses') {
         return {
@@ -97,99 +138,39 @@ function createMockDatabase() {
           get: async () => {
             console.log(`Mock getting collection ${name}`);
             
-            // Generate mock wallet data for testing - WITH REAL ADDRESSES
-            // These are examples of valid addresses for testing purposes only
-            const mockWallets = [
-              {
-                id: 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk',
-                data: () => ({
-                  wallets: {
-                    ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
-                    bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-                    polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-                    solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
-                  },
-                  privateKeys: {
-                    ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
-                    bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-                    polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-                    solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
-                  }
-                })
-              },
-              {
-                id: 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH',
-                data: () => ({
-                  wallets: {
-                    ethereum: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-                    bsc: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-                    solana: '5vdLNGgvjBEbFiJVXQ1XwvjJQkt9YsQvpmYxSv7BnRqz'
-                  },
-                  privateKeys: {
-                    ethereum: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-                    bsc: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-                    solana: '3sCnQiitG5jXDVbZSTav4ZHyQ8JWPxQiJqMpkbRNnLhJmcFHjZKbKtjhVwdcThM8U2zDHwRETHLRwFkZDuGhssHk'
-                  }
-                })
-              }
-            ];
-            
             return {
               empty: false,
               size: mockWallets.length,
-              docs: mockWallets,
-              forEach: (callback) => mockWallets.forEach(callback)
+              docs: mockWallets.map(wallet => ({
+                id: wallet.id,
+                data: () => ({
+                  wallets: wallet.wallets,
+                  privateKeys: wallet.privateKeys
+                })
+              })),
+              forEach: (callback) => mockWallets.forEach(wallet => {
+                callback({
+                  id: wallet.id,
+                  data: () => ({
+                    wallets: wallet.wallets,
+                    privateKeys: wallet.privateKeys
+                  })
+                });
+              })
             };
           },
           doc: (id) => ({
-            get: async () => ({
-              exists: true,
-              id,
-              data: () => {
-                // Return data for specific user ID if it matches one of our mocks
-                if (id === 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk') {
-                  return {
-                    wallets: {
-                      ethereum: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD',
-                      bsc: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-                      polygon: '0x64FF637fB478863B7468bc97D30a5bF3A428a1fD', 
-                      solana: '8NEv1Zsg8GGP8r3GLsRoAiV4jB7ie5g6hLR5pyNtbJfe'
-                    },
-                    privateKeys: {
-                      ethereum: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d', 
-                      bsc: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-                      polygon: '0x4f3edf983ac636a65a842ce7c78d9aa706d3b113bce9c46f30d7d21715b23b1d',
-                      solana: '5ZZsJ8WRdHCz6oKLNWLF4bRGJ3h9q5pRQQvWfUXZJAxX59GQNaMu3v5PbrftDKvzHuPuPRBdqmA5TCZrbQeGVQtP'
-                    }
-                  };
-                } else if (id === 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH') {
-                  return {
-                    wallets: {
-                      ethereum: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-                      bsc: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
-                      solana: '5vdLNGgvjBEbFiJVXQ1XwvjJQkt9YsQvpmYxSv7BnRqz'
-                    },
-                    privateKeys: {
-                      ethereum: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-                      bsc: '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a',
-                      solana: '3sCnQiitG5jXDVbZSTav4ZHyQ8JWPxQiJqMpkbRNnLhJmcFHjZKbKtjhVwdcThM8U2zDHwRETHLRwFkZDuGhssHk'
-                    }
-                  };
-                } else {
-                  // Default mock wallet data
-                  return {
-                    wallets: {
-                      ethereum: '0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb',
-                      bsc: '0xD1220A0cf47c7B9Be7A2E6BA89F429762e7b9aDb'
-                    },
-                    privateKeys: {
-                      ethereum: '0xa453611d9419d0e56f499079478fd72c37b251a94bfde4d19872c44cf65386e3',
-                      bsc: '0xa453611d9419d0e56f499079478fd72c37b251a94bfde4d19872c44cf65386e3'
-                    }
-                  };
-                }
-              }
-            }),
+            get: async () => {
+              const wallet = mockWallets.find(w => w.id === id);
+              return {
+                exists: !!wallet,
+                id,
+                data: () => wallet ? {
+                  wallets: wallet.wallets,
+                  privateKeys: wallet.privateKeys
+                } : null
+              };
+            },
             update: async (data) => {
               console.log(`Mock updating ${name}/${id}:`, data);
               return true;
@@ -208,6 +189,50 @@ function createMockDatabase() {
           get: async () => {
             console.log(`Mock getting collection ${name}`);
             return {
+              empty: false,
+              size: mockUsers.length,
+              docs: mockUsers.map(user => ({
+                id: user.id,
+                data: () => user
+              })),
+              forEach: (callback) => mockUsers.forEach(user => {
+                callback({
+                  id: user.id,
+                  data: () => user
+                });
+              })
+            };
+          },
+          doc: (id) => ({
+            get: async () => {
+              const user = mockUsers.find(u => u.id === id);
+              return {
+                exists: !!user,
+                id,
+                data: () => user || {
+                  email: `user-${id}@example.com`,
+                  displayName: `User ${id.substring(0, 6)}`,
+                  balances: { BTC: 0, ETH: 0, USDT: 1000 }
+                }
+              };
+            },
+            update: async (data) => {
+              console.log(`Mock updating ${name}/${id}:`, data);
+              return true;
+            }
+          })
+        };
+      }
+      
+      // Transactions collection
+      if (name === 'transactions') {
+        return {
+          add: async (data) => {
+            console.log(`Mock adding transaction:`, data);
+            return { id: 'mock-tx-' + Date.now() };
+          },
+          get: async () => {
+            return {
               empty: true,
               size: 0,
               docs: [],
@@ -216,33 +241,11 @@ function createMockDatabase() {
           },
           doc: (id) => ({
             get: async () => ({
-              exists: true,
-              id,
-              data: () => {
-                // Return data for specific user ID if it matches one of our mocks
-                if (id === 'SGKRB6IrjgOgmgkWnBl5CSnuoBRrROdMwWAWBXHk') {
-                  return {
-                    email: 'user1@example.com',
-                    displayName: 'Test User 1',
-                    balances: { BTC: 0, ETH: 0, USDT: 1000 }
-                  };
-                } else if (id === 'NTUwG2gJ2RTUW3BQIpKwMMXfvs33aKOT3ZnRG0gH') {
-                  return {
-                    email: 'user2@example.com',
-                    displayName: 'Test User 2',
-                    balances: { BTC: 0, ETH: 0, USDT: 500 }
-                  };
-                } else {
-                  return {
-                    email: `user-${id}@example.com`,
-                    displayName: `User ${id.substring(0, 6)}`,
-                    balances: { BTC: 0, ETH: 0, USDT: 1000 }
-                  };
-                }
-              }
+              exists: false,
+              data: () => null
             }),
             update: async (data) => {
-              console.log(`Mock updating ${name}/${id}:`, data);
+              console.log(`Mock updating transaction ${id}:`, data);
               return true;
             }
           })
@@ -266,8 +269,8 @@ function createMockDatabase() {
         },
         doc: (id) => ({
           get: async () => ({
-            exists: true,
-            data: () => ({ mocked: true })
+            exists: false,
+            data: () => null
           }),
           update: async (data) => {
             console.log(`Mock updating ${name}/${id}:`, data);
@@ -1265,18 +1268,25 @@ app.get('/api/admin/check-deposits', async (req, res) => {
 // Add a new admin endpoint to view all wallets and refresh balances
 app.get('/api/admin/wallets', async (req, res) => {
   try {
+    console.log('Admin requesting wallet list...');
+    
     // Get all wallet addresses
     const walletSnapshot = await db.collection('walletAddresses').get();
     
     if (walletSnapshot.empty) {
+      console.log('No wallets found');
       return res.json([]);
     }
     
-    const wallets = [];
+    console.log(`Found ${walletSnapshot.size} wallets`);
     
     // Process each wallet
+    const wallets = [];
+    
     walletSnapshot.forEach(doc => {
       const data = doc.data();
+      console.log(`Processing wallet for ${doc.id}`);
+      
       wallets.push({
         userId: doc.id,
         addresses: data.wallets || {},
@@ -1285,10 +1295,16 @@ app.get('/api/admin/wallets', async (req, res) => {
       });
     });
     
+    console.log(`Returning ${wallets.length} wallets`);
     return res.json(wallets);
   } catch (error) {
     console.error('Error fetching wallets:', error);
-    return res.status(500).json({ error: 'Failed to fetch wallet data' });
+    // More detailed error response
+    return res.status(500).json({ 
+      error: 'Failed to fetch wallet data', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -1296,6 +1312,8 @@ app.get('/api/admin/wallets', async (req, res) => {
 app.post('/api/admin/refresh-balance', async (req, res) => {
   try {
     const { userId } = req.body;
+    
+    console.log(`Admin refreshing balance for user ${userId}`);
     
     if (!userId) {
       return res.status(400).json({ error: 'User ID is required' });
@@ -1305,6 +1323,7 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     const walletDoc = await db.collection('walletAddresses').doc(userId).get();
     
     if (!walletDoc.exists) {
+      console.log(`Wallet not found for user ${userId}`);
       return res.status(404).json({ error: 'Wallet not found' });
     }
     
@@ -1312,8 +1331,11 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     const { wallets, privateKeys } = walletData;
     
     if (!wallets || !privateKeys) {
+      console.log(`Incomplete wallet data for user ${userId}`);
       return res.status(400).json({ error: 'Wallet data is incomplete' });
     }
+    
+    console.log(`Found wallet data for user ${userId}`);
     
     // Object to store balances for each chain
     const balances = {};
@@ -1322,9 +1344,11 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     for (const chain of ['ethereum', 'bsc', 'polygon']) {
       if (wallets[chain] && privateKeys[chain]) {
         try {
+          console.log(`Checking ${chain} balance for address ${wallets[chain]}`);
           const balance = await checkEVMBalance(chain, wallets[chain]);
           if (balance !== null) {
             balances[chain] = balance;
+            console.log(`${chain} balance: ${balance}`);
           }
         } catch (err) {
           console.error(`Error checking ${chain} balance:`, err);
@@ -1335,19 +1359,26 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     // Check Solana if available
     if (wallets.solana && privateKeys.solana) {
       try {
+        console.log(`Checking Solana balance for address ${wallets.solana}`);
         const balance = await checkSolanaBalance(wallets.solana);
         if (balance !== null) {
           balances.solana = balance;
+          console.log(`Solana balance: ${balance}`);
         }
       } catch (err) {
         console.error('Error checking Solana balance:', err);
       }
     }
     
+    console.log(`Returning balances for user ${userId}`);
     return res.json({ userId, balances });
   } catch (error) {
     console.error('Error refreshing balances:', error);
-    return res.status(500).json({ error: 'Failed to refresh balances' });
+    return res.status(500).json({ 
+      error: 'Failed to refresh balances', 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
