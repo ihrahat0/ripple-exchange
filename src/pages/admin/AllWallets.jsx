@@ -10,6 +10,8 @@ const Container = styled.div`
   max-width: 1200px;
   margin: 0 auto;
   color: #e6edf3;
+  background-color: #0d1117;
+  min-height: 100vh;
 `;
 
 const Title = styled.h1`
@@ -50,8 +52,9 @@ const UserName = styled.h3`
 
 const UserEmail = styled.div`
   color: #c9d1d9;
-  font-size: 1rem;
+  font-size: 1.25rem;
   margin-bottom: 6px;
+  font-weight: 500;
 `;
 
 const UserBalance = styled.div`
@@ -64,6 +67,7 @@ const UserId = styled.div`
   color: #8b949e;
   font-size: 12px;
   font-family: monospace;
+  opacity: 0.6;
 `;
 
 const WalletGrid = styled.div`
@@ -175,17 +179,6 @@ const RefreshButton = styled.button`
   }
 `;
 
-const RefreshAllButton = styled(RefreshButton)`
-  background: rgba(76, 175, 80, 0.2);
-  color: #4cd964;
-  border-color: #2ea043;
-  margin-left: 10px;
-  
-  &:hover {
-    background: rgba(76, 175, 80, 0.4);
-  }
-`;
-
 const ButtonContainer = styled.div`
   display: flex;
   margin-bottom: 20px;
@@ -266,18 +259,22 @@ const UserCount = styled.div`
   display: inline-block;
 `;
 
-const NetworkIcon = (network) => {
+const ContentWrapper = styled.div`
+  position: relative;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  background-color: #0d1117;
+`;
+
+const getNetworkIcon = (network) => {
   switch (network) {
-    case 'ethereum':
-      return <i className="bi bi-currency-ethereum"></i>;
-    case 'bsc':
-      return <i className="bi bi-coin"></i>;
-    case 'polygon':
-      return <i className="bi bi-hexagon"></i>;
-    case 'solana':
-      return <i className="bi bi-sun"></i>;
-    default:
-      return <i className="bi bi-wallet2"></i>;
+    case 'ethereum': return <i className="bi bi-currency-ethereum"></i>;
+    case 'bsc': return <i className="bi bi-coin"></i>;
+    case 'polygon': return <i className="bi bi-hexagon"></i>;
+    case 'solana': return <i className="bi bi-sun"></i>;
+    default: return <i className="bi bi-wallet2"></i>;
   }
 };
 
@@ -299,8 +296,8 @@ const AllWallets = () => {
       if (response.data.success) {
         setWallets(response.data.wallets || []);
         toast.success(`Found ${response.data.wallets.length} wallets`);
-      } else if (response.data.mockDataAvailable) {
-        setWallets(response.data.mockWallets || []);
+      } else if (response.data.mockData) {
+        setWallets(response.data.wallets || []);
         toast.info('Using mock wallet data (development mode)');
       } else {
         toast.error(response.data.error || 'Failed to fetch wallets');
@@ -329,21 +326,27 @@ const AllWallets = () => {
       });
   };
 
-  const getNetworkIcon = (network) => {
-    switch (network) {
-      case 'ethereum': return <i className="bi bi-currency-ethereum"></i>;
-      case 'bsc': return <i className="bi bi-coin"></i>;
-      case 'polygon': return <i className="bi bi-hexagon"></i>;
-      case 'solana': return <i className="bi bi-sun"></i>;
-      default: return <i className="bi bi-wallet2"></i>;
-    }
-  };
-
   // Generate random balance data for mock wallets in development mode
   const formatBalanceData = (network, wallet) => {
     // If we have real balance data, use it
     if (wallet.balances && wallet.balances[network]) {
       return `${wallet.balances[network]} ${network.toUpperCase()}`;
+    }
+    
+    // If we have balance data for a token that matches this network
+    if (wallet.balances) {
+      if (network === 'ethereum' && wallet.balances.ETH) {
+        return `${wallet.balances.ETH} ETH`;
+      }
+      if (network === 'bsc' && wallet.balances.BNB) {
+        return `${wallet.balances.BNB} BNB`;
+      }
+      if (network === 'polygon' && wallet.balances.MATIC) {
+        return `${wallet.balances.MATIC} MATIC`;
+      }
+      if (network === 'solana' && wallet.balances.SOL) {
+        return `${wallet.balances.SOL} SOL`;
+      }
     }
     
     // Otherwise generate some mock balance data
@@ -358,11 +361,16 @@ const AllWallets = () => {
   };
 
   if (loading) {
-    return <LoadingOverlay>Loading all wallets...</LoadingOverlay>;
+    return (
+      <ContentWrapper>
+        <AdminNavbar />
+        <LoadingOverlay>Loading all wallets...</LoadingOverlay>
+      </ContentWrapper>
+    );
   }
 
   return (
-    <>
+    <ContentWrapper>
       <AdminNavbar />
       <Container>
         <Title>All User Wallets</Title>
@@ -392,10 +400,10 @@ const AllWallets = () => {
             <WalletCard key={wallet.userId}>
               <UserInfo>
                 <UserDetails>
-                  <UserName>{wallet.userName || wallet.userEmail || 'Unknown User'}</UserName>
                   <UserEmail>
                     <i className="bi bi-envelope"></i> {wallet.userEmail || 'No Email'}
                   </UserEmail>
+                  <UserName>{wallet.userName || 'Unknown User'}</UserName>
                   {wallet.balances && Object.keys(wallet.balances).length > 0 && (
                     <UserBalance>
                       <i className="bi bi-coin"></i> Total Balance: 
@@ -404,7 +412,7 @@ const AllWallets = () => {
                       ).join(', ')}
                     </UserBalance>
                   )}
-                  <UserId><i className="bi bi-person-badge"></i> ID: {wallet.userId}</UserId>
+                  <UserId><i className="bi bi-person-badge"></i> {wallet.userId}</UserId>
                 </UserDetails>
               </UserInfo>
               
@@ -441,7 +449,7 @@ const AllWallets = () => {
         )}
         <Toaster position="bottom-right" />
       </Container>
-    </>
+    </ContentWrapper>
   );
 };
 
