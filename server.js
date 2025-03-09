@@ -323,7 +323,7 @@ const port = process.env.PORT || 3001;
 // CORS options - support multiple origins from env variable
 const allowedOrigins = process.env.FRONTEND_URL 
   ? process.env.FRONTEND_URL.split(',') 
-  : ['http://localhost:3000', 'http://localhost:3001', 'https://rippleexchange.org', 'http://rippleexchange.org'];
+  : ['http://localhost:3000', 'http://localhost:3002', 'https://rippleexchange.org', 'http://rippleexchange.org'];
 
 console.log('CORS allowed origins:', allowedOrigins);
 

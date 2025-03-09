@@ -5,6 +5,10 @@ import App from "./App";
 import './App.scss'
 import ScrollToTop from "./ScrollToTop";
 import 'bootstrap-icons/font/bootstrap-icons.css';
+import axios from 'axios';
+import reportWebVitals from './reportWebVitals';
+import './assets/css/style.css';
+import './assets/css/plugins.css';
 
 // Polyfills
 import { Buffer } from 'buffer';
@@ -154,6 +158,9 @@ window.safelyCallDestroyBackup = function(thing) {
     console.warn('Error in safelyCallDestroyBackup:', err);
   }
 };
+
+// Configure axios to use the correct backend URL
+axios.defaults.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
 // Start the React application with error protection
 const renderApp = () => {
