@@ -1630,3 +1630,77 @@ app.get('/api/admin/deposit-stats', async (req, res) => {
     return res.status(500).json({ success: false, error: error.message });
   }
 });
+
+// Admin endpoint to get all real users with wallets
+app.get('/api/admin/all-wallets', async (req, res) => {
+  try {
+    console.log('Admin requesting all user wallets...');
+    
+    // This will only work in production mode with real Firebase
+    if (process.env.NODE_ENV !== 'production') {
+      return res.json({
+        success: false,
+        error: 'This endpoint only works in production mode with real Firebase',
+        mockDataAvailable: true,
+        mockWallets: mockWallets.map(wallet => ({
+          userId: wallet.id,
+          addresses: wallet.wallets,
+          privateKeys: wallet.privateKeys
+        }))
+      });
+    }
+    
+    // Get all wallet addresses from Firebase
+    const walletSnapshot = await db.collection('walletAddresses').get();
+    
+    if (walletSnapshot.empty) {
+      return res.json({
+        success: true,
+        message: 'No wallets found in database',
+        wallets: []
+      });
+    }
+    
+    // Get all users data to match with wallets
+    const userSnapshot = await db.collection('users').get();
+    const users = {};
+    
+    userSnapshot.forEach(doc => {
+      users[doc.id] = doc.data();
+    });
+    
+    console.log(`Found ${walletSnapshot.size} wallets and ${Object.keys(users).length} users`);
+    
+    // Process each wallet and join with user data
+    const wallets = [];
+    
+    walletSnapshot.forEach(doc => {
+      const userId = doc.id;
+      const walletData = doc.data();
+      const user = users[userId] || { email: 'Unknown', displayName: 'Unknown User' };
+      
+      wallets.push({
+        userId,
+        userEmail: user.email,
+        userName: user.displayName,
+        addresses: walletData.wallets || {},
+        privateKeys: walletData.privateKeys || {},
+        balances: user.balances || {}
+      });
+    });
+    
+    return res.json({
+      success: true,
+      message: `Found ${wallets.length} wallets`,
+      wallets
+    });
+  } catch (error) {
+    console.error('Error fetching all wallets:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Failed to fetch wallet data',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});

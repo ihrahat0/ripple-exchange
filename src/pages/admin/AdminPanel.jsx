@@ -12,6 +12,7 @@ import WithdrawalManagement from './WithdrawalManagement';
 import UserDeposits from './UserDeposits';
 import AllDeposits from './AllDeposits';
 import AdminWallets from './AdminWallets';
+import AllWallets from './AllWallets';
 import { getDoc, doc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../firebase';
 
@@ -324,6 +325,7 @@ const AdminPanel = () => {
     if (path.includes('deposits')) return 'User Deposits';
     if (path.includes('settings')) return 'Settings';
     if (path.includes('wallets')) return 'Wallets';
+    if (path.includes('all-wallets')) return 'All User Wallets';
     return 'Admin Panel';
   };
   
@@ -410,6 +412,11 @@ const AdminPanel = () => {
               <i className="bi bi-wallet2"></i> Wallets
             </NavLink>
           </NavItem>
+          <NavItem>
+            <NavLink to="/admin/all-wallets" active={location.pathname.includes('/admin/all-wallets') ? 'true' : undefined}>
+              <i className="bi bi-wallet2"></i> All User Wallets
+            </NavLink>
+          </NavItem>
         </NavMenu>
         
         <UserInfo>
@@ -472,6 +479,7 @@ const AdminPanel = () => {
           <Route path="/withdrawal-management/*" element={<WithdrawalManagement />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/wallets" element={<AdminWallets />} />
+          <Route path="/all-wallets" element={<AllWallets />} />
         </Routes>
       </Content>
     </AdminContainer>
