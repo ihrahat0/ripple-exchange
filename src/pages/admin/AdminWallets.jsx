@@ -339,33 +339,23 @@ const AdminWallets = () => {
   const refreshAllBalances = async () => {
     try {
       setRefreshingAll(true);
+      toast.loading('Refreshing all wallet balances...', { id: 'refresh-all' });
       
-      // Sequentially refresh each wallet to prevent overwhelming the server
-      for (const wallet of wallets) {
-        try {
-          const response = await axios.post('/api/admin/refresh-balance', { userId: wallet.userId });
-          
-          // Update the wallets state with the new data
-          setWallets(prevWallets => 
-            prevWallets.map(w => 
-              w.userId === wallet.userId ? { ...w, balances: response.data.balances } : w
-            )
-          );
-          
-          toast.success(`Refreshed balances for user ${wallet.userId}`);
-        } catch (err) {
-          console.error(`Error refreshing balance for ${wallet.userId}:`, err);
-        }
-        
-        // Add a small delay between requests
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
+      // Use the new bulk refresh endpoint
+      const response = await axios.post('/api/admin/refresh-all-balances');
+      console.log('Bulk refresh response:', response.data);
       
-      toast.success('All balances have been refreshed');
+      // Fetch wallets again to get updated data
+      await fetchWallets();
+      
+      toast.success(
+        `All balances refreshed! Processed ${response.data.processed} wallets, updated ${response.data.updated} users.`, 
+        { id: 'refresh-all', duration: 5000 }
+      );
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
       console.error('Error refreshing all balances:', error);
-      toast.error(`Failed to refresh all balances: ${errorMessage}`);
+      toast.error(`Failed to refresh all balances: ${errorMessage}`, { id: 'refresh-all' });
     } finally {
       setRefreshingAll(false);
     }
