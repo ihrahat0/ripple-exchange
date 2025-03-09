@@ -6,15 +6,95 @@ const bodyParser = require('body-parser');
 const path = require('path');
 const emailService = require('./server/utils/emailService');
 
-// Firebase Admin SDK initialization
-const admin = require('firebase-admin');
-const serviceAccount = require('./serviceAccountKey.json');
+// Force development mode for local testing
+// Set NODE_ENV=production on your server to use real Firebase Admin
+if (!process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'development';
+}
+console.log(`Running in ${process.env.NODE_ENV} mode`);
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount)
-});
+// Firebase Admin SDK initialization with environment check
+let admin;
+let db;
 
-const db = admin.firestore();
+try {
+  if (process.env.NODE_ENV === 'production') {
+    // In production, use the service account credentials
+    admin = require('firebase-admin');
+    
+    // If using a JSON file for credentials
+    const serviceAccount = require('./serviceAccountKey.json');
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount)
+    });
+    db = admin.firestore();
+    console.log('Firebase Admin SDK initialized in production mode');
+  } else {
+    // In development, require firebase-admin but don't initialize with the invalid key
+    console.log('Running in development mode - using mock Firebase');
+    admin = require('firebase-admin');
+    
+    // Mock the firestore field values without initializing
+    admin.firestore = {
+      FieldValue: {
+        increment: (val) => val,
+        serverTimestamp: () => new Date()
+      }
+    };
+    
+    // Simple mock DB for development
+    db = {
+      collection: (name) => ({
+        add: async (data) => {
+          console.log(`Mock adding to ${name}:`, data);
+          return { id: 'mock-id-' + Date.now() };
+        },
+        doc: (id) => ({
+          get: async () => ({ 
+            exists: true, 
+            data: () => ({ balances: { BTC: 0, ETH: 0, USDT: 1000 } })
+          }),
+          update: async (data) => {
+            console.log(`Mock updating ${name}/${id}:`, data);
+            return true;
+          }
+        })
+      })
+    };
+  }
+} catch (error) {
+  console.error('Error initializing Firebase Admin:', error);
+  console.log('Continuing with mock Firebase implementation');
+  
+  // Set up mock implementations if initialization fails
+  admin = {
+    firestore: {
+      FieldValue: {
+        increment: (val) => val,
+        serverTimestamp: () => new Date()
+      }
+    }
+  };
+  
+  db = {
+    collection: (name) => ({
+      add: async (data) => {
+        console.log(`Mock adding to ${name}:`, data);
+        return { id: 'mock-id-' + Date.now() };
+      },
+      doc: (id) => ({
+        get: async () => ({ 
+          exists: true, 
+          data: () => ({ balances: { BTC: 0, ETH: 0, USDT: 1000 } })
+        }),
+        update: async (data) => {
+          console.log(`Mock updating doc ${id}:`, data);
+          return true;
+        }
+      })
+    })
+  };
+}
 
 // Initialize the app
 const app = express();
@@ -630,6 +710,16 @@ app.post('/api/verify-2fa-code', async (req, res) => {
   }
 });
 
+// Define master wallet addresses for deposit processing
+const MASTER_WALLETS = {
+  ethereum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  bsc: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  polygon: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  arbitrum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  base: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
+  solana: 'DxXnPZvjgc8QdHYzx4BGwvKCs9GbxdkwVZSUvzKVPktr'
+};
+
 // Add mock deposit processing for demonstration purposes
 app.post('/api/mock-deposit', async (req, res) => {
   try {
@@ -652,7 +742,9 @@ app.post('/api/mock-deposit', async (req, res) => {
       chain,
       txHash,
       status: 'pending',
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: process.env.NODE_ENV === 'production' ? 
+        admin.firestore.FieldValue.serverTimestamp() : 
+        new Date(),
       masterWallet: MASTER_WALLETS[chain] || 'unknown'
     });
     
@@ -665,7 +757,9 @@ app.post('/api/mock-deposit', async (req, res) => {
       chain,
       txHash,
       status: 'completed',
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
+      timestamp: process.env.NODE_ENV === 'production' ? 
+        admin.firestore.FieldValue.serverTimestamp() : 
+        new Date()
     });
     
     // Update user's balance
@@ -674,17 +768,31 @@ app.post('/api/mock-deposit', async (req, res) => {
     
     if (userDoc.exists) {
       // Increment the user's balance
-      await userRef.update({
-        [`balances.${token}`]: admin.firestore.FieldValue.increment(parseFloat(amount))
-      });
+      const incrementAmount = parseFloat(amount);
+      
+      if (process.env.NODE_ENV === 'production') {
+        await userRef.update({
+          [`balances.${token}`]: admin.firestore.FieldValue.increment(incrementAmount)
+        });
+      } else {
+        // In development, we mock the increment
+        console.log(`Mock: Increasing user ${userId}'s ${token} balance by ${incrementAmount}`);
+        await userRef.update({
+          [`balances.${token}`]: incrementAmount
+        });
+      }
       
       console.log(`Updated balance for user ${userId}: added ${amount} ${token}`);
       
       // Update the pending deposit status
-      await depositRef.update({
-        status: 'completed',
-        processedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      if (process.env.NODE_ENV === 'production') {
+        await depositRef.update({
+          status: 'completed',
+          processedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+      } else {
+        console.log('Mock: Updated deposit status to completed');
+      }
       
       return res.json({ 
         success: true, 
@@ -702,15 +810,6 @@ app.post('/api/mock-deposit', async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
-const MASTER_WALLETS = {
-  ethereum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
-  bsc: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
-  polygon: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
-  arbitrum: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
-  base: '0x4F54cF379B087C8c800B73c958F5dE6225C46F5d',
-  solana: 'DxXnPZvjgc8QdHYzx4BGwvKCs9GbxdkwVZSUvzKVPktr'
-};
 
 // Start the server
 app.listen(port, () => {
