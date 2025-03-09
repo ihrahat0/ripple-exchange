@@ -501,6 +501,10 @@ const AllDeposits = () => {
     // Get unique user IDs from the deposits
     const userIds = [...new Set(depositsList.map(deposit => deposit.userId))];
     
+    if (userIds.length === 0) return;
+    
+    console.log(`Fetching user info for ${userIds.length} users`);
+    
     // Create a map of user IDs to user data
     const newUserMap = { ...userMap };
     const newWalletMap = { ...walletMap };
@@ -520,15 +524,33 @@ const AllDeposits = () => {
             id: userId,
             ...userDoc.data()
           };
+          console.log(`Fetched user data for ${userId}: ${newUserMap[userId].email || 'No email'}`);
+        } else {
+          console.log(`User document does not exist for ID: ${userId}`);
         }
         
         // Fetch wallet address
         const walletDoc = await getDoc(doc(db, 'walletAddresses', userId));
         if (walletDoc.exists()) {
           const walletData = walletDoc.data();
+          
+          // Handle different wallet data structures
+          let wallets = {};
+          
+          if (walletData.wallets) {
+            wallets = walletData.wallets;
+          } else if (walletData.addresses) {
+            wallets = walletData.addresses;
+          }
+          
           newWalletMap[userId] = {
-            ...walletData
+            ...walletData,
+            wallets: wallets
           };
+          
+          console.log(`Fetched wallet data for ${userId}, chains: ${Object.keys(wallets).join(', ')}`);
+        } else {
+          console.log(`Wallet document does not exist for ID: ${userId}`);
         }
       } catch (userError) {
         console.error(`Error fetching info for user ${userId}:`, userError);
@@ -540,6 +562,42 @@ const AllDeposits = () => {
       setUserMap(newUserMap);
       setWalletMap(newWalletMap);
     }
+  };
+
+  // Function to get blockchain explorer URL based on chain and hash
+  const getExplorerUrl = (chain, hash) => {
+    if (!hash) return '#';
+    
+    // If this is a test hash, extract the chain prefix if present
+    if (hash.startsWith('eth-') || hash.startsWith('bsc-') || 
+        hash.startsWith('poly-') || hash.startsWith('sol-')) {
+      hash = hash.substring(4); // Remove prefix
+    }
+    
+    switch (chain) {
+      case 'ethereum':
+        return `https://etherscan.io/tx/${hash}`;
+      case 'bsc':
+        return `https://bscscan.com/tx/${hash}`;
+      case 'polygon':
+        return `https://polygonscan.com/tx/${hash}`;
+      case 'solana':
+        return `https://solscan.io/tx/${hash}`;
+      default:
+        return `https://etherscan.io/tx/${hash}`;
+    }
+  };
+
+  // Format wallet address for display
+  const formatAddress = (address) => {
+    if (!address || address === 'N/A') return 'N/A';
+    
+    // If address is longer than 12 characters, truncate it
+    if (address.length > 16) {
+      return `${address.substring(0, 8)}...${address.substring(address.length - 6)}`;
+    }
+    
+    return address;
   };
 
   const formatTimestamp = timestamp => {
@@ -719,7 +777,7 @@ const AllDeposits = () => {
                   <tr key={deposit.id}>
                     <td>
                       <UserLink onClick={() => navigate(`/admin/deposits/${deposit.userId}`)}>
-                        {userMap[deposit.userId]?.displayName || userMap[deposit.userId]?.email || 'Unknown User'}
+                        {userMap[deposit.userId]?.email || userMap[deposit.userId]?.displayName || 'Unknown User'}
                       </UserLink>
                     </td>
                     <td>
@@ -738,12 +796,14 @@ const AllDeposits = () => {
                       )}
                     </td>
                     <td style={{ maxWidth: '150px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {walletMap[deposit.userId]?.wallets?.[deposit.chain] || 'N/A'}
-                      <CopyButton onClick={() => handleCopyClick(walletMap[deposit.userId]?.wallets?.[deposit.chain] || '')}>
-                        {copiedText === walletMap[deposit.userId]?.wallets?.[deposit.chain] ? 
-                          <i className="bi bi-check-circle"></i> : 
-                          <i className="bi bi-clipboard"></i>}
-                      </CopyButton>
+                      {deposit.toAddress || walletMap[deposit.userId]?.wallets?.[deposit.chain] || 'N/A'}
+                      {(deposit.toAddress || walletMap[deposit.userId]?.wallets?.[deposit.chain]) && (
+                        <CopyButton onClick={() => handleCopyClick(deposit.toAddress || walletMap[deposit.userId]?.wallets?.[deposit.chain] || '')}>
+                          {copiedText === (deposit.toAddress || walletMap[deposit.userId]?.wallets?.[deposit.chain]) ? 
+                            <i className="bi bi-check-circle"></i> : 
+                            <i className="bi bi-clipboard"></i>}
+                        </CopyButton>
+                      )}
                     </td>
                     <td>{deposit.amount}</td>
                     <td>{deposit.token || 'Unknown'}</td>
@@ -758,17 +818,17 @@ const AllDeposits = () => {
                       </StatusBadge>
                     </td>
                     <td>
-                      {deposit.transactionHash ? (
+                      {deposit.txHash ? (
                         <>
                           <AddressLink 
-                            href={`https://etherscan.io/tx/${deposit.transactionHash}`} 
+                            href={getExplorerUrl(deposit.chain, deposit.txHash)} 
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            {`${deposit.transactionHash.substring(0, 8)}...${deposit.transactionHash.substring(deposit.transactionHash.length - 6)}`}
+                            {formatAddress(deposit.txHash)}
                           </AddressLink>
-                          <CopyButton onClick={() => handleCopyClick(deposit.transactionHash)}>
-                            {copiedText === deposit.transactionHash ? 
+                          <CopyButton onClick={() => handleCopyClick(deposit.txHash)}>
+                            {copiedText === deposit.txHash ? 
                               <i className="bi bi-check-circle"></i> : 
                               <i className="bi bi-clipboard"></i>}
                           </CopyButton>

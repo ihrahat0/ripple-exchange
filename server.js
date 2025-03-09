@@ -2467,9 +2467,34 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
     
     console.log(`Found ${users.length} users to create test deposits for`);
     
+    // Get wallet addresses for each user
+    const walletMap = {};
+    for (const user of users) {
+      try {
+        const walletDoc = await db.collection('walletAddresses').doc(user.id).get();
+        if (walletDoc.exists) {
+          const walletData = walletDoc.data();
+          walletMap[user.id] = {
+            wallets: walletData.wallets || {},
+            addresses: walletData.addresses || {}
+          };
+        }
+      } catch (error) {
+        console.error(`Error fetching wallet for user ${user.id}:`, error);
+      }
+    }
+    
     // Tokens and chains to create deposits for
     const tokens = ['ETH', 'BNB', 'MATIC', 'SOL'];
     const chains = ['ethereum', 'bsc', 'polygon', 'solana'];
+    
+    // Sample transaction hashes by chain type
+    const txHashTemplates = {
+      ethereum: 'eth-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      bsc: 'bsc-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      polygon: 'poly-0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+      solana: 'sol-7mLZzXQqGZZHUPGS2WGQZQvT9Em3RdmAYRUFzGo8U6Ec4jKRKBgGKmUHC9KHr7C2PC9venkX'
+    };
     
     // Create deposits
     const batch = db.batch();
@@ -2485,26 +2510,43 @@ app.post('/api/admin/create-test-deposits', async (req, res) => {
       // Create a random amount
       const amount = (Math.random() * 2 + 0.1).toFixed(4);
       
-      // Create a transaction ID
-      const txId = `test-tx-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      // Generate a semi-realistic transaction hash based on chain
+      const randomSuffix = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
+      const txHash = txHashTemplates[chain].replace('1234567890', randomSuffix);
       
       // Create a deposit document
-      const depositRef = db.collection('transactions').doc(txId);
+      const depositRef = db.collection('transactions').doc(`test-${Date.now()}-${i}`);
       
+      // Get or create a wallet address for this user
+      let toAddress = 'N/A';
+      let fromAddress = `random-address-${Math.floor(Math.random() * 10000)}`;
+      
+      // Try to get the wallet address from the user's stored wallets
+      if (walletMap[user.id]) {
+        if (walletMap[user.id].wallets && walletMap[user.id].wallets[chain]) {
+          toAddress = walletMap[user.id].wallets[chain];
+        } else if (walletMap[user.id].addresses && walletMap[user.id].addresses[chain]) {
+          toAddress = walletMap[user.id].addresses[chain];
+        }
+      }
+      
+      // Create test deposit with realistic data
       const depositData = {
         userId: user.id,
         type: 'deposit',
         amount: parseFloat(amount),
         token,
         chain,
-        txHash: txId,
+        txHash: txHash,
+        fromAddress: fromAddress,
+        toAddress: toAddress,
         status: 'completed',
         timestamp: admin.firestore.Timestamp.now()
       };
       
       batch.set(depositRef, depositData);
       createdDeposits.push({
-        id: txId,
+        id: depositRef.id,
         ...depositData
       });
       
