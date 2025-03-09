@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import styled from 'styled-components';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import toast, { Toaster } from 'react-hot-toast';
 import { formatAddress } from '../../utils/helpers';
 import AdminNavbar from '../../components/AdminNavbar';
 
@@ -335,7 +334,7 @@ const AdminWallets = () => {
             </WalletCard>
           ))
         )}
-        <ToastContainer position="bottom-right" />
+        <Toaster position="bottom-right" />
       </Container>
     </>
   );

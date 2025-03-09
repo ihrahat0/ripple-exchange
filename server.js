@@ -1168,29 +1168,77 @@ async function checkBlockchainDeposits() {
       const userData = userDoc.data();
       const userBalances = userData.balances || {};
       
-      // Check deposits for each wallet
-      for (const [chain, address] of Object.entries(wallets)) {
-        if (!privateKeys[chain]) {
-          console.log(`No private key found for ${chain} wallet of user ${userId}`);
-          continue;
-        }
-        
-        try {
-          // Get balance from blockchain
-          let balance = 0;
-          
-          // Check balance based on chain type
-          if (['ethereum', 'bsc', 'polygon'].includes(chain)) {
-            balance = await checkEVMBalance(chain, address);
-          } else if (chain === 'solana') {
-            balance = await checkSolanaBalance(address);
-          } else {
-            console.log(`Unsupported chain: ${chain}`);
-            continue;
+      // Check EVM chains (Ethereum, BSC, Polygon)
+      for (const chain of ['ethereum', 'bsc', 'polygon']) {
+        if (wallets[chain] && privateKeys[chain]) {
+          try {
+            console.log(`Checking ${chain} balance for ${userId}...`);
+            
+            // Get balance from blockchain
+            const balance = await checkEVMBalance(chain, wallets[chain]);
+            
+            if (balance === null) {
+              console.log(`Failed to get balance for ${chain} wallet of user ${userId}`);
+              continue;
+            }
+            
+            // Convert balance to number
+            const numBalance = parseFloat(balance);
+            
+            // Determine token symbol
+            let tokenSymbol = chain.toUpperCase();
+            if (chain === 'ethereum') tokenSymbol = 'ETH';
+            if (chain === 'bsc') tokenSymbol = 'BNB';
+            if (chain === 'polygon') tokenSymbol = 'MATIC';
+            
+            // Get current balance
+            const currentBalance = userBalances[tokenSymbol] || 0;
+            
+            console.log(`User ${userId} ${chain} balance: ${numBalance} ${tokenSymbol} (recorded: ${currentBalance})`);
+            
+            // If blockchain balance is higher, update it
+            if (numBalance > currentBalance) {
+              const depositAmount = numBalance - currentBalance;
+              
+              console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+              
+              // Record transaction
+              await db.collection('transactions').add({
+                userId,
+                type: 'deposit',
+                amount: depositAmount,
+                token: tokenSymbol,
+                chain,
+                txHash: `auto-${Date.now()}`,
+                status: 'completed',
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+              });
+              
+              // Update user balance
+              await db.collection('users').doc(userId).update({
+                [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+              });
+              
+              processedDeposits++;
+              
+              console.log(`Processed deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+            }
+          } catch (error) {
+            console.error(`Error checking ${chain} deposits for ${userId}:`, error);
           }
+        }
+      }
+      
+      // Check Solana balance
+      if (wallets.solana && privateKeys.solana) {
+        try {
+          console.log(`Checking Solana balance for ${userId}...`);
+          
+          // Get balance from blockchain
+          const balance = await checkSolanaBalance(wallets.solana);
           
           if (balance === null) {
-            console.log(`Failed to get balance for ${chain} wallet of user ${userId}`);
+            console.log(`Failed to get balance for Solana wallet of user ${userId}`);
             continue;
           }
           
@@ -1198,15 +1246,12 @@ async function checkBlockchainDeposits() {
           const numBalance = parseFloat(balance);
           
           // Determine token symbol
-          let tokenSymbol = chain.toUpperCase();
-          if (chain === 'ethereum') tokenSymbol = 'ETH';
-          if (chain === 'bsc') tokenSymbol = 'BNB';
-          if (chain === 'polygon') tokenSymbol = 'MATIC';
+          const tokenSymbol = 'SOL';
           
           // Get current balance
           const currentBalance = userBalances[tokenSymbol] || 0;
           
-          console.log(`User ${userId} ${chain} balance: ${numBalance} ${tokenSymbol} (recorded: ${currentBalance})`);
+          console.log(`User ${userId} Solana balance: ${numBalance} ${tokenSymbol} (recorded: ${currentBalance})`);
           
           // If blockchain balance is higher, update it
           if (numBalance > currentBalance) {
@@ -1220,7 +1265,7 @@ async function checkBlockchainDeposits() {
               type: 'deposit',
               amount: depositAmount,
               token: tokenSymbol,
-              chain,
+              chain: 'solana',
               txHash: `auto-${Date.now()}`,
               status: 'completed',
               timestamp: admin.firestore.FieldValue.serverTimestamp()
@@ -1236,7 +1281,7 @@ async function checkBlockchainDeposits() {
             console.log(`Processed deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
           }
         } catch (error) {
-          console.error(`Error checking ${chain} deposits for ${userId}:`, error);
+          console.error(`Error checking Solana deposits for ${userId}:`, error);
         }
       }
     }
@@ -1337,8 +1382,20 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     
     console.log(`Found wallet data for user ${userId}`);
     
+    // Get user data to check current balances
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      console.log(`User ${userId} not found in database`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userData = userDoc.data();
+    const userBalances = userData.balances || {};
+    
     // Object to store balances for each chain
     const balances = {};
+    let updatesDetected = false;
     
     // Check EVM chains (Ethereum, BSC, Polygon)
     for (const chain of ['ethereum', 'bsc', 'polygon']) {
@@ -1346,9 +1403,45 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
         try {
           console.log(`Checking ${chain} balance for address ${wallets[chain]}`);
           const balance = await checkEVMBalance(chain, wallets[chain]);
+          
           if (balance !== null) {
+            const numBalance = parseFloat(balance);
             balances[chain] = balance;
             console.log(`${chain} balance: ${balance}`);
+            
+            // Determine token symbol
+            let tokenSymbol = chain.toUpperCase();
+            if (chain === 'ethereum') tokenSymbol = 'ETH';
+            if (chain === 'bsc') tokenSymbol = 'BNB';
+            if (chain === 'polygon') tokenSymbol = 'MATIC';
+            
+            // Check if balance is higher than recorded
+            const currentBalance = userBalances[tokenSymbol] || 0;
+            
+            if (numBalance > currentBalance) {
+              const depositAmount = numBalance - currentBalance;
+              console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+              
+              // Record transaction
+              await db.collection('transactions').add({
+                userId,
+                type: 'deposit',
+                amount: depositAmount,
+                token: tokenSymbol,
+                chain,
+                txHash: `manual-${Date.now()}`,
+                status: 'completed',
+                timestamp: admin.firestore.FieldValue.serverTimestamp()
+              });
+              
+              // Update user balance
+              await db.collection('users').doc(userId).update({
+                [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+              });
+              
+              updatesDetected = true;
+              console.log(`Updated ${tokenSymbol} balance for user ${userId}`);
+            }
           }
         } catch (err) {
           console.error(`Error checking ${chain} balance:`, err);
@@ -1361,9 +1454,40 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
       try {
         console.log(`Checking Solana balance for address ${wallets.solana}`);
         const balance = await checkSolanaBalance(wallets.solana);
+        
         if (balance !== null) {
+          const numBalance = parseFloat(balance);
           balances.solana = balance;
           console.log(`Solana balance: ${balance}`);
+          
+          // Check if balance is higher than recorded
+          const tokenSymbol = 'SOL';
+          const currentBalance = userBalances[tokenSymbol] || 0;
+          
+          if (numBalance > currentBalance) {
+            const depositAmount = numBalance - currentBalance;
+            console.log(`Detected deposit of ${depositAmount} ${tokenSymbol} for user ${userId}`);
+            
+            // Record transaction
+            await db.collection('transactions').add({
+              userId,
+              type: 'deposit',
+              amount: depositAmount,
+              token: tokenSymbol,
+              chain: 'solana',
+              txHash: `manual-${Date.now()}`,
+              status: 'completed',
+              timestamp: admin.firestore.FieldValue.serverTimestamp()
+            });
+            
+            // Update user balance
+            await db.collection('users').doc(userId).update({
+              [`balances.${tokenSymbol}`]: admin.firestore.FieldValue.increment(depositAmount)
+            });
+            
+            updatesDetected = true;
+            console.log(`Updated ${tokenSymbol} balance for user ${userId}`);
+          }
         }
       } catch (err) {
         console.error('Error checking Solana balance:', err);
@@ -1371,7 +1495,11 @@ app.post('/api/admin/refresh-balance', async (req, res) => {
     }
     
     console.log(`Returning balances for user ${userId}`);
-    return res.json({ userId, balances });
+    return res.json({ 
+      userId, 
+      balances,
+      updated: updatesDetected
+    });
   } catch (error) {
     console.error('Error refreshing balances:', error);
     return res.status(500).json({ 
