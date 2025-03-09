@@ -1732,7 +1732,7 @@ async function processChainDeposits(chain, address, privateKey, userId) {
     
     if (balance === null) {
       console.log(`Failed to get balance for ${chain} wallet of user ${userId}`);
-      return;
+      return false;
     }
     
     // Convert balance to number
@@ -1749,7 +1749,7 @@ async function processChainDeposits(chain, address, privateKey, userId) {
     
     if (!userDoc.exists) {
       console.log(`User ${userId} not found in database`);
-      return;
+      return false;
     }
     
     const userData = userDoc.data();
@@ -1804,7 +1804,7 @@ async function processSolanaDeposits(address, privateKey, userId) {
     
     if (balance === null) {
       console.log(`Failed to get balance for Solana wallet of user ${userId}`);
-      return;
+      return false;
     }
     
     // Convert balance to number
@@ -1818,7 +1818,7 @@ async function processSolanaDeposits(address, privateKey, userId) {
     
     if (!userDoc.exists) {
       console.log(`User ${userId} not found in database`);
-      return;
+      return false;
     }
     
     const userData = userDoc.data();
