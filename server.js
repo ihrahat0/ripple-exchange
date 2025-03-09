@@ -20,40 +20,25 @@ let admin;
 let db;
 
 try {
-  if (process.env.NODE_ENV === 'production') {
-    // In production, use the service account credentials
-    admin = require('firebase-admin');
-    
-    // If using a JSON file for credentials
+  // Always try to initialize Firebase Admin first, regardless of environment
+  admin = require('firebase-admin');
+  
+  try {
+    // Try to use service account if available
     const serviceAccount = require('./serviceAccountKey.json');
     admin.initializeApp({
       credential: admin.credential.cert(serviceAccount)
     });
-    db = admin.firestore();
-    console.log('Firebase Admin SDK initialized in production mode');
-  } else {
-    // In development, try to use real Firebase but with a different approach
-    console.log('Running in development mode - using mock Firebase');
-    
-    try {
-      // Setting up mock Firebase admin
-      admin = {
-        firestore: {
-          FieldValue: {
-            increment: (val) => val,
-            serverTimestamp: () => new Date()
-          }
-        }
-      };
-      
-      // Use mock database
-      db = createMockDatabase();
-      console.log('Mock database initialized successfully');
-    } catch (mockError) {
-      console.error('Error initializing mock database:', mockError);
-      throw mockError;
-    }
+    console.log('Firebase Admin SDK initialized with service account');
+  } catch (serviceAccountError) {
+    // Fallback to application default credentials
+    admin.initializeApp({
+      projectId: "infinitysolution-ddf7d"
+    });
+    console.log('Firebase Admin SDK initialized with application default credentials');
   }
+  
+  db = admin.firestore();
 } catch (error) {
   console.error('Error initializing Firebase Admin:', error);
   console.log('Continuing with mock Firebase implementation');
@@ -68,7 +53,7 @@ try {
     }
   };
   
-  // Use mock database
+  // Use mock database as last resort
   db = createMockDatabase();
 }
 
@@ -304,7 +289,7 @@ const port = process.env.PORT || 3001;
 // CORS options - support multiple origins from env variable
 const allowedOrigins = process.env.FRONTEND_URL 
   ? process.env.FRONTEND_URL.split(',') 
-  : ['http://localhost:3000', 'http://localhost:3002', 'https://rippleexchange.org', 'http://rippleexchange.org'];
+  : ['http://localhost:3000', 'http://localhost:3001', 'https://rippleexchange.org', 'http://rippleexchange.org'];
 
 console.log('CORS allowed origins:', allowedOrigins);
 
@@ -1330,7 +1315,7 @@ app.get('/api/admin/wallets', async (req, res) => {
   try {
     console.log('Admin requesting wallet list...');
     
-    // Get all wallet addresses
+    // Get all wallet addresses from Firestore
     const walletSnapshot = await db.collection('walletAddresses').get();
     
     if (walletSnapshot.empty) {
@@ -1757,6 +1742,44 @@ app.get('/api/admin/all-wallets', async (req, res) => {
     return res.status(500).json({
       success: false,
       error: 'Failed to fetch wallet data',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Admin endpoint to get user info by ID
+app.get('/api/admin/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+    
+    console.log(`Getting user info for ${userId}`);
+    
+    // Get user data from Firestore
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      console.log(`User ${userId} not found`);
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    const userData = userDoc.data();
+    
+    // Return essential user info
+    return res.json({
+      userId: userDoc.id,
+      email: userData.email || null,
+      displayName: userData.displayName || null,
+      balances: userData.balances || {}
+    });
+  } catch (error) {
+    console.error('Error getting user info:', error);
+    return res.status(500).json({ 
+      error: 'Failed to get user info', 
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });

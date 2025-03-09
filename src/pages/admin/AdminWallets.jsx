@@ -266,18 +266,43 @@ const AdminWallets = () => {
       const response = await axios.get('/api/admin/wallets');
       console.log('Wallets data received:', response.data);
       
-      // Add fake email data for testing
-      const enrichedWallets = response.data.map(wallet => ({
-        ...wallet,
-        userEmail: `user-${wallet.userId.substring(0, 6)}@example.com`
-      }));
-      
-      setWallets(enrichedWallets);
+      // If we have actual wallet data
+      if (response.data && Array.isArray(response.data)) {
+        // Try to get user information for each wallet
+        const walletsWithUserInfo = await Promise.all(
+          response.data.map(async (wallet) => {
+            try {
+              // Try to get user info from Firebase
+              const userResponse = await axios.get(`/api/admin/user/${wallet.userId}`);
+              if (userResponse.data && userResponse.data.email) {
+                return {
+                  ...wallet,
+                  userEmail: userResponse.data.email,
+                  userName: userResponse.data.displayName || ''
+                };
+              }
+            } catch (err) {
+              console.log(`Could not fetch user info for ${wallet.userId}`);
+            }
+            
+            // Fallback: Generate email from userId if we couldn't get real user data
+            return {
+              ...wallet,
+              userEmail: `user-${wallet.userId.substring(0, 6)}@example.com`
+            };
+          })
+        );
+        
+        setWallets(walletsWithUserInfo);
+      } else {
+        // Fallback in case we didn't get expected data format
+        setWallets([]);
+        toast.error('Unexpected data format received');
+      }
     } catch (error) {
       const errorMessage = error.response?.data?.message || error.message || 'Unknown error';
       console.error('Error fetching wallets:', error);
       toast.error(`Failed to fetch wallets: ${errorMessage}`);
-      // Set empty array to avoid undefined errors
       setWallets([]);
     } finally {
       setLoading(false);
