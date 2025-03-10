@@ -65,6 +65,20 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // Allow users to read their notifications
+    match /notifications/{notificationId} {
+      allow create: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow update: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
     // Main positions collection rules
     match /positions/{positionId} {
       allow read: if isAuthenticated() && (
@@ -87,6 +101,14 @@ service cloud.firestore {
     match /coins/{coinId} {
       allow read: if true;
       allow create, update, delete: if isAdmin();
+    }
+
+    // Allow airdrops to be read and written by the user or admin
+    match /airdrops/{userId} {
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
     }
 
     // Public collections anyone can read

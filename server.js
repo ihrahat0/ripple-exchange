@@ -25,24 +25,81 @@ try {
   // Import Firebase Admin
   admin = require('firebase-admin');
   
-  // Load service account
-  const serviceAccount = require('./serviceAccountKey.json');
-  console.log('Using real Firebase service account key');
-  
   // Initialize Firebase Admin
-  if (!admin.apps.length) {
-    admin.initializeApp({
+  try {
+    let firebaseConfig;
+    let serviceAccount;
+    
+    // Try loading from serviceAccountKey.json
+    try {
+      serviceAccount = require('./serviceAccountKey.json');
+      
+      // Check if private key is a placeholder
+      if (serviceAccount.private_key.includes('REPLACE_THIS_WITH_YOUR_ACTUAL_PRIVATE_KEY')) {
+        console.log('serviceAccountKey.json contains placeholder values, trying alternative file');
+        throw new Error('Private key contains placeholder value');
+      }
+      
+      console.log('Using Firebase service account key from serviceAccountKey.json');
+    } catch (error) {
+      console.log('Failed to load from serviceAccountKey.json:', error.message);
+      
+      // Try loading from the alternative key file
+      try {
+        serviceAccount = require('./src/firebase/new-private-key.json');
+        console.log('Using Firebase service account key from src/firebase/new-private-key.json');
+      } catch (altError) {
+        console.log('Failed to load from alternative key file:', altError.message);
+        
+        // Fall back to environment variables if available
+        if (process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PROJECT_ID) {
+          console.log('Using Firebase credentials from environment variables');
+          firebaseConfig = {
+            credential: admin.credential.cert({
+              projectId: process.env.FIREBASE_PROJECT_ID,
+              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+              // Replace escaped newlines in the private key
+              privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+            })
+          };
+          
+          // Initialize Firebase app with env vars
+          if (!admin.apps.length) {
+            admin.initializeApp(firebaseConfig);
+          } else {
+            admin.app().delete().then(() => {
+              admin.initializeApp(firebaseConfig);
+            });
+          }
+          
+          console.log('Firebase Admin SDK initialized with environment variables');
+          return; // Exit initialization flow since we've initialized with env vars
+        } else {
+          throw new Error('No valid Firebase credentials found');
+        }
+      }
+    }
+    
+    // Initialize with the service account we found
+    firebaseConfig = {
       credential: admin.credential.cert(serviceAccount)
-    });
-  } else {
-    admin.app().delete().then(() => {
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount)
+    };
+    
+    // Initialize Firebase app
+    if (!admin.apps.length) {
+      admin.initializeApp(firebaseConfig);
+    } else {
+      admin.app().delete().then(() => {
+        admin.initializeApp(firebaseConfig);
       });
-    });
+    }
+    
+    console.log('Firebase Admin SDK initialized properly');
+  } catch (error) {
+    console.error('ERROR INITIALIZING FIREBASE:', error);
+    // Continue execution without Firebase if needed
   }
   
-  console.log('Firebase Admin SDK initialized properly');
   db = admin.firestore();
   console.log('Firestore database connected - USING REAL DATABASE');
 } catch (error) {

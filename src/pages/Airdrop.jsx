@@ -560,7 +560,7 @@ const Airdrop = () => {
           
           <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column' }}>
             <SocialButton 
-              href="https://twitter.com/RippleExchange" 
+              href="https://x.com/ripple_exch" 
               target="_blank" 
               rel="noopener noreferrer"
               twitter
@@ -601,7 +601,7 @@ const Airdrop = () => {
           
           <div style={{ marginTop: '1.5rem', display: 'flex', flexDirection: 'column' }}>
             <SocialButton 
-              href="https://t.me/RippleExchangeOfficial" 
+              href="https://t.me/Ripple_exch" 
               target="_blank" 
               rel="noopener noreferrer"
               onClick={handleTelegramFollow}
