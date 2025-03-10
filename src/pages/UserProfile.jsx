@@ -521,6 +521,7 @@ function UserProfile(props) {
     const [balances, setBalances] = useState({});
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
+    const [success, setSuccess] = useState(''); // Added missing success state variable
     const [displayName, setDisplayName] = useState('');
     const [isPremium, setIsPremium] = useState(false);
     const [userId, setUserId] = useState('');
@@ -610,6 +611,8 @@ function UserProfile(props) {
 
     // Check if user is authenticated
     useEffect(() => {
+        let safetyTimeout; // Declare variable at the top level of useEffect
+        
         if (auth.currentUser) {
             setUserId(auth.currentUser.uid);
             
@@ -618,7 +621,7 @@ function UserProfile(props) {
             let balancesLoaded = false;
             
             // Safety timeout to prevent infinite loading
-            const safetyTimeout = setTimeout(() => {
+            safetyTimeout = setTimeout(() => {
                 if (loading) {
                     console.log("Safety timeout triggered - forcing loading state to false");
                     setLoading(false);
@@ -740,8 +743,11 @@ function UserProfile(props) {
             navigate('/login');
         }
         
+        // Return cleanup function to clear the timeout
         return () => {
-            clearTimeout(safetyTimeout);
+            if (safetyTimeout) {
+                clearTimeout(safetyTimeout);
+            }
         };
     }, []);
 
