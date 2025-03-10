@@ -559,7 +559,9 @@ function UserProfile(props) {
     const [balances, setBalances] = useState({});
     const [positions, setPositions] = useState([]);
     const [totalPnL, setTotalPnL] = useState(0);
-    const [tokenPrices, setTokenPrices] = useState({});
+    const [tokenPrices, setTokenPrices] = useState({
+        RIPPLEX: 1 // Set a fixed price of $1 for RIPPLEX token
+    });
     const [isAdmin, setIsAdmin] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
     const [users, setUsers] = useState([]);
@@ -795,50 +797,36 @@ function UserProfile(props) {
         }
     }, []);
 
-    useEffect(() => {
-        const fetchPrices = async () => {
-            try {
-                const response = await axios.get('https://api.coingecko.com/api/v3/simple/price', {
-                    params: {
-                        ids: 'bitcoin,ethereum,solana,binancecoin,dogecoin,ripple,cardano,matic-network,polkadot',
-                        vs_currencies: 'usd'
-                    }
-                });
-                
-                setTokenPrices({
-                    BTC: response.data.bitcoin?.usd || 0,
-                    ETH: response.data.ethereum?.usd || 0,
-                    SOL: response.data.solana?.usd || 0,
-                    BNB: response.data.binancecoin?.usd || 0,
-                    DOGE: response.data.dogecoin?.usd || 0,
-                    XRP: response.data.ripple?.usd || 0,
-                    ADA: response.data.cardano?.usd || 0,
-                    MATIC: response.data['matic-network']?.usd || 0,
-                    DOT: response.data.polkadot?.usd || 0,
-                    USDT: 1 // USDT is pegged to USD
-                });
-            } catch (error) {
-                console.error('Error fetching prices:', error);
-                // Set default prices if API fails
-                setTokenPrices({
-                    BTC: 0,
-                    ETH: 0,
-                    SOL: 0,
-                    BNB: 0,
-                    DOGE: 0,
-                    XRP: 0,
-                    ADA: 0,
-                    MATIC: 0,
-                    DOT: 0,
-                    USDT: 1
-                });
-            }
-        };
-
-        fetchPrices();
-        const interval = setInterval(fetchPrices, 60000); // Update prices every minute
-        return () => clearInterval(interval);
-    }, []);
+    // Function to fetch cryptocurrency prices
+    const fetchPrices = async () => {
+        try {
+            const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum,ripple,cardano,dogecoin,solana,binancecoin,matic-network,polkadot,avalanche-2,chainlink,uniswap,cosmos&vs_currencies=usd');
+            const data = await response.json();
+            
+            // Create a mapping from our token symbols to prices
+            const prices = {
+                ...tokenPrices, // Preserve existing prices, especially RIPPLEX
+                BTC: data.bitcoin?.usd || 0,
+                ETH: data.ethereum?.usd || 0,
+                XRP: data.ripple?.usd || 0,
+                ADA: data.cardano?.usd || 0,
+                DOGE: data.dogecoin?.usd || 0,
+                SOL: data.solana?.usd || 0,
+                BNB: data.binancecoin?.usd || 0,
+                MATIC: data['matic-network']?.usd || 0,
+                DOT: data.polkadot?.usd || 0,
+                AVAX: data['avalanche-2']?.usd || 0,
+                LINK: data.chainlink?.usd || 0,
+                UNI: data.uniswap?.usd || 0,
+                ATOM: data.cosmos?.usd || 0,
+                USDT: 1
+            };
+            
+            setTokenPrices(prices);
+        } catch (error) {
+            console.error('Error fetching token prices:', error);
+        }
+    };
 
     useEffect(() => {
         if (auth.currentUser) {
@@ -1188,6 +1176,19 @@ function UserProfile(props) {
             fetchBonusAccount();
             fetchReferralData();
         }
+    }, []);
+
+    // Format wallet address for display
+
+    // Fetch token prices periodically
+    useEffect(() => {
+        fetchPrices();
+        const interval = setInterval(fetchPrices, 60000); // Update prices every minute
+        return () => clearInterval(interval);
+    }, []);
+        
+    useEffect(() => {
+        checkAdminStatus();
     }, []);
 
     if (loading) {

@@ -47,6 +47,25 @@ const confettiAnimation = keyframes`
   100% { transform: translateY(1000px) rotate(720deg); opacity: 0; }
 `;
 
+// Add stronger glowing animations
+const strongGlowAnimation = keyframes`
+  0% { box-shadow: 0 0 10px rgba(255, 167, 38, 0.7), 0 0 20px rgba(255, 145, 0, 0.4); }
+  50% { box-shadow: 0 0 30px rgba(255, 167, 38, 0.9), 0 0 60px rgba(255, 145, 0, 0.6); }
+  100% { box-shadow: 0 0 10px rgba(255, 167, 38, 0.7), 0 0 20px rgba(255, 145, 0, 0.4); }
+`;
+
+const textGlowAnimation = keyframes`
+  0% { text-shadow: 0 0 5px rgba(255, 167, 38, 0.5), 0 0 10px rgba(255, 145, 0, 0.3); }
+  50% { text-shadow: 0 0 15px rgba(255, 167, 38, 0.8), 0 0 30px rgba(255, 145, 0, 0.5); }
+  100% { text-shadow: 0 0 5px rgba(255, 167, 38, 0.5), 0 0 10px rgba(255, 145, 0, 0.3); }
+`;
+
+const shimmerAnimation = keyframes`
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+`;
+
 // Styled Components
 const AirdropContainer = styled.div`
   min-height: 80vh;
@@ -106,7 +125,7 @@ const ClaimButton = styled.button`
   
   &:hover {
     transform: scale(1.05);
-    box-shadow: 0 0 15px rgba(255, 167, 38, 0.8);
+    box-shadow: 0 0 15px rgba(255, 167, 38, 0.8), 0 0 30px rgba(255, 145, 0, 0.5);
   }
   
   &:disabled {
@@ -243,6 +262,25 @@ const CongratsContainer = styled.div`
   text-align: center;
   animation: ${fadeInAnimation} 1s ease-out;
   max-width: 600px;
+  position: relative;
+  padding: 2rem;
+  border-radius: 20px;
+  background: rgba(15, 16, 18, 0.8);
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #FF9100, #FFC400, #FF9100, #FFC400);
+    background-size: 400% 400%;
+    z-index: -1;
+    border-radius: 22px;
+    animation: ${shimmerAnimation} 6s linear infinite;
+    filter: blur(4px);
+  }
 `;
 
 const CongratsTitle = styled.h2`
@@ -251,22 +289,45 @@ const CongratsTitle = styled.h2`
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 1rem;
-  animation: ${bounceAnimation} 1.5s;
+  animation: ${bounceAnimation} 1.5s, ${textGlowAnimation} 3s infinite;
+  position: relative;
+  
+  &::after {
+    content: '🎉';
+    position: absolute;
+    right: -40px;
+    animation: ${bounceAnimation} 2s infinite;
+  }
 `;
 
 const TokenGlow = styled.div`
-  width: 150px;
-  height: 150px;
+  width: 180px;
+  height: 180px;
   margin: 2rem auto;
   background: url(${ripplexLogo}) no-repeat center/contain;
-  animation: ${glowAnimation} 3s infinite, ${floatAnimation} 6s ease-in-out infinite;
+  animation: ${strongGlowAnimation} 3s infinite, ${floatAnimation} 6s ease-in-out infinite;
   border-radius: 50%;
+  position: relative;
+  
+  &::before {
+    content: '';
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    right: -20px;
+    bottom: -20px;
+    background: radial-gradient(circle, rgba(255, 145, 0, 0.5) 0%, rgba(255, 145, 0, 0) 70%);
+    border-radius: 50%;
+    z-index: -1;
+  }
 `;
 
 const CongratsText = styled.p`
   font-size: 1.4rem;
   line-height: 1.6;
   margin-bottom: 2rem;
+  color: white;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
 `;
 
 const AirdropCard = styled.div`

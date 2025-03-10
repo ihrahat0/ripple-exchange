@@ -2,6 +2,10 @@ import React, { useState, useEffect } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { Link, useNavigate } from 'react-router-dom';
 import CryptoPrices from '../components/CryptoPrices';
+import Testimonials from '../components/Testimonials';
+import Accordion from '../components/Accordion';
+import { toast } from 'react-toastify';
+import { useAuth } from '../contexts/AuthContext';
 
 // Import images needed for the design
 import btcIcon from '../assets/images/coin/btc.png';
@@ -1243,10 +1247,76 @@ const Button = styled.button`
   }
 `;
 
+// Add a style for the airdrop button
+const AirdropButton = styled.button`
+  background: linear-gradient(90deg, #FF9100, #FFC400);
+  color: #000;
+  font-weight: bold;
+  padding: 12px 24px;
+  border: none;
+  border-radius: 30px;
+  cursor: pointer;
+  margin-top: 1rem;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 5px 15px rgba(255, 145, 0, 0.4);
+  transition: all 0.3s ease;
+  
+  &::before {
+    content: "";
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    transform: rotate(30deg);
+    animation: shimmerEffect 3s infinite;
+  }
+  
+  @keyframes shimmerEffect {
+    0% {
+      transform: translateX(-100%) rotate(30deg);
+    }
+    100% {
+      transform: translateX(100%) rotate(30deg);
+    }
+  }
+  
+  svg {
+    margin-right: 8px;
+    font-size: 18px;
+  }
+  
+  &:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(255, 145, 0, 0.6);
+  }
+  
+  &:active {
+    transform: translateY(0);
+  }
+  
+  @media (max-width: 768px) {
+    width: 100%;
+    margin-top: 15px;
+  }
+`;
+
 function HomeOne() {
   const [email, setEmail] = useState('');
   const navigate = useNavigate();
   const [openFAQ, setOpenFAQ] = useState(0);
+  const { currentUser } = useAuth();
   
   const faqItems = [
     {
@@ -1276,8 +1346,24 @@ function HomeOne() {
     navigate('/register');
   };
   
-    return (
-        <div className='home-1'>
+  const handleClaimAirdrop = () => {
+    if (currentUser) {
+      navigate('/airdrop');
+    } else {
+      toast.info('Please log in to claim your airdrop', {
+        position: "top-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: true,
+        draggable: true,
+      });
+      navigate('/login', { state: { from: '/airdrop' } });
+    }
+  };
+  
+  return (
+    <div className='home-1'>
       <HeroSection>
         <GlowingOrb />
         <GlowingOrb2 />
@@ -1303,7 +1389,19 @@ function HomeOne() {
                 <PrimaryButton onClick={handleSignUp}>Sign Up Now</PrimaryButton>
               </SignupBox>
               
-              <SecondaryButton $secondary onClick={handleSignUpForRewards}>Sign Up for Rewards →</SecondaryButton>
+              <div style={{ display: 'flex', gap: '15px', marginTop: '10px', flexWrap: 'wrap' }}>
+                <SecondaryButton onClick={handleSignUpForRewards}>
+                  <i className="fa fa-gift" style={{ marginRight: '8px' }}></i>
+                  Sign Up for Rewards
+                </SecondaryButton>
+                
+                <AirdropButton onClick={handleClaimAirdrop}>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M8 16a2 2 0 0 0 2-2H6a2 2 0 0 0 2 2zm.995-14.901a1 1 0 1 0-1.99 0A5.002 5.002 0 0 0 3 6c0 1.098-.5 6-2 7h14c-1.5-1-2-5.902-2-7 0-2.42-1.72-4.44-4.005-4.901z"/>
+                  </svg>
+                  Claim 100$ Airdrop
+                </AirdropButton>
+              </div>
             </HeroLeft>
             
             {/* Add Marquee Banner */}
@@ -1487,8 +1585,8 @@ function HomeOne() {
           </CTAContainer>
         </CTASection>
       </Container>
-        </div>
-    );
+    </div>
+  );
 }
 
 export default HomeOne;
