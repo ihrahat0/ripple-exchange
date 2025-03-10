@@ -89,6 +89,14 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // Allow airdrops to be read and written by the user or admin
+    match /airdrops/{userId} {
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && (isOwner(userId) || isAdmin());
+      allow delete: if isAdmin();
+    }
+
     // Public collections anyone can read
     match /{path=**}/tokens/{tokenId} {
       allow read: if true;

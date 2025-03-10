@@ -112,8 +112,8 @@ const generateBitcoinWallet = () => {
  */
 const generateWallets = async (mnemonic) => {
   try {
-    // Create Ethereum wallet from mnemonic
-    const ethWallet = Wallet.fromPhrase(mnemonic);
+    // Create Ethereum wallet from mnemonic (using fromMnemonic for ethers v5.x)
+    const ethWallet = Wallet.fromMnemonic(mnemonic);
     
     // Generate Solana wallet (independent of Ethereum)
     const solanaWallet = await generateSolanaWallet();
@@ -290,7 +290,7 @@ export const recoverUserWallet = async (userId) => {
     const { encryptedMnemonic } = walletDoc.data();
     const mnemonic = decrypt(encryptedMnemonic);
     
-    return Wallet.fromPhrase(mnemonic);
+    return Wallet.fromMnemonic(mnemonic);
   } catch (error) {
     console.error('Error recovering wallet:', error);
     throw error;

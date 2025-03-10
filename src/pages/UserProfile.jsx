@@ -19,7 +19,8 @@ import {
     getDocs, 
     updateDoc, 
     serverTimestamp,
-    setDoc
+    setDoc,
+    deleteDoc
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Link } from 'react-router-dom';
@@ -51,6 +52,9 @@ import linkLogo from '../assets/images/coin/link.png';
 import uniLogo from '../assets/images/coin/uni.png';
 import atomLogo from '../assets/images/coin/atom.png';
 import ripplexLogo from '../assets/images/logo/logo.png'; // Import Ripple Exchange logo for RIPPLEX token
+import { fetchBalances, updateTokenBalance } from '../services/balanceService';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 UserProfile.propTypes = {
     
@@ -591,109 +595,97 @@ function UserProfile(props) {
 
     // Check if user is authenticated
     useEffect(() => {
-        const fetchUserData = async () => {
-            setLoading(true);
-            setError(''); // Clear any previous errors
-            try {
-                const user = auth.currentUser;
-                
-                if (!user) {
-                    console.log("No authenticated user found");
-                    navigate('/login');
-                    return;
-                }
-                
-                console.log("Current user:", user.uid);
-                
+        if (auth.currentUser) {
+            setUserId(auth.currentUser.uid);
+            
+            // Check admin status and user status
+            checkAdminStatusOnMount();
+            
+            // Fetch authenticated user's data
+            const fetchUserData = async () => {
                 try {
-                    // Get Firestore user document
-                    const userDoc = await getDoc(doc(db, 'users', user.uid));
+                    const userRef = doc(db, 'users', auth.currentUser.uid);
+                    const userSnapshot = await getDoc(userRef);
                     
-                    if (userDoc.exists()) {
-                        console.log("User document exists in Firestore");
-                        const userData = userDoc.data();
+                    if (userSnapshot.exists()) {
+                        const userData = userSnapshot.data();
+                        setUserData(userData);
+                        setDisplayName(userData.displayName || '');
+                        setIsPremium(userData.isPremium || false);
                         
-                        // Check if this is a Google account (has provider data)
-                        const isGoogleAccount = userData.authProvider === 'google';
+                        const storedAvatar = userData.avatar || auth.currentUser.photoURL;
+                        if (storedAvatar) {
+                            setAvatar(storedAvatar);
+                        }
                         
-                        // Use default image for non-Google accounts
-                        const photoURL = isGoogleAccount ? user.photoURL : img;
+                        // For any information tied to 2FA
+                        await checkTwoFactorStatus(auth.currentUser.uid);
+                    }
+                } catch (error) {
+                    console.error('Error fetching user data:', error);
+                    setError('Failed to fetch user data');
+                }
+            };
+            
+            fetchUserData();
+            
+            // Fetch users for admin
+            if (isAdmin) {
+                const fetchUsers = async () => {
+                    try {
+                        const usersCollection = collection(db, 'users');
+                        const usersSnapshot = await getDocs(usersCollection);
+                        const usersData = usersSnapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        }));
+                        setAllUsers(usersData);
+                    } catch (error) {
+                        console.error('Error fetching users:', error);
+                    }
+                };
+                fetchUsers();
+            }
+
+            // Use the imported fetchBalances function to get user balances
+            const getUserBalances = async () => {
+                try {
+                    console.log("Initializing balances for user:", auth.currentUser.uid);
+                    const userBalances = await fetchBalances(auth.currentUser.uid);
+                    setBalances(userBalances);
+                    
+                    // Also check for any airdrop claims
+                    const airdropRef = doc(db, 'airdrops', auth.currentUser.uid);
+                    const airdropDoc = await getDoc(airdropRef);
+                    
+                    if (airdropDoc.exists() && airdropDoc.data().completed) {
+                        console.log("User has completed airdrop, checking balance");
                         
-                        setUserData({
-                            displayName: user.displayName || '',
-                            email: user.email,
-                            phoneNumber: user.phoneNumber || '',
-                            photoURL: photoURL
-                        });
-                    } else {
-                        console.log("User document doesn't exist, creating default data");
-                        // No user document, use auth data with default image
-                        setUserData({
-                            displayName: user.displayName || '',
-                            email: user.email,
-                            phoneNumber: user.phoneNumber || '',
-                            photoURL: img
-                        });
-                        
-                        // Create a default user document if it doesn't exist
-                        try {
-                            await setDoc(doc(db, 'users', user.uid), {
-                                email: user.email,
-                                displayName: user.displayName || '',
-                                createdAt: serverTimestamp(),
-                                emailVerified: true
-                            });
-                            console.log("Created new user document");
-                        } catch (docCreateError) {
-                            console.error("Error creating user document:", docCreateError);
+                        // If RIPPLEX is missing or 0 but airdrop was completed, add 100 RIPPLEX
+                        if (!userBalances.RIPPLEX || userBalances.RIPPLEX === 0) {
+                            console.log("Adding missing RIPPLEX tokens from completed airdrop");
+                            const updated = await updateTokenBalance(auth.currentUser.uid, 'RIPPLEX', 100);
+                            
+                            if (updated) {
+                                // Update local state
+                                setBalances(prev => ({
+                                    ...prev,
+                                    RIPPLEX: 100
+                                }));
+                                
+                                toast.success("Added 100 RIPPLEX tokens from your completed airdrop!");
+                            }
                         }
                     }
-                } catch (firestoreError) {
-                    console.error("Error accessing Firestore:", firestoreError);
-                    setError('Error retrieving user profile data');
-                    return;
+                } catch (error) {
+                    console.error('Error fetching balances:', error);
+                    setError('Failed to fetch balances');
                 }
-                
-                // Check if user is authenticated with Google
-                const isGoogleAuth = user.providerData.some(
-                    (provider) => provider.providerId === 'google.com'
-                );
-                setIsGoogleUser(isGoogleAuth);
-                
-                try {
-                    // Fetch user balances
-                    await fetchBalances();
-                } catch (balanceError) {
-                    console.error("Error fetching balances:", balanceError);
-                    // Continue even if balances fail
-                }
-                
-                try {
-                    // Fetch prices
-                    await fetchPrices();
-                } catch (priceError) {
-                    console.error("Error fetching prices:", priceError);
-                    // Continue even if prices fail
-                }
-                
-                try {
-                    // Check 2FA status
-                    await checkTwoFactorStatus(user.uid);
-                } catch (twoFAError) {
-                    console.error("Error checking 2FA status:", twoFAError);
-                    // Continue even if 2FA check fails
-                }
-                
-            } catch (error) {
-                console.error('Error in fetchUserData:', error);
-                setError('Failed to load user data: ' + (error.message || 'Unknown error'));
-            } finally {
-                setLoading(false);
-            }
-        };
-        
-        fetchUserData();
-    }, [navigate]);
+            };
+
+            getUserBalances();
+        }
+    }, []);
 
     // Fetch all users for admin
     useEffect(() => {
