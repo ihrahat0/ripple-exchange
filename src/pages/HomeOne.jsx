@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import styled, { keyframes, css } from 'styled-components';
 import { Link, useNavigate } from 'react-router-dom';
 import CryptoPrices from '../components/CryptoPrices';
-import Testimonials from '../components/Testimonials';
-import Accordion from '../components/Accordion';
 import { toast } from 'react-toastify';
 import { useAuth } from '../contexts/AuthContext';
 
