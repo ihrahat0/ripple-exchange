@@ -2817,3 +2817,120 @@ app.post('/api/airdrop/claim', async (req, res) => {
     });
   }
 });
+
+// Add an endpoint to initialize RIPPLEX token for all users
+app.get('/api/admin/initialize-ripplex', async (req, res) => {
+  try {
+    console.log('Initializing RIPPLEX token for all users...');
+    
+    // Get all users
+    const usersSnapshot = await db.collection('users').get();
+    
+    if (usersSnapshot.empty) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'No users found' 
+      });
+    }
+    
+    let updatedCount = 0;
+    let userCount = 0;
+    
+    // Batch operations for better performance
+    const batchSize = 500; // Firestore batch limit is 500
+    let batch = db.batch();
+    let operationCount = 0;
+    
+    for (const userDoc of usersSnapshot.docs) {
+      userCount++;
+      const userData = userDoc.data();
+      const balances = userData.balances || {};
+      
+      // Check if user already has RIPPLEX token
+      if (!balances.RIPPLEX && balances.RIPPLEX !== 0) {
+        // User doesn't have RIPPLEX token, add it with 0 balance
+        const userRef = db.collection('users').doc(userDoc.id);
+        batch.update(userRef, { 'balances.RIPPLEX': 0 });
+        
+        operationCount++;
+        updatedCount++;
+        
+        // If we've reached the batch limit, commit and start a new batch
+        if (operationCount >= batchSize) {
+          await batch.commit();
+          batch = db.batch();
+          operationCount = 0;
+          console.log(`Committed batch, processed ${updatedCount} users so far...`);
+        }
+      }
+    }
+    
+    // Commit any remaining operations
+    if (operationCount > 0) {
+      await batch.commit();
+      console.log(`Final batch committed, total ${updatedCount} users updated.`);
+    }
+    
+    // Now check for completed airdrops and add 100 RIPPLEX tokens to those users
+    const airdropsSnapshot = await db.collection('airdrops')
+      .where('completed', '==', true)
+      .get();
+    
+    let airdropCount = 0;
+    batch = db.batch();
+    operationCount = 0;
+    
+    for (const airdropDoc of airdropsSnapshot.docs) {
+      const airdropData = airdropDoc.data();
+      const userId = airdropData.userId;
+      
+      // Get user document
+      const userRef = db.collection('users').doc(userId);
+      const userDoc = await userRef.get();
+      
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        const balances = userData.balances || {};
+        
+        // Check if user has the RIPPLEX token but with 0 balance
+        if (balances.RIPPLEX === 0 || balances.RIPPLEX === undefined) {
+          batch.update(userRef, { 'balances.RIPPLEX': 100 });
+          
+          operationCount++;
+          airdropCount++;
+          
+          // If we've reached the batch limit, commit and start a new batch
+          if (operationCount >= batchSize) {
+            await batch.commit();
+            batch = db.batch();
+            operationCount = 0;
+            console.log(`Committed airdrop batch, processed ${airdropCount} airdrops so far...`);
+          }
+        }
+      }
+    }
+    
+    // Commit any remaining operations
+    if (operationCount > 0) {
+      await batch.commit();
+      console.log(`Final airdrop batch committed, total ${airdropCount} users received RIPPLEX tokens.`);
+    }
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: `RIPPLEX token initialization completed. ${updatedCount} out of ${userCount} users updated. ${airdropCount} airdrops processed.`,
+      details: {
+        totalUsers: userCount,
+        usersUpdated: updatedCount,
+        airdropsProcessed: airdropCount
+      }
+    });
+  } catch (error) {
+    console.error('Error initializing RIPPLEX token:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Error initializing RIPPLEX token', 
+      error: error.message 
+    });
+  }
+});

@@ -732,16 +732,29 @@ function UserProfile(props) {
                     updatedBalances[coin] = currentBalances[coin] || 0;
                 });
                 
-                // Update the user document with complete balance set
-                try {
-                    await updateDoc(userRef, {
-                        balances: updatedBalances,
-                        updatedAt: serverTimestamp()
-                    });
-                    console.log("Updated user balances in Firestore");
-                } catch (updateError) {
-                    console.error("Error updating balances in Firestore:", updateError);
-                    // Return the balances anyway even if we couldn't update Firestore
+                // Make sure RIPPLEX is initialized even if it wasn't in DEFAULT_COINS before
+                if (!('RIPPLEX' in updatedBalances)) {
+                    console.log("Adding RIPPLEX token to user's balances");
+                    updatedBalances['RIPPLEX'] = 0;
+                }
+                
+                // Check if we need to update the database (if any coins were added)
+                const needsUpdate = Object.keys(updatedBalances).some(coin => !(coin in currentBalances));
+                
+                if (needsUpdate) {
+                    // Update the user document with complete balance set
+                    try {
+                        await updateDoc(userRef, {
+                            balances: updatedBalances,
+                            updatedAt: serverTimestamp()
+                        });
+                        console.log("Updated user balances in Firestore with missing coins");
+                    } catch (updateError) {
+                        console.error("Error updating balances in Firestore:", updateError);
+                        // Return the balances anyway even if we couldn't update Firestore
+                    }
+                } else {
+                    console.log("No new coins to add to user's balances");
                 }
                 
                 return updatedBalances;
@@ -753,6 +766,9 @@ function UserProfile(props) {
                     defaultBalances[coin] = 0;
                 });
                 
+                // Explicitly ensure RIPPLEX is included
+                defaultBalances['RIPPLEX'] = 0;
+                
                 // Try to create a user document with default balances
                 try {
                     await setDoc(userRef, {
@@ -762,7 +778,7 @@ function UserProfile(props) {
                         createdAt: serverTimestamp(),
                         emailVerified: true
                     });
-                    console.log("Created new user document with default balances");
+                    console.log("Created new user document with default balances including RIPPLEX");
                 } catch (setError) {
                     console.error("Error creating user document with balances:", setError);
                 }
@@ -776,6 +792,8 @@ function UserProfile(props) {
             Object.keys(DEFAULT_COINS).forEach(coin => {
                 fallbackBalances[coin] = 0;
             });
+            // Ensure RIPPLEX is included even in fallback
+            fallbackBalances['RIPPLEX'] = 0;
             return fallbackBalances;
         }
     };
@@ -785,8 +803,41 @@ function UserProfile(props) {
         if (auth.currentUser) {
             const fetchBalances = async () => {
                 try {
+                    // Always initialize balances to ensure newest tokens are included
                     const updatedBalances = await initializeUserBalances(auth.currentUser.uid);
                     setBalances(updatedBalances);
+                    
+                    // Also check for any airdrop claims
+                    const airdropRef = doc(db, 'airdrops', auth.currentUser.uid);
+                    const airdropDoc = await getDoc(airdropRef);
+                    
+                    if (airdropDoc.exists() && airdropDoc.data().completed) {
+                        console.log("User has completed airdrop, checking balance");
+                        // Explicitly check if the user has the RIPPLEX token in their balance
+                        const userRef = doc(db, 'users', auth.currentUser.uid);
+                        const userDoc = await getDoc(userRef);
+                        
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            const userBalances = userData.balances || {};
+                            
+                            // If RIPPLEX is missing or 0 but airdrop was completed, add 100 RIPPLEX
+                            if (!userBalances.RIPPLEX || userBalances.RIPPLEX === 0) {
+                                console.log("Adding missing RIPPLEX tokens from completed airdrop");
+                                await updateDoc(userRef, {
+                                    'balances.RIPPLEX': 100
+                                });
+                                
+                                // Update local state
+                                setBalances(prev => ({
+                                    ...prev,
+                                    RIPPLEX: 100
+                                }));
+                                
+                                toast.success("Added 100 RIPPLEX tokens from your completed airdrop!");
+                            }
+                        }
+                    }
                 } catch (error) {
                     console.error('Error fetching balances:', error);
                     setError('Failed to fetch balances');

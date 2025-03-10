@@ -1,10 +1,26 @@
 import React, { useState } from 'react';
-import styled from 'styled-components';
+import styled, { keyframes } from 'styled-components';
+import axios from 'axios';
+import { toast } from 'react-toastify';
+
+const rotate = keyframes`
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+`;
 
 const SettingsContainer = styled.div`
   display: grid;
   grid-template-columns: 1fr;
   gap: 30px;
+  
+  .spin {
+    animation: ${rotate} 1s linear infinite;
+    display: inline-block;
+  }
 `;
 
 const Card = styled.div`
@@ -215,6 +231,8 @@ function Settings() {
     depositFee: 0
   });
   
+  const [initializing, setInitializing] = useState(false);
+  
   const handleGeneralChange = (e) => {
     const { name, value } = e.target;
     setGeneralSettings(prev => ({ ...prev, [name]: value }));
@@ -241,6 +259,24 @@ function Settings() {
     alert('Settings saved successfully!');
   };
   
+  const handleInitializeRipplex = async () => {
+    setInitializing(true);
+    try {
+      const response = await axios.get('/api/admin/initialize-ripplex');
+      
+      if (response.data && response.data.success) {
+        toast.success(`RIPPLEX token initialized successfully. ${response.data.details.usersUpdated} users updated. ${response.data.details.airdropsProcessed} airdrops processed.`);
+      } else {
+        toast.error('Failed to initialize RIPPLEX token');
+      }
+    } catch (error) {
+      console.error('Error initializing RIPPLEX token:', error);
+      toast.error(`Error initializing RIPPLEX token: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setInitializing(false);
+    }
+  };
+  
   return (
     <SettingsContainer>
       <Card>
@@ -250,66 +286,102 @@ function Settings() {
         
         <Form onSubmit={handleSubmit}>
           <FormGroup>
-            <Label>Site Name</Label>
+            <Label htmlFor="siteName">Site Name</Label>
             <Input 
               type="text" 
+              id="siteName" 
               name="siteName" 
-              value={generalSettings.siteName}
+              value={generalSettings.siteName} 
               onChange={handleGeneralChange}
             />
           </FormGroup>
           
           <FormGroup>
-            <Label>Site Description</Label>
+            <Label htmlFor="siteDescription">Site Description</Label>
             <Input 
               type="text" 
+              id="siteDescription" 
               name="siteDescription" 
-              value={generalSettings.siteDescription}
+              value={generalSettings.siteDescription} 
               onChange={handleGeneralChange}
             />
           </FormGroup>
           
           <FormGroup>
-            <Label>Support Email</Label>
+            <Label htmlFor="supportEmail">Support Email</Label>
             <Input 
               type="email" 
+              id="supportEmail" 
               name="supportEmail" 
-              value={generalSettings.supportEmail}
+              value={generalSettings.supportEmail} 
               onChange={handleGeneralChange}
             />
           </FormGroup>
           
           <FormGroup>
-            <Label>Timezone</Label>
+            <Label htmlFor="timezone">Timezone</Label>
             <Select 
+              id="timezone" 
               name="timezone" 
-              value={generalSettings.timezone}
+              value={generalSettings.timezone} 
               onChange={handleGeneralChange}
             >
               <option value="UTC">UTC</option>
-              <option value="America/New_York">Eastern Time (ET)</option>
-              <option value="America/Chicago">Central Time (CT)</option>
-              <option value="America/Denver">Mountain Time (MT)</option>
-              <option value="America/Los_Angeles">Pacific Time (PT)</option>
+              <option value="EST">Eastern Time (EST)</option>
+              <option value="CST">Central Time (CST)</option>
+              <option value="MST">Mountain Time (MST)</option>
+              <option value="PST">Pacific Time (PST)</option>
             </Select>
           </FormGroup>
           
           <FormGroup>
-            <Label>Theme</Label>
+            <Label htmlFor="theme">Theme</Label>
             <Select 
+              id="theme" 
               name="theme" 
-              value={generalSettings.theme}
+              value={generalSettings.theme} 
               onChange={handleGeneralChange}
             >
               <option value="dark">Dark</option>
               <option value="light">Light</option>
+              <option value="auto">Auto (System)</option>
             </Select>
           </FormGroup>
           
           <Button type="submit">
-            <i className="bi bi-save"></i> Save Changes
+            <i className="bi bi-save"></i> Save Settings
           </Button>
         </Form>
+      </Card>
+      
+      <Card>
+        <SectionTitle>
+          <i className="bi bi-coin"></i> Token Management
+        </SectionTitle>
+        
+        <div style={{ marginBottom: '20px' }}>
+          <p style={{ color: '#e6edf3', marginBottom: '15px' }}>Initialize RIPPLEX token for all users. This will ensure all users have the RIPPLEX token in their balances and anyone who completed the airdrop gets 100 tokens.</p>
+          
+          <Button 
+            onClick={handleInitializeRipplex} 
+            disabled={initializing}
+            style={{ 
+              background: initializing ? 'rgba(59, 130, 246, 0.15)' : 'rgba(59, 130, 246, 0.25)',
+              color: '#3B82F6', 
+              borderColor: 'rgba(59, 130, 246, 0.4)' 
+            }}
+          >
+            {initializing ? (
+              <>
+                <i className="bi bi-arrow-repeat spin"></i> Initializing...
+              </>
+            ) : (
+              <>
+                <i className="bi bi-currency-exchange"></i> Initialize RIPPLEX Token
+              </>
+            )}
+          </Button>
+        </div>
       </Card>
       
       <Card>

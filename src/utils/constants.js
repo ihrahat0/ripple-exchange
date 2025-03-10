@@ -83,6 +83,12 @@ export const DEFAULT_COINS = {
         initialBalance: 0,
         decimals: 8
     },
+    RIPPLEX: {
+        name: 'Ripple Exchange Token',
+        symbol: 'RIPPLEX',
+        initialBalance: 0,
+        decimals: 8
+    },
     BCH: {
         name: 'Bitcoin Cash',
         symbol: 'BCH',
