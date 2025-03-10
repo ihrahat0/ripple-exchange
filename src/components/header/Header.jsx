@@ -850,6 +850,20 @@ const Header = () => {
 
                 <Navigation $isOpen={mobileMenuOpen}>
                     <NavLink onClick={() => handleNavLinkClick('/market')}>Market</NavLink>
+                    <NavLink onClick={() => handleNavLinkClick('/airdrop')}>
+                        Airdrop
+                        <span style={{ 
+                            backgroundColor: '#FF9100', 
+                            color: 'black', 
+                            borderRadius: '4px', 
+                            padding: '2px 5px', 
+                            fontSize: '10px', 
+                            marginLeft: '5px', 
+                            fontWeight: 'bold' 
+                        }}>
+                            NEW
+                        </span>
+                    </NavLink>
                     <NavLink onClick={() => handleNavLinkClick('/deposit')}>Deposit</NavLink>
                     <NavLinkWrapper>
                         <NavLink onClick={() => handleNavLinkClick('/withdraw')}>

@@ -12,6 +12,7 @@ import Register from './pages/Register';
 import Trading from './pages/Trading';
 import Deposit from './pages/Deposit';
 import Withdraw from './pages/Withdraw';
+import Airdrop from './pages/Airdrop';
 import { auth } from './firebase';
 import { isSignInWithEmailLink, signInWithEmailLink } from 'firebase/auth';
 import AOS from 'aos';
@@ -87,6 +88,11 @@ function App() {
                     <Route path="/withdraw" element={
                         <PrivateRoute>
                             <Withdraw />
+                        </PrivateRoute>
+                    } />
+                    <Route path="/airdrop" element={
+                        <PrivateRoute>
+                            <Airdrop />
                         </PrivateRoute>
                     } />
                     <Route path="/admin/*" element={

@@ -2749,3 +2749,71 @@ function generateTxHash(chain) {
       return `auto-${Date.now()}-${randomHex()}`;
   }
 }
+
+// Add API endpoint to verify and process airdrop claims
+app.post('/api/airdrop/claim', async (req, res) => {
+  try {
+    const { userId, twitterUsername, telegramUsername } = req.body;
+    
+    if (!userId || !twitterUsername || !telegramUsername) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required fields: userId, twitterUsername, telegramUsername' 
+      });
+    }
+    
+    // Verify that user exists
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'User not found' 
+      });
+    }
+    
+    // Check if user has already claimed the airdrop
+    const airdropDoc = await db.collection('airdrops').doc(userId).get();
+    
+    if (airdropDoc.exists && airdropDoc.data().completed) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Airdrop already claimed by this user' 
+      });
+    }
+    
+    // Update or create airdrop record
+    await db.collection('airdrops').doc(userId).set({
+      userId,
+      twitter: twitterUsername,
+      telegram: telegramUsername,
+      completed: true,
+      completedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
+    
+    // Add RIPPLEX token to user's balance
+    const userData = userDoc.data();
+    const balances = userData.balances || {};
+    
+    await db.collection('users').doc(userId).update({
+      'balances.RIPPLEX': admin.firestore.FieldValue.increment(100)
+    });
+    
+    // Log the airdrop claim
+    console.log(`Airdrop of 100 RIPPLEX claimed by user ${userId}`);
+    
+    return res.status(200).json({ 
+      success: true, 
+      message: 'Airdrop successfully claimed', 
+      amount: 100,
+      token: 'RIPPLEX'
+    });
+  } catch (error) {
+    console.error('Error processing airdrop claim:', error);
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Failed to process airdrop claim', 
+      error: error.message 
+    });
+  }
+});

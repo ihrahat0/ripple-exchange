@@ -50,6 +50,7 @@ import avaxLogo from '../assets/images/coin/avax.png';
 import linkLogo from '../assets/images/coin/link.png';
 import uniLogo from '../assets/images/coin/uni.png';
 import atomLogo from '../assets/images/coin/atom.png';
+import ripplexLogo from '../assets/images/logo/logo.png'; // Import Ripple Exchange logo for RIPPLEX token
 
 UserProfile.propTypes = {
     
@@ -69,7 +70,8 @@ const COIN_LOGOS = {
   AVAX: avaxLogo,
   LINK: linkLogo,
   UNI: uniLogo,
-  ATOM: atomLogo
+  ATOM: atomLogo,
+  RIPPLEX: ripplexLogo // Add RIPPLEX token logo
 };
 
 const AnimatedBorder = styled.div`
@@ -578,7 +580,9 @@ function UserProfile(props) {
 
     const calculateTotalBalance = useMemo(() => {
         return Object.entries(balances).reduce((total, [asset, balance]) => {
-            const usdValue = balance * (tokenPrices[asset] || 0);
+            // Use a fixed price of $1 for RIPPLEX token
+            const price = asset === 'RIPPLEX' ? 1 : (tokenPrices[asset] || 0);
+            const usdValue = balance * price;
             return total + usdValue;
         }, 0);
     }, [balances, tokenPrices]);
@@ -1536,10 +1540,14 @@ function UserProfile(props) {
                                                 <tbody>
                                                     {Object.keys(balances).length > 0 ? (
                                                         Object.entries(balances).map(([asset, balance], index) => {
-                                                            const usdValue = balance * (tokenPrices[asset] || 0);
+                                                            // Use a fixed price of $1 for RIPPLEX token
+                                                            const price = asset === 'RIPPLEX' ? 1 : (tokenPrices[asset] || 0);
+                                                            const usdValue = balance * price;
+                                                            const isRipplex = asset === 'RIPPLEX';
                                                             return (
                                                                 <tr key={asset} style={{
-                                                                    transition: 'all 0.3s'
+                                                                    transition: 'all 0.3s',
+                                                                    background: isRipplex ? 'rgba(255, 145, 0, 0.1)' : 'transparent'
                                                                 }}>
                                                                     <td style={{
                                                                         padding: '16px',
@@ -1563,7 +1571,8 @@ function UserProfile(props) {
                                                                                     width: '32px',
                                                                                     height: '32px',
                                                                                     borderRadius: '50%',
-                                                                                    background: '#2A2A3C'
+                                                                                    background: '#2A2A3C',
+                                                                                    boxShadow: isRipplex ? '0 0 10px rgba(255, 145, 0, 0.5)' : 'none'
                                                                                 }}
                                                                                 onError={(e) => {
                                                                                     e.target.onerror = null;
@@ -1571,15 +1580,32 @@ function UserProfile(props) {
                                                                                 }}
                                                                             />
                                                                             <div>
-                                                                                <div style={{
-                                                                                    fontWeight: '500',
-                                                                                    color: '#fff'
-                                                                                }}>{asset}</div>
+                                                                                <div style={{ fontWeight: 'bold', fontSize: '16px' }}>
+                                                                                    {asset}
+                                                                                    {isRipplex && (
+                                                                                        <span style={{ 
+                                                                                            marginLeft: '8px', 
+                                                                                            background: 'linear-gradient(90deg, #FF9100, #FFC400)', 
+                                                                                            padding: '2px 6px', 
+                                                                                            borderRadius: '4px',
+                                                                                            fontSize: '10px',
+                                                                                            color: 'black',
+                                                                                            fontWeight: 'bold',
+                                                                                            verticalAlign: 'middle'
+                                                                                        }}>
+                                                                                            AIRDROP
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
                                                                                 <div style={{
                                                                                     fontSize: '12px',
                                                                                     color: '#7A7A7A',
                                                                                     marginTop: '2px'
-                                                                                }}>{asset === 'USDT' ? 'Tether USD' : asset}</div>
+                                                                                }}>
+                                                                                    {asset === 'USDT' ? 'Tether USD' : 
+                                                                                     asset === 'RIPPLEX' ? 'Ripple Exchange Token' : 
+                                                                                     asset}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
                                                                     </td>
