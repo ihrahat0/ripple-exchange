@@ -26,7 +26,13 @@ try {
   admin = require('firebase-admin');
   
   // Load service account
-  const serviceAccount = require('./serviceAccountKey.json');
+  const serviceAccount = require('./src/firebase/new-private-key.json');
+
+  // Fix the private key format
+  if (serviceAccount.private_key) {
+    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
+  }
+
   console.log('Using real Firebase service account key');
   
   // Initialize Firebase Admin
