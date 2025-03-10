@@ -525,7 +525,27 @@ function UserProfile(props) {
     const [isPremium, setIsPremium] = useState(false);
     const [userId, setUserId] = useState('');
     const [avatar, setAvatar] = useState(img);
-
+    const [isAdmin, setIsAdmin] = useState(false);
+    
+    // Admin state variables
+    const [users, setUsers] = useState([]);
+    const [selectedUser, setSelectedUser] = useState('');
+    const [selectedToken, setSelectedToken] = useState('');
+    const [amount, setAmount] = useState('');
+    
+    // Define checkAdminStatusOnMount function
+    const checkAdminStatusOnMount = async () => {
+        if (auth.currentUser) {
+            try {
+                const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+                setIsAdmin(userDoc.exists() && (userDoc.data()?.role === 'admin' || userDoc.data()?.isAdmin === true));
+            } catch (error) {
+                console.error('Error checking admin status:', error);
+                setIsAdmin(false);
+            }
+        }
+    };
+    
     const [dataCoinTab] = useState([
         {
             id: 1,
@@ -564,9 +584,6 @@ function UserProfile(props) {
     const [tokenPrices, setTokenPrices] = useState({
         RIPPLEX: 1 // Set a fixed price of $1 for RIPPLEX token
     });
-    const [isAdmin, setIsAdmin] = useState(false);
-    const [selectedUser, setSelectedUser] = useState(null);
-    const [users, setUsers] = useState([]);
     const [editBalance, setEditBalance] = useState({ token: '', amount: '' });
     const [showConvertModal, setShowConvertModal] = useState(false);
     const [isGoogleUser, setIsGoogleUser] = useState(false);
@@ -929,42 +946,38 @@ function UserProfile(props) {
         // This function is kept to avoid breaking any existing code
     };
 
+    // Handle balance update for user profile
     const handleUpdateBalance = async () => {
-        if (!selectedUser || !editBalance.token || editBalance.amount === '') return;
-        
         try {
-            const userRef = doc(db, 'users', selectedUser);
-            const userDoc = await getDoc(userRef);
-            
-            if (userDoc.exists()) {
-                const currentBalances = userDoc.data().balances || {};
-                const updatedBalances = { ...currentBalances };
-                updatedBalances[editBalance.token] = Number(editBalance.amount);
-                
-                await updateDoc(userRef, {
-                    balances: updatedBalances
-                });
-                
-                // Update local state if modifying current user
-                if (selectedUser === auth.currentUser.uid) {
-                    setBalances(updatedBalances);
-                }
-                
-                // Update users list
-                setUsers(prevUsers => 
-                    prevUsers.map(user => 
-                        user.id === selectedUser 
-                            ? { ...user, balances: updatedBalances }
-                            : user
-                    )
-                );
-                
-                setEditBalance({ token: '', amount: '' });
-                alert('Balance updated successfully!');
+            if (!selectedUser || !editBalance.token || !editBalance.amount) {
+                toast.error('Please select a token and enter an amount');
+                return;
             }
+            
+            // Get current user balances
+            const userRef = doc(db, 'users', selectedUser);
+            await updateDoc(userRef, {
+                [`balances.${editBalance.token}`]: parseFloat(editBalance.amount),
+                updatedAt: serverTimestamp()
+            });
+            
+            toast.success(`Balance updated successfully`);
+            
+            // Reset form
+            setEditBalance({ token: '', amount: '' });
+            
+            // Refresh user list
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const usersData = usersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                email: doc.data().email,
+                balances: doc.data().balances || {}
+            }));
+            setUsers(usersData);
+            
         } catch (error) {
             console.error('Error updating balance:', error);
-            setError('Failed to update balance');
+            toast.error('Failed to update balance');
         }
     };
 
@@ -1244,11 +1257,65 @@ function UserProfile(props) {
         checkAdminStatusOnMount();
     }, []);
 
+    // Admin function to update user balances
+    const handleAdminUpdateBalance = async (action) => {
+        if (!selectedUser || !selectedToken || !amount) {
+            toast.error('Please select a user, token, and enter an amount');
+            return;
+        }
+        
+        try {
+            const userRef = doc(db, 'users', selectedUser);
+            const userDoc = await getDoc(userRef);
+            
+            if (!userDoc.exists()) {
+                toast.error('User document not found');
+                return;
+            }
+            
+            const userData = userDoc.data();
+            const currentBalances = userData.balances || {};
+            const currentAmount = currentBalances[selectedToken] || 0;
+            
+            let newAmount = currentAmount;
+            
+            if (action === 'add') {
+                newAmount = currentAmount + parseFloat(amount);
+            } else if (action === 'subtract') {
+                newAmount = Math.max(0, currentAmount - parseFloat(amount));
+            }
+            
+            // Update the user's balance
+            await updateDoc(userRef, {
+                [`balances.${selectedToken}`]: newAmount,
+                updatedAt: serverTimestamp()
+            });
+            
+            toast.success(`Successfully ${action === 'add' ? 'added' : 'subtracted'} ${amount} ${selectedToken} for user`);
+            
+            // Refresh user list to show updated balances
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const usersData = usersSnapshot.docs.map(doc => ({
+                id: doc.id,
+                email: doc.data().email,
+                balances: doc.data().balances || {}
+            }));
+            setUsers(usersData);
+            
+            // Reset form
+            setAmount('');
+            
+        } catch (error) {
+            console.error('Error updating user balance:', error);
+            toast.error('Failed to update balance: ' + error.message);
+        }
+    };
+
     if (loading) {
         return <div>Loading...</div>;
     }
 
-    // Update the admin controls JSX
+    // Define renderAdminControls function
     const renderAdminControls = () => (
         <div style={{
             marginTop: '24px',
@@ -1260,92 +1327,86 @@ function UserProfile(props) {
             <h4 style={{ marginBottom: '16px' }}>Admin Controls</h4>
             <div style={{ display: 'flex', gap: '16px', marginBottom: '16px', flexWrap: 'wrap' }}>
                 <select 
-                    value={selectedUser} 
-                    onChange={(e) => setSelectedUser(e.target.value)}
                     style={{
-                        background: '#2A2A3C',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        padding: '8px 12px',
                         borderRadius: '8px',
-                        padding: '8px',
-                        color: '#fff',
-                        minWidth: '200px'
+                        background: '#2D2D3F',
+                        color: 'white',
+                        border: '1px solid rgba(255, 255, 255, 0.1)'
                     }}
+                    value={selectedUser || ''}
+                    onChange={(e) => setSelectedUser(e.target.value)}
                 >
                     <option value="">Select User</option>
                     {users.map(user => (
                         <option key={user.id} value={user.id}>{user.email}</option>
                     ))}
                 </select>
-                <select 
-                    value={editBalance.token}
-                    onChange={(e) => setEditBalance(prev => ({ ...prev, token: e.target.value }))}
-                    style={{
-                        background: '#2A2A3C',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        padding: '8px',
-                        color: '#fff',
-                        minWidth: '150px'
-                    }}
-                >
-                    <option value="">Select Token</option>
-                    {Object.entries(DEFAULT_COINS).map(([symbol, coin]) => (
-                        <option key={symbol} value={symbol}>
-                            {coin.name} ({symbol})
-                        </option>
-                    ))}
-                </select>
-                <input 
-                    type="number"
-                    value={editBalance.amount}
-                    onChange={(e) => setEditBalance(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="Amount"
-                    style={{
-                        background: '#2A2A3C',
-                        border: '1px solid rgba(255, 255, 255, 0.1)',
-                        borderRadius: '8px',
-                        padding: '8px',
-                        color: '#fff',
-                        minWidth: '120px'
-                    }}
-                />
-                <button 
+                
+                <button
+                    className="btn btn-primary"
                     onClick={handleUpdateBalance}
-                    className="btn-action"
-                    style={{
-                        background: '#4A6BF3',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '8px 16px',
-                        color: '#fff'
-                    }}
+                    disabled={!selectedUser}
                 >
                     Update Balance
                 </button>
             </div>
+            
             {selectedUser && (
                 <div style={{
                     marginTop: '16px',
                     padding: '16px',
-                    background: 'rgba(74,107,243,0.1)',
+                    background: '#2D2D3F',
                     borderRadius: '8px'
                 }}>
-                    <h5 style={{ marginBottom: '12px', color: '#fff' }}>Current Balances</h5>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
-                        {users.find(u => u.id === selectedUser)?.balances && 
-                            Object.entries(users.find(u => u.id === selectedUser).balances).map(([coin, balance]) => (
-                                <div key={coin} style={{
-                                    padding: '8px',
-                                    background: '#2A2A3C',
-                                    borderRadius: '6px',
-                                    display: 'flex',
-                                    justifyContent: 'space-between'
-                                }}>
-                                    <span>{coin}:</span>
-                                    <span>{balance}</span>
-                                </div>
-                            ))
-                        }
+                    <h5>Modify User: {users.find(u => u.id === selectedUser)?.email}</h5>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '16px', alignItems: 'center' }}>
+                        <select
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                background: '#333348',
+                                color: 'white',
+                                border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}
+                            value={selectedToken}
+                            onChange={(e) => setSelectedToken(e.target.value)}
+                        >
+                            <option value="">Select Token</option>
+                            {Object.keys(DEFAULT_COINS).map(coin => (
+                                <option key={coin} value={coin}>{coin}</option>
+                            ))}
+                        </select>
+                        
+                        <input
+                            type="number"
+                            placeholder="Amount"
+                            value={amount}
+                            onChange={(e) => setAmount(e.target.value)}
+                            style={{
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                background: '#333348',
+                                color: 'white',
+                                border: '1px solid rgba(255, 255, 255, 0.1)'
+                            }}
+                        />
+                        
+                        <button 
+                            className="btn btn-success"
+                            onClick={() => handleAdminUpdateBalance('add')}
+                            disabled={!selectedToken || !amount}
+                        >
+                            Add
+                        </button>
+                        
+                        <button 
+                            className="btn btn-danger"
+                            onClick={() => handleAdminUpdateBalance('subtract')}
+                            disabled={!selectedToken || !amount}
+                        >
+                            Subtract
+                        </button>
                     </div>
                 </div>
             )}
