@@ -517,15 +517,14 @@ const StyledTabs = styled(Tabs)`
 
 function UserProfile(props) {
     const navigate = useNavigate();
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
+    const [userData, setUserData] = useState({});
+    const [balances, setBalances] = useState({});
     const [loading, setLoading] = useState(true);
-    const [userData, setUserData] = useState({
-        displayName: '',
-        email: '',
-        phoneNumber: '',
-        photoURL: '',
-    });
+    const [error, setError] = useState('');
+    const [displayName, setDisplayName] = useState('');
+    const [isPremium, setIsPremium] = useState(false);
+    const [userId, setUserId] = useState('');
+    const [avatar, setAvatar] = useState(img);
 
     const [dataCoinTab] = useState([
         {
@@ -560,7 +559,6 @@ function UserProfile(props) {
         },
     ]);
 
-    const [balances, setBalances] = useState({});
     const [positions, setPositions] = useState([]);
     const [totalPnL, setTotalPnL] = useState(0);
     const [tokenPrices, setTokenPrices] = useState({
