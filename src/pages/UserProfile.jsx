@@ -613,8 +613,22 @@ function UserProfile(props) {
         if (auth.currentUser) {
             setUserId(auth.currentUser.uid);
             
+            // Define variables to track loading process
+            let userDataLoaded = false;
+            let balancesLoaded = false;
+            
+            // Safety timeout to prevent infinite loading
+            const safetyTimeout = setTimeout(() => {
+                if (loading) {
+                    console.log("Safety timeout triggered - forcing loading state to false");
+                    setLoading(false);
+                }
+            }, 10000); // 10 seconds timeout
+            
             // Check admin status and user status
-            checkAdminStatusOnMount();
+            checkAdminStatusOnMount().catch(err => {
+                console.error("Error checking admin status:", err);
+            });
             
             // Fetch authenticated user's data
             const fetchUserData = async () => {
@@ -636,13 +650,22 @@ function UserProfile(props) {
                         // For any information tied to 2FA
                         await checkTwoFactorStatus(auth.currentUser.uid);
                     }
+                    userDataLoaded = true;
+                    // If balances are already loaded, we can set loading to false
+                    if (balancesLoaded) {
+                      setLoading(false);
+                    }
                 } catch (error) {
                     console.error('Error fetching user data:', error);
                     setError('Failed to fetch user data');
+                    setLoading(false); // Always set loading to false on error
                 }
             };
             
-            fetchUserData();
+            fetchUserData().catch(err => {
+              console.error("Error in fetchUserData:", err);
+              setLoading(false);
+            });
             
             // Fetch users for admin
             if (isAdmin) {
@@ -654,12 +677,14 @@ function UserProfile(props) {
                             id: doc.id,
                             ...doc.data()
                         }));
-                        setAllUsers(usersData);
+                        setUsers(usersData);
                     } catch (error) {
                         console.error('Error fetching users:', error);
                     }
                 };
-                fetchUsers();
+                fetchUsers().catch(err => {
+                  console.error("Error in fetchUsers:", err);
+                });
             }
 
             // Use the imported fetchBalances function to get user balances
@@ -692,14 +717,32 @@ function UserProfile(props) {
                             }
                         }
                     }
+                    balancesLoaded = true;
+                    // If user data is already loaded, we can set loading to false
+                    if (userDataLoaded) {
+                      setLoading(false);
+                    }
                 } catch (error) {
                     console.error('Error fetching balances:', error);
                     setError('Failed to fetch balances');
+                    setLoading(false); // Always set loading to false on error
                 }
             };
 
-            getUserBalances();
+            getUserBalances().catch(err => {
+              console.error("Error in getUserBalances:", err);
+              setLoading(false);
+            });
+        } else {
+            // If no user is authenticated, redirect to login and set loading to false
+            console.log("No authenticated user, redirecting to login");
+            setLoading(false);
+            navigate('/login');
         }
+        
+        return () => {
+            clearTimeout(safetyTimeout);
+        };
     }, []);
 
     // Fetch all users for admin
@@ -1241,22 +1284,6 @@ function UserProfile(props) {
         return () => clearInterval(interval);
     }, []);
          
-    // Only check admin status once when component mounts
-    useEffect(() => {
-        const checkAdminStatusOnMount = async () => {
-            if (auth.currentUser) {
-                try {
-                    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-                    setIsAdmin(userDoc.data()?.isAdmin || false);
-                } catch (error) {
-                    console.error('Error checking admin status:', error);
-                }
-            }
-        };
-        
-        checkAdminStatusOnMount();
-    }, []);
-
     // Admin function to update user balances
     const handleAdminUpdateBalance = async (action) => {
         if (!selectedUser || !selectedToken || !amount) {
@@ -1312,7 +1339,33 @@ function UserProfile(props) {
     };
 
     if (loading) {
-        return <div>Loading...</div>;
+        return (
+            <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '80vh',
+                color: 'white'
+            }}>
+                <div style={{
+                    border: '4px solid rgba(255, 255, 255, 0.1)',
+                    borderTop: '4px solid #f3c121',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    animation: 'spin 1s linear infinite',
+                    marginBottom: '20px'
+                }} />
+                <div>Loading your dashboard...</div>
+                <style jsx>{`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}</style>
+            </div>
+        );
     }
 
     // Define renderAdminControls function
