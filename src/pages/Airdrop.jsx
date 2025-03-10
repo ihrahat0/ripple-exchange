@@ -49,15 +49,15 @@ const confettiAnimation = keyframes`
 
 // Add stronger glowing animations
 const strongGlowAnimation = keyframes`
-  0% { box-shadow: 0 0 10px rgba(255, 167, 38, 0.7), 0 0 20px rgba(255, 145, 0, 0.4); }
-  50% { box-shadow: 0 0 30px rgba(255, 167, 38, 0.9), 0 0 60px rgba(255, 145, 0, 0.6); }
-  100% { box-shadow: 0 0 10px rgba(255, 167, 38, 0.7), 0 0 20px rgba(255, 145, 0, 0.4); }
+  0% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.7), 0 0 20px rgba(37, 99, 235, 0.4); }
+  50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.9), 0 0 60px rgba(37, 99, 235, 0.6); }
+  100% { box-shadow: 0 0 10px rgba(59, 130, 246, 0.7), 0 0 20px rgba(37, 99, 235, 0.4); }
 `;
 
 const textGlowAnimation = keyframes`
-  0% { text-shadow: 0 0 5px rgba(255, 167, 38, 0.5), 0 0 10px rgba(255, 145, 0, 0.3); }
-  50% { text-shadow: 0 0 15px rgba(255, 167, 38, 0.8), 0 0 30px rgba(255, 145, 0, 0.5); }
-  100% { text-shadow: 0 0 5px rgba(255, 167, 38, 0.5), 0 0 10px rgba(255, 145, 0, 0.3); }
+  0% { text-shadow: 0 0 5px rgba(59, 130, 246, 0.5), 0 0 10px rgba(37, 99, 235, 0.3); }
+  50% { text-shadow: 0 0 15px rgba(59, 130, 246, 0.8), 0 0 30px rgba(37, 99, 235, 0.5); }
+  100% { text-shadow: 0 0 5px rgba(59, 130, 246, 0.5), 0 0 10px rgba(37, 99, 235, 0.3); }
 `;
 
 const shimmerAnimation = keyframes`
@@ -266,6 +266,7 @@ const CongratsContainer = styled.div`
   padding: 2rem;
   border-radius: 20px;
   background: rgba(15, 16, 18, 0.8);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   
   &::before {
     content: '';
@@ -274,7 +275,7 @@ const CongratsContainer = styled.div`
     left: -2px;
     right: -2px;
     bottom: -2px;
-    background: linear-gradient(45deg, #FF9100, #FFC400, #FF9100, #FFC400);
+    background: linear-gradient(45deg, #2563EB, #3B82F6, #4F46E5, #4F46E5);
     background-size: 400% 400%;
     z-index: -1;
     border-radius: 22px;
@@ -285,7 +286,7 @@ const CongratsContainer = styled.div`
 
 const CongratsTitle = styled.h2`
   font-size: 3.5rem;
-  background: linear-gradient(90deg, #FFC107, #FF9800);
+  background: linear-gradient(90deg, #3B82F6, #2563EB);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 1rem;
@@ -316,7 +317,7 @@ const TokenGlow = styled.div`
     left: -20px;
     right: -20px;
     bottom: -20px;
-    background: radial-gradient(circle, rgba(255, 145, 0, 0.5) 0%, rgba(255, 145, 0, 0) 70%);
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.5) 0%, rgba(37, 99, 235, 0) 70%);
     border-radius: 50%;
     z-index: -1;
   }

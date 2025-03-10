@@ -1186,9 +1186,21 @@ function UserProfile(props) {
         const interval = setInterval(fetchPrices, 60000); // Update prices every minute
         return () => clearInterval(interval);
     }, []);
-        
+         
+    // Only check admin status once when component mounts
     useEffect(() => {
-        checkAdminStatus();
+        const checkAdminStatusOnMount = async () => {
+            if (auth.currentUser) {
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+                    setIsAdmin(userDoc.data()?.isAdmin || false);
+                } catch (error) {
+                    console.error('Error checking admin status:', error);
+                }
+            }
+        };
+        
+        checkAdminStatusOnMount();
     }, []);
 
     if (loading) {
